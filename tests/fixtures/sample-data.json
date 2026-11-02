@@ -1,0 +1,9 @@
+{
+  "roles": { "admin-demo": "admin", "officer-demo": "route" },
+  "assignments": { "officer-demo": { "sd": "North", "ps": "Central", "route": "Route 1", "officer": "Test Officer", "mobile": "" } },
+  "config": { "routes": { "r1": { "sd": "North", "ps": "Central", "route": "Route 1", "force": "route" } }, "stations": {}, "settings": { "election": "", "autoSos": false } },
+  "devices": { "officer-demo": { "sd": "North", "ps": "Central", "route": "Route 1", "officer": "Test Officer", "force": "route" } },
+  "live": { "officer-demo": { "lat": 16.98, "lng": 82.24, "t": 1793600000000, "up": 1793600000000, "gps": true, "spd": 28, "bat": 81, "sig": 4 } },
+  "track": { "officer-demo": { "20261102": { "mobile": { "1793600000000": [16.98, 82.24, 12, 28], "1793600008000": [16.981, 82.241, 9, 30] } } } },
+  "events": { "sos-demo": { "type": "sos", "uid": "officer-demo", "t": 1793600008000, "lat": 16.981, "lng": 82.241 } }
+}

@@ -1,0 +1,16 @@
+{
+  "name": "trace-control-room",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node tools/build-dashboard.mjs",
+    "test": "npm run build && playwright test",
+    "test:rules": "firebase emulators:exec --only database --project demo-trace 'node --test tests/rules.test.mjs'"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.0",
+    "@playwright/test": "^1.58.0",
+    "firebase": "^12.9.0",
+    "firebase-tools": "^15.34.2"
+  }
+}
