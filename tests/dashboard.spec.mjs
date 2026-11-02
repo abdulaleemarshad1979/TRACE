@@ -366,6 +366,12 @@ test('settings accordion contains only Routes, Polling locations, and Registered
   await expect(page.locator('details[data-sec="locks"]')).toHaveCount(0);
   await expect(page.locator('details[data-sec="vers"]')).toHaveCount(0);
   await expect(page.locator('details[data-sec="notes"]')).toHaveCount(0);
+
+  // Election dropdowns must not offer "+ Add a new election"
+  await expect(page.locator('#setElec option[value="__new"]')).toHaveCount(0);
+  await expect(page.locator('#setElec option:has-text("Add a new election")')).toHaveCount(0);
+  await expect(page.locator('#setElec2 option[value="__new"]')).toHaveCount(0);
+  await expect(page.locator('#setElec2 option:has-text("Add a new election")')).toHaveCount(0);
 });
 
 test('active tab displays 5 status cards, active units and active routes with click-to-center', async ({ page }) => {
