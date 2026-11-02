@@ -5324,19 +5324,46 @@ async function makeReport(day) {
   XLSX.writeFile(wb, `Route mobile report ${day}.xlsx`);
 }
 
+/* TRACK_EXCEL_HOTFIX_V1: independent election records stored in Firebase. */
+function trackElectionNames() {
+  const names = [
+    ...Object.values(CONF.elections || {}).map(v => typeof v === 'string' ? v : v?.name),
+    ...allRoutes().map(r => r.election),
+    ...Object.values(CONF.stations || {}).map(p => p.el), ELEC()
+  ];
+  const unique = new Map();
+  names.forEach(v => { const n = String(v || '').replace(/\s+/g, ' ').trim(); if (n && !unique.has(n.toLowerCase())) unique.set(n.toLowerCase(), n); });
+  return [...unique.values()].sort((a,b) => a.localeCompare(b));
+}
+async function trackNewElection() {
+  const value = prompt('Name for the new election:');
+  if (value === null) return;
+  const name = value.replace(/\s+/g, ' ').trim();
+  if (!name || name.length > 120) { toast('Election name must be 1–120 characters.'); return; }
+  const existing = trackElectionNames().find(e => e.toLowerCase() === name.toLowerCase());
+  if (!existing) {
+    const id = 'e' + uid8(); const record = { name, status: 'draft', createdAt: Date.now() };
+    await dbPut('config/elections/' + id, record);
+    CONF.elections = Object.assign({}, CONF.elections || {}, { [id]: record });
+  }
+  const selected = existing || name;
+  await dbPatch('config/settings', { election: selected });
+  CONF.settings = Object.assign({}, CONF.settings || {}, { election: selected });
+  schedule('force'); renderPane(); toast('Election selected. You can import Excel now.');
+}
 /* ---------- setup ---------- */
 function sec(k, title, body) { return `<details ${UI.setupOpen === k ? 'open' : ''} data-sec="${k}" style="border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-bottom:8px"><summary style="font-weight:700;cursor:pointer;color:var(--navy)">${title}</summary><div style="margin-top:8px">${body}</div></details>`; }
 function paneSetup() {
   const s = S(), R = routes();   // Setup lists every route; the top-bar filters do not hide rows here
-  const els = [...new Set([...allRoutes().map(r => (r.election || '').trim()), ...Object.values(CONF.stations || {}).map(x => (x.el || '').trim()), ELEC()].filter(Boolean))].sort();
+  const els = trackElectionNames();
   const elSel = id => `<select id="${id}"><option value="">All elections (${allRoutes().length} routes)</option>${els.map(e => `<option value="${esc(e)}" ${e === ELEC() ? 'selected' : ''}>${esc(e)} (${allRoutes().filter(r => (r.election || '').trim() === e).length} routes)</option>`).join('')}</select>`;
   let h = sec('routes', `Routes (${routes().length}${ELEC() ? ' — ' + esc(ELEC()) : ''})`, `<p class="note">Use Assign member to set the officer name, mobile number and password. The APK loads their assigned route after login. Routes marked Review coverage have proposed merges or splits; check their polling locations before assigning.</p>
     <div class="row"><label class="f" style="flex:1">Election <span class="u">(choose one: the list below and the phones show only that election's routes)</span>${elSel('setElec')}</label></div>
-    <div class="row"><button class="btn small" data-act="routeAdd">Add a route</button><button class="btn small" data-act="routeImport">Import from Excel</button><button class="btn small" data-act="routeTemplate">Excel template</button><button class="btn small red" data-act="routeClearAll">Remove all routes</button>${ELEC() ? `<button class="btn small red" data-act="delElec">Delete election "${esc(ELEC())}"</button>` : ''}</div>
+    <div class="row"><button class="btn small" data-act="newElection">+ New election</button><button class="btn small" data-act="routeAdd">Add a route</button><button class="btn small" data-act="routeImport">Import from Excel</button><button class="btn small" data-act="trackTemplate">Download Excel format</button><button class="btn small red" data-act="routeClearAll">Remove all routes</button>${ELEC() ? `<button class="btn small red" data-act="delElec">Delete election "${esc(ELEC())}"</button>` : ''}</div>
     <div class="tw"><table class="t"><thead><tr><th>Election</th><th>Sub-division</th><th>PS</th><th>Route</th><th>Villages</th><th>Officer</th><th></th></tr></thead><tbody>${R.map(r => `<tr><td>${esc(r.election || '')}</td><td>${esc(r.sd)}</td><td>${esc(r.ps)}</td><td><b>${esc(r.route)}</b>${r.coverageStatus === 'proposed' ? '<br><span class="note" style="color:#a16207">Review coverage</span>' : ''}</td><td>${esc(r.villages || '')}</td><td>${esc(r.officer || '')} ${esc(r.mobile || '')}${r.vehicle ? '<br><span class="note">' + esc(r.vehicle) + '</span>' : ''}</td><td style="white-space:nowrap"><button class="btn small" data-act="routeQr" data-id="${r.id}">QR</button><button class="btn small" data-act="routeEdit" data-id="${r.id}">Edit</button>${USER_ROLE === 'admin' ? `<button class="btn small primary" data-act="memberAssign" data-id="${r.id}">Assign member</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="7" class="note">No routes yet.</td></tr>'}</tbody></table></div>`);
   h += sec('ps', `Polling locations (${stations().length})`, `<p class="note">Shown on the map, used for the incident search, the off-route alert and the "visited" check. Columns: Polling location, Latitude, Longitude, Sensitivity, Police station, Route No. One row per location, even if it has several booths.</p>
     <div class="row"><label class="f" style="flex:1">Election for these locations <span class="u">(the map shows the locations of the election chosen here)</span>${elSel('setElec2')}</label></div>
-    <div class="row"><button class="btn small" data-act="psImport">Import from Excel</button>${ELEC() ? `<button class="btn small red" data-act="delElec">Delete election "${esc(ELEC())}"</button>` : ''}<button class="btn small" data-act="psTemplate">Excel template</button>${stations().length ? '<button class="btn small" data-act="psClear">Remove all</button>' : ''}</div>`);
+    <div class="row"><button class="btn small" data-act="psImport">Import from Excel</button>${ELEC() ? `<button class="btn small red" data-act="delElec">Delete election "${esc(ELEC())}"</button>` : ''}${stations().length ? '<button class="btn small" data-act="psClear">Remove all</button>' : ''}</div>`);
   const D = Object.keys(DEV).filter(visible).sort((a, b) => dname(a).localeCompare(dname(b), undefined, { numeric: true }));
   h += sec('dev', `Registered phones (${Object.keys(DEV).length})`, `<div class="tw"><table class="t"><thead><tr><th>Vehicle</th><th>Officer</th><th>Phone</th><th>Set up</th><th></th></tr></thead><tbody>${D.map(u => `<tr><td><b>${esc(dname(u))}</b><br><span class="note">${esc(DEV[u].sd || '')}</span></td><td>${esc(DEV[u].officer || '')}<br>${esc(DEV[u].mobile || '')}</td><td class="note">${esc(DEV[u].model || '')}<br>app ${esc(DEV[u].v || '')}</td><td class="note">${fDT(DEV[u].setup)}</td><td><button class="btn small" data-act="editDev" data-u="${u}">Edit</button></td></tr>`).join('') || '<tr><td colspan="5" class="note">None yet.</td></tr>'}</tbody></table></div>`);
   return h;
@@ -5465,7 +5492,7 @@ window.addEventListener('afterprint', () => { $('#printArea').innerHTML = ''; })
 
 /* Excel import */
 /* reads one or more Excel files; each sheet is offered to the importer, which takes the sheets whose columns it recognises */
-function pickFile(cb) { const i = document.createElement('input'); i.type = 'file'; i.multiple = true; i.accept = '.xlsx,.xls,.csv'; i.onchange = async () => { const sheets = []; for (const f of i.files) { const wb = XLSX.read(await f.arrayBuffer(), { type: 'array' }); wb.SheetNames.forEach(n => sheets.push(XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, defval: '' }))); } if (sheets.length) cb(sheets); }; i.click(); }
+function pickFile(cb) { const i = document.createElement('input'); i.type = 'file'; i.multiple = true; i.accept = '.xlsx,.xls,.csv'; i.onchange = async () => { try { const sheets = []; for (const f of i.files) { const wb = XLSX.read(await f.arrayBuffer(), { type: 'array' }); wb.SheetNames.forEach(n => { const rows = XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, defval: '' }); rows.sheetName = n; sheets.push(rows); }); } if (sheets.length) await cb(sheets); } catch (e) { toast('Excel import failed: ' + e.message, 8000); } }; i.click(); }
 function mapCols(rows, want) {
   for (let i = 0; i < Math.min(rows.length, 15); i++) {
     const m = {};
@@ -5510,6 +5537,7 @@ document.addEventListener('click', async e => {
     else if (act === 'rpPlay') { if (RP_TIMER) { clearInterval(RP_TIMER); RP_TIMER = null; } else { if (UI.replay.pos >= 1) UI.replay.pos = 0; RP_TIMER = setInterval(() => { UI.replay.pos = Math.min(1, UI.replay.pos + 0.004); drawReplay(); if ($('#rpPos')) { $('#rpPos').value = Math.round(UI.replay.pos * 1000); const P = UI.replay.pts; $('#rpPos').nextElementSibling.textContent = fTs(P[Math.round(UI.replay.pos * (P.length - 1))][0]); } if (UI.replay.pos >= 1) { clearInterval(RP_TIMER); RP_TIMER = null; renderPane(); } }, 80); } renderPane(); }
     else if (act === 'report') await makeReport($('#repD').value);
     else if (act === 'routeAdd') routeModal();
+    else if (act === 'newElection') await trackNewElection();
     else if (act === 'memberAssign') await memberModal(a.dataset.id);
     else if (act === 'delElec') {
       const name = ELEC(); if (!name) return;
@@ -5526,21 +5554,41 @@ document.addEventListener('click', async e => {
     else if (act === 'routeClearAll') { const n = Object.keys(CONF.routes || {}).length; if (!n) { toast('There are no routes to remove.'); return; } if (!confirm(`Remove ALL ${n} routes from the list?\n\nPhones already registered keep working until they restart. You can import the list again afterwards.\n\nDo not do this on poll day or the day before.`)) return; if (!confirm('Are you sure? This cannot be undone.')) return; await dbDel('config/routes'); CONF.routes = {}; toast(`${n} routes removed.`); schedule('force'); paneDirty = 'force'; renderPane(); }
     else if (act === 'routeEdit') routeModal(a.dataset.id);
     else if (act === 'routeQr') { const r = Object.assign({ id: a.dataset.id }, CONF.routes[a.dataset.id]); const m = document.createElement('div'); m.className = 'modal'; m.innerHTML = `<div class="card" style="text-align:center"><div style="max-width:320px;margin:auto">${qrSvg(qrPayload(r))}</div><h2>${esc(r.ps)} – ${esc(r.route)}</h2><p class="note">Scan with the Route Mobile app on the phone of this route.</p><button class="btn" data-x>Close</button></div>`; document.body.appendChild(m); m.addEventListener('click', ev => { if (ev.target === m || ev.target.hasAttribute('data-x')) m.remove(); }); }
-    else if (act === 'routeTemplate') xlsTemplate('Routes template.xlsx', ['Election', 'Sub-division', 'Police station', 'Route No.', 'Officer rank and name', 'Officer mobile'], [[ELEC() || 'Municipal 2026', 'Kakinada', 'I Town', 'Route 1', 'SI K. Ramesh', '9000000001']]);
+    else if (act === 'trackTemplate') {
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Election','Sub-division','PS','Route','Villages','Officer']]), 'TRACK Import');
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Election','Sub-division','Police Station','Route','Polling Location','Latitude','Longitude','Category','Voters']]), 'Polling Locations');
+      XLSX.writeFile(wb, 'TRACK_Excel_Format.xlsx');
+    }
     else if (act === 'routeImport') pickFile(async sheets => {
-      if (!ELEC()) { toast('Choose an election first (Setup → Routes), then import.', 6000); return; }
-      const have = new Set(allRoutes().map(r => (r.election || '').toLowerCase() + '|' + r.ps + '|' + norm(r.route))); const add = {}; let n = 0, used = 0;
+
+      const have = new Set(allRoutes().map(r => (r.election || '').trim().toLowerCase() + '|' + String(r.ps || '').toLowerCase() + '|' + norm(r.route))); const add = {}; let n = 0, used = 0; let importedName = ''; const hasPrimary = sheets.some(rows => rows.sheetName === 'TRACK Import');
       for (const rows of sheets) {
+      if (hasPrimary && rows.sheetName !== 'TRACK Import') continue;
       const h = mapCols(rows, { election: /election|poll type/, vehicle: /vehicle|reg/, sd: /sub.?div|sdpo|division/, ps: /police|^ps$|p\.s\b/, route: /route|beat|unit/, force: /type|force|categ/, villages: /village|ward|cover|area/, officer: /officer|in.?charge/, mobile: /mobile|phone|cell/ });
-      if (!h || h.m.ps === undefined || h.m.route === undefined || h.m.lat !== undefined || rows[h.row].some(c => /latitude/i.test(String(c)))) continue; used++;
-      rows.slice(h.row + 1).forEach(r => { const o = {}; Object.entries(h.m).forEach(([k, j]) => { o[k] = String(r[j] ?? '').trim(); }); if (!o.election) o.election = ELEC(); if (!o.ps || !o.route || have.has(o.election.toLowerCase() + '|' + o.ps + '|' + norm(o.route))) return; have.add(o.election.toLowerCase() + '|' + o.ps + '|' + norm(o.route)); o.force = forceCode(o.force); add['r' + uid8() + n] = Object.assign({ sd: '', villages: '', officer: '', mobile: '', vehicle: '', force: 'route' }, o); n++; });
+      if (!h || h.m.ps === undefined || h.m.route === undefined || rows[h.row].some(c => /latitude/i.test(String(c)))) continue;
+      const routeHeading = String(rows[h.row][h.m.route] || '').trim();
+      if (!/^(route(\s*(no\.?|number|id))?|beat(\s*no\.?)?|unit(\s*no\.?)?)$/i.test(routeHeading)) continue;
+      used++;
+      rows.slice(h.row + 1).forEach(r => { const o = {}; Object.entries(h.m).forEach(([k, j]) => { o[k] = String(r[j] ?? '').trim(); }); if (!o.election) o.election = ELEC() || importedName || (importedName = (prompt('Election name for Excel rows without an Election column:') || '').trim()); if (!o.ps || !o.route || !o.election || have.has(o.election.toLowerCase() + '|' + o.ps.toLowerCase() + '|' + norm(o.route))) return; have.add(o.election.toLowerCase() + '|' + o.ps.toLowerCase() + '|' + norm(o.route)); o.force = forceCode(o.force); add['r' + uid8() + n] = Object.assign({ sd: '', villages: '', officer: '', mobile: '', vehicle: '', force: 'route' }, o); n++; });
       }
       if (!used) { toast('No sheet with Police station and Route columns. Use the template.'); return; }
-      if (n) { await dbPatch('config/routes', add); CONF.routes = Object.assign({}, CONF.routes || {}, add); schedule('force'); paneDirty = 'force'; } toast(`${n} routes added${n ? '' : ' (all were already in the list)'}.`);
+      if (n) {
+        const names = [...new Set(Object.values(add).map(r => r.election))];
+        const known = new Set(trackElectionNames().map(n => n.toLowerCase()));
+        const elections = {};
+        names.forEach(name => { if (!known.has(name.toLowerCase())) { elections['e' + uid8()] = { name, status: 'draft', createdAt: Date.now() }; known.add(name.toLowerCase()); } });
+        if (Object.keys(elections).length) { await dbPatch('config/elections', elections); CONF.elections = Object.assign({}, CONF.elections || {}, elections); }
+        await dbPatch('config/routes', add);
+        CONF.routes = Object.assign({}, CONF.routes || {}, add);
+        if (!ELEC() && names.length === 1) { await dbPatch('config/settings', { election: names[0] }); CONF.settings = Object.assign({}, CONF.settings || {}, { election: names[0] }); }
+        schedule('force'); paneDirty = 'force'; renderPane();
+      }
+      toast(n + ' routes imported (duplicates skipped).', 7000);
     });
-    else if (act === 'psTemplate') xlsTemplate('Polling locations template.xlsx', ['Election', 'Polling location (building and village / ward)', 'Latitude', 'Longitude', 'Sensitivity', 'Police station', 'Route No.'], [[ELEC() || 'Municipal 2026', 'ZPHS, Gandhi Nagar', 16.9604, 82.2381, 'Sensitive', 'I Town', 'Route 1']]);
     else if (act === 'psImport') pickFile(async sheets => {
-      if (!ELEC()) { toast('Choose an election first (Setup → Routes), then import.', 6000); return; }
+
+      let importedName = '';
       const key = x => [(x.el || '').toLowerCase(), (x.ps || '').toLowerCase(), (x.name || '').toLowerCase()].join('|');
       const have = new Map(Object.entries(CONF.stations || {}).map(([id, x]) => [key(x), id])); const add = {}; let n = 0, upd = 0, used = 0, bad = 0;
       for (const rows of sheets) {
@@ -5552,7 +5600,7 @@ document.addEventListener('click', async e => {
           const lat = parseFloat(r[h.m.lat]), lng = parseFloat(r[h.m.lng]);
           if (!(lat > 5 && lat < 40 && lng > 65 && lng < 100)) { if (g(r, 'name') || g(r, 'num')) bad++; return; }
           const num = g(r, 'num'), nm = g(r, 'name');
-          const o = { name: [num && (/^\d/.test(num) ? 'PS ' + num : num), nm].filter(Boolean).join(', ') || 'Station', lat, lng, cat: g(r, 'cat'), ps: g(r, 'ps'), route: g(r, 'route'), el: g(r, 'el') || ELEC(), voters: parseInt(String(g(r, 'voters')).replace(/[^\d]/g, '')) || 0 };
+          const o = { name: [num && (/^\d/.test(num) ? 'PS ' + num : num), nm].filter(Boolean).join(', ') || 'Station', lat, lng, cat: g(r, 'cat'), ps: g(r, 'ps'), route: g(r, 'route'), el: g(r, 'el') || ELEC() || (importedName || (importedName = (prompt('Election for polling locations without an Election column:') || '').trim())), voters: parseInt(String(g(r, 'voters')).replace(/[^\d]/g, '')) || 0 };
           const ex = have.get(key(o)); if (ex) { if (!add[ex]) { add[ex] = Object.assign({}, CONF.stations[ex], o); upd++; } return; } const nid = 's' + uid8() + n; have.set(key(o), nid); add[nid] = o; n++;
         });
       }
@@ -5593,6 +5641,7 @@ document.addEventListener('change', e => {
   if (t.id === 'setElec' || t.id === 'setElec2') { (async () => {
     const v = t.value;
     await dbPatch('config/settings', { election: v });
+    CONF.settings = Object.assign({}, CONF.settings || {}, { election: v });
     toast(v ? `Election: ${v}. The list and the phones now show its routes.` : 'Showing routes of all elections.');
     renderPane();
   })(); return; }
