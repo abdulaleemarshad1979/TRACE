@@ -16,9 +16,20 @@ input:focus,select:focus,textarea:focus{outline:2px solid #a1a1aa;outline-offset
 .restricted{border-color:#fecaca;background:#fff7f7}
 .stamp{color:#71717a;background:#fff9}
 @media(max-width:700px){.login .card{padding:20px}}
-.trace-trip{position:fixed;left:84px;bottom:24px;z-index:1100;width:min(350px,calc(100vw - 110px));padding:14px 16px;background:#fff;color:#18181b;border:1px solid #d4d4d8;border-radius:11px;box-shadow:0 12px 32px #0002;font-variant-numeric:tabular-nums}
-.trace-trip h3{margin:0 0 8px;font-size:14px;letter-spacing:-.02em}.trace-trip small{color:#71717a}.trace-trip .trip-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0}.trace-trip .trip-grid b{display:block;font-size:17px}.trace-trip .trip-grid span{font-size:11px;color:#71717a}.trace-trip .trip-foot{display:flex;justify-content:space-between;gap:8px;align-items:center;border-top:1px solid #e4e4e7;padding-top:8px;font-size:12px}.trace-trip button{background:#09090b;color:#fff;border:0;border-radius:6px;padding:5px 9px;cursor:pointer}
-@media(max-width:700px){.trace-trip{left:10px;bottom:10px;width:min(300px,calc(100vw - 20px));padding:10px}.trace-trip .trip-grid b{font-size:15px}}
+.trace-trip{position:fixed;left:84px;bottom:24px;z-index:1100;width:min(360px,calc(100vw - 110px));padding:14px 16px;background:#fff;color:#18181b;border:1px solid #e4e4e7;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.12),0 1px 3px rgba(0,0,0,.06);font-variant-numeric:tabular-nums;pointer-events:auto}
+.trace-trip .trip-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:4px}
+.trace-trip h3{margin:0;font-size:14px;font-weight:600;letter-spacing:-.02em;line-height:1.35;min-width:0;word-break:break-word}
+.trace-trip .trip-close{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border:0;border-radius:6px;background:#f4f4f5;color:#71717a;font-size:17px;line-height:1;padding:0;margin:-2px -4px 0 0;cursor:pointer;flex-shrink:0;transition:background-color .15s,color .15s}
+.trace-trip .trip-close:hover{background:#e4e4e7;color:#09090b}
+.trace-trip small{color:#71717a;font-size:12px;line-height:1.4;display:block}
+.trace-trip .trip-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0}
+.trace-trip .trip-grid b{display:block;font-size:17px;font-weight:700;letter-spacing:-.02em}
+.trace-trip .trip-grid span{font-size:11px;color:#71717a}
+.trace-trip .trip-foot{display:flex;justify-content:space-between;gap:8px;align-items:center;border-top:1px solid #e4e4e7;padding-top:8px;font-size:12px}
+.trace-trip .trip-foot + .trip-foot{margin-top:6px}
+.trace-trip button{background:#09090b;color:#fff;border:0;border-radius:6px;padding:5px 10px;font-size:12px;font-weight:500;cursor:pointer;transition:background .15s}
+.trace-trip button:hover{background:#27272a}
+
 
 /* Keep the filter and status rows aligned at every dashboard width. */
 .rd main.body > .bar{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;flex:none}
@@ -44,7 +55,26 @@ input:focus,select:focus,textarea:focus{outline:2px solid #a1a1aa;outline-offset
 .rd .pane{min-width:0;overflow-wrap:anywhere}
 .rd .pane .row{flex-wrap:wrap}
 .rd .pane .row > input,.rd .pane .row > select{min-width:0;max-width:100%}
-.rd .pane .tw{max-width:100%;overflow:auto}
+.rd .pane .tw{width:100%;max-width:100%;overflow-x:auto;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.rd .pane table.t{width:100%;min-width:720px;border-collapse:collapse;table-layout:auto;overflow-wrap:normal;word-break:normal}
+.rd .pane table.t th{white-space:nowrap;overflow-wrap:normal;word-break:normal;font-weight:600}
+.rd .pane table.t th,.rd .pane table.t td{overflow-wrap:normal;word-break:normal;min-width:90px}
+.rd .pane table.t td *{overflow-wrap:normal;word-break:normal}
+.rd .pane table.t th:last-child,.rd .pane table.t td:last-child{min-width:110px;white-space:nowrap}
+/* Settings needs room for route administration, independent of map-panel visibility. */
+body.v-setup .trace-trip{display:none!important}
+body.v-setup .rd .work{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr)}
+body.v-setup .rd .work #map,body.v-setup #panelBtn,body.v-setup #panelShow{display:none}
+body.v-setup .rd .work aside.panel{display:flex;min-width:0;border:0;background:#fff}
+body.v-setup .rd .pane{background:#fff}
+body.v-setup .rd .pane .tw{max-height:65vh;overflow-x:auto;overflow-y:auto;width:100%;max-width:100%}
+body.v-setup .rd .pane table.t{min-width:1000px;width:100%;table-layout:auto}
+body.v-setup .rd .pane table.t th{white-space:nowrap}
+body.v-setup .rd .pane table.t th,body.v-setup .rd .pane table.t td{min-width:100px;overflow-wrap:normal;word-break:normal}
+body.v-setup .rd .pane table.t th:first-child,body.v-setup .rd .pane table.t td:first-child{min-width:110px}
+body.v-setup .rd .pane table.t th:nth-child(5),body.v-setup .rd .pane table.t td:nth-child(5){min-width:160px}
+body.v-setup .rd .pane table.t th:nth-child(6),body.v-setup .rd .pane table.t td:nth-child(6){min-width:160px}
+body.v-setup .rd .pane table.t th:last-child,body.v-setup .rd .pane table.t td:last-child{min-width:140px;white-space:nowrap}
 .rd .mapbox .stamp{max-width:calc(100% - 24px);white-space:normal;text-align:center;line-height:1.25}
 .member-modal .card{width:min(560px,100%);max-height:calc(100dvh - 32px);overflow:auto}
 .member-modal h2{overflow-wrap:anywhere;margin-top:0}
@@ -70,5 +100,10 @@ body.v-dash #panelBtn{display:none}
   .rd .pane .grid2{grid-template-columns:minmax(0,1fr)}
   .rd .lyr{left:48px;max-width:calc(100% - 100px);padding:8px;font-size:12px}
   .rd .lyr label{white-space:normal}
-  .trace-trip{left:10px;bottom:76px;max-width:calc(100vw - 20px)}
+  .trace-trip{left:10px;right:10px;bottom:74px;width:auto;max-width:calc(100vw - 20px);padding:10px 12px;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.15);z-index:1200;max-height:calc(100dvh - 160px);overflow-y:auto}
+  .trace-trip h3{font-size:13px}
+  .trace-trip .trip-grid{gap:6px;margin:8px 0}
+  .trace-trip .trip-grid b{font-size:15px}
+  .trace-trip .trip-grid span{font-size:10px}
+  .trace-trip .trip-foot{font-size:11.5px;padding-top:6px}
 }

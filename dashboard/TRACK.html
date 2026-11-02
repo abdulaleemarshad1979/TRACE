@@ -968,6 +968,28 @@ header.top .officers{grid-column:2;grid-row:1 / span 3;justify-self:end;align-se
 .sumbar.sumtop{padding:6px 12px}
 .sumbar.sumtop span{visibility:hidden}
 
+/* Active card tab & lazy rendering */
+.active-card{border:1px solid var(--line);border-left:5px solid var(--grey);border-radius:10px;padding:9px 12px;margin-bottom:8px;background:#fff;box-shadow:var(--card-sh);cursor:pointer;transition:box-shadow .15s,transform .06s}
+.active-card:hover{background:#fbfcfe;box-shadow:var(--card-sh-h);transform:translateY(-1px)}
+.active-card.sel{outline:2px solid var(--gold);outline-offset:1px}
+.active-metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:8px 0;background:#f8fafc;padding:6px 8px;border-radius:8px;font-size:11.5px}
+.active-metric{display:flex;flex-direction:column;gap:1px}
+.active-metric em{font-style:normal;color:var(--ink2);font-size:10px;text-transform:uppercase;letter-spacing:.02em}
+.active-metric b{font-size:12.5px;color:var(--navy)}
+.active-grid5{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:10px}
+.active-stat-card{background:color-mix(in srgb,var(--c,var(--blue)) 8%,#fff);border:1px solid color-mix(in srgb,var(--c,var(--blue)) 20%,#fff);border-radius:8px;padding:8px 6px;text-align:center;cursor:pointer;display:flex;flex-direction:column;gap:2px;transition:transform .1s,box-shadow .1s}
+.active-stat-card:hover{transform:translateY(-1px);box-shadow:0 2px 6px rgba(0,0,0,.08)}
+.active-stat-card.on{outline:2px solid var(--c);outline-offset:1px}
+.active-stat-card b{font-size:15px;color:var(--navy)}
+.active-stat-card span{font-size:11px;color:var(--ink2);white-space:nowrap}
+@media(max-width:450px){.active-grid5{grid-template-columns:repeat(3,1fr)}}
+
+/* Lazy rendering for off-screen components */
+.veh, .active-card, .alert, .card, table.t tr {
+  content-visibility: auto;
+  contain-intrinsic-size: 0 75px;
+}
+
 /* ===== Header v3 (option 3): navy title bar with officer photos at right; light strip with phone counts; light strip with filters and controls ===== */
 header.top{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto auto auto;gap:0;padding:0;align-items:stretch}
 header.top .ttl{grid-column:1;grid-row:1;justify-content:flex-start;padding:10px 18px;gap:14px}
@@ -1265,9 +1287,20 @@ input:focus,select:focus,textarea:focus{outline:2px solid #a1a1aa;outline-offset
 .restricted{border-color:#fecaca;background:#fff7f7}
 .stamp{color:#71717a;background:#fff9}
 @media(max-width:700px){.login .card{padding:20px}}
-.trace-trip{position:fixed;left:84px;bottom:24px;z-index:1100;width:min(350px,calc(100vw - 110px));padding:14px 16px;background:#fff;color:#18181b;border:1px solid #d4d4d8;border-radius:11px;box-shadow:0 12px 32px #0002;font-variant-numeric:tabular-nums}
-.trace-trip h3{margin:0 0 8px;font-size:14px;letter-spacing:-.02em}.trace-trip small{color:#71717a}.trace-trip .trip-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0}.trace-trip .trip-grid b{display:block;font-size:17px}.trace-trip .trip-grid span{font-size:11px;color:#71717a}.trace-trip .trip-foot{display:flex;justify-content:space-between;gap:8px;align-items:center;border-top:1px solid #e4e4e7;padding-top:8px;font-size:12px}.trace-trip button{background:#09090b;color:#fff;border:0;border-radius:6px;padding:5px 9px;cursor:pointer}
-@media(max-width:700px){.trace-trip{left:10px;bottom:10px;width:min(300px,calc(100vw - 20px));padding:10px}.trace-trip .trip-grid b{font-size:15px}}
+.trace-trip{position:fixed;left:84px;bottom:24px;z-index:1100;width:min(360px,calc(100vw - 110px));padding:14px 16px;background:#fff;color:#18181b;border:1px solid #e4e4e7;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.12),0 1px 3px rgba(0,0,0,.06);font-variant-numeric:tabular-nums;pointer-events:auto}
+.trace-trip .trip-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:4px}
+.trace-trip h3{margin:0;font-size:14px;font-weight:600;letter-spacing:-.02em;line-height:1.35;min-width:0;word-break:break-word}
+.trace-trip .trip-close{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border:0;border-radius:6px;background:#f4f4f5;color:#71717a;font-size:17px;line-height:1;padding:0;margin:-2px -4px 0 0;cursor:pointer;flex-shrink:0;transition:background-color .15s,color .15s}
+.trace-trip .trip-close:hover{background:#e4e4e7;color:#09090b}
+.trace-trip small{color:#71717a;font-size:12px;line-height:1.4;display:block}
+.trace-trip .trip-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0}
+.trace-trip .trip-grid b{display:block;font-size:17px;font-weight:700;letter-spacing:-.02em}
+.trace-trip .trip-grid span{font-size:11px;color:#71717a}
+.trace-trip .trip-foot{display:flex;justify-content:space-between;gap:8px;align-items:center;border-top:1px solid #e4e4e7;padding-top:8px;font-size:12px}
+.trace-trip .trip-foot + .trip-foot{margin-top:6px}
+.trace-trip button{background:#09090b;color:#fff;border:0;border-radius:6px;padding:5px 10px;font-size:12px;font-weight:500;cursor:pointer;transition:background .15s}
+.trace-trip button:hover{background:#27272a}
+
 
 /* Keep the filter and status rows aligned at every dashboard width. */
 .rd main.body > .bar{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;flex:none}
@@ -1293,7 +1326,26 @@ input:focus,select:focus,textarea:focus{outline:2px solid #a1a1aa;outline-offset
 .rd .pane{min-width:0;overflow-wrap:anywhere}
 .rd .pane .row{flex-wrap:wrap}
 .rd .pane .row > input,.rd .pane .row > select{min-width:0;max-width:100%}
-.rd .pane .tw{max-width:100%;overflow:auto}
+.rd .pane .tw{width:100%;max-width:100%;overflow-x:auto;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.rd .pane table.t{width:100%;min-width:720px;border-collapse:collapse;table-layout:auto;overflow-wrap:normal;word-break:normal}
+.rd .pane table.t th{white-space:nowrap;overflow-wrap:normal;word-break:normal;font-weight:600}
+.rd .pane table.t th,.rd .pane table.t td{overflow-wrap:normal;word-break:normal;min-width:90px}
+.rd .pane table.t td *{overflow-wrap:normal;word-break:normal}
+.rd .pane table.t th:last-child,.rd .pane table.t td:last-child{min-width:110px;white-space:nowrap}
+/* Settings needs room for route administration, independent of map-panel visibility. */
+body.v-setup .trace-trip{display:none!important}
+body.v-setup .rd .work{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr)}
+body.v-setup .rd .work #map,body.v-setup #panelBtn,body.v-setup #panelShow{display:none}
+body.v-setup .rd .work aside.panel{display:flex;min-width:0;border:0;background:#fff}
+body.v-setup .rd .pane{background:#fff}
+body.v-setup .rd .pane .tw{max-height:65vh;overflow-x:auto;overflow-y:auto;width:100%;max-width:100%}
+body.v-setup .rd .pane table.t{min-width:1000px;width:100%;table-layout:auto}
+body.v-setup .rd .pane table.t th{white-space:nowrap}
+body.v-setup .rd .pane table.t th,body.v-setup .rd .pane table.t td{min-width:100px;overflow-wrap:normal;word-break:normal}
+body.v-setup .rd .pane table.t th:first-child,body.v-setup .rd .pane table.t td:first-child{min-width:110px}
+body.v-setup .rd .pane table.t th:nth-child(5),body.v-setup .rd .pane table.t td:nth-child(5){min-width:160px}
+body.v-setup .rd .pane table.t th:nth-child(6),body.v-setup .rd .pane table.t td:nth-child(6){min-width:160px}
+body.v-setup .rd .pane table.t th:last-child,body.v-setup .rd .pane table.t td:last-child{min-width:140px;white-space:nowrap}
 .rd .mapbox .stamp{max-width:calc(100% - 24px);white-space:normal;text-align:center;line-height:1.25}
 .member-modal .card{width:min(560px,100%);max-height:calc(100dvh - 32px);overflow:auto}
 .member-modal h2{overflow-wrap:anywhere;margin-top:0}
@@ -1319,7 +1371,12 @@ body.v-dash #panelBtn{display:none}
   .rd .pane .grid2{grid-template-columns:minmax(0,1fr)}
   .rd .lyr{left:48px;max-width:calc(100% - 100px);padding:8px;font-size:12px}
   .rd .lyr label{white-space:normal}
-  .trace-trip{left:10px;bottom:76px;max-width:calc(100vw - 20px)}
+  .trace-trip{left:10px;right:10px;bottom:74px;width:auto;max-width:calc(100vw - 20px);padding:10px 12px;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.15);z-index:1200;max-height:calc(100dvh - 160px);overflow-y:auto}
+  .trace-trip h3{font-size:13px}
+  .trace-trip .trip-grid{gap:6px;margin:8px 0}
+  .trace-trip .trip-grid b{font-size:15px}
+  .trace-trip .trip-grid span{font-size:10px}
+  .trace-trip .trip-foot{font-size:11.5px;padding-top:6px}
 }
 
 </style></head><body>
@@ -4905,9 +4962,9 @@ function initMap() {
   MAP = L.map('map', { zoomControl: true, preferCanvas: false }).setView([17.0005, 81.8040], 11);
   const esri = n => `https://server.arcgisonline.com/ArcGIS/rest/services/${n}/MapServer/tile/{z}/{y}/{x}`;
   const base = {
-    'Streets': L.tileLayer(esri('World_Street_Map'), { maxZoom: 19, attribution: 'Tiles © Esri' }),
-    'Satellite': L.layerGroup([L.tileLayer(esri('World_Imagery'), { maxZoom: 19, attribution: 'Tiles © Esri' }), L.tileLayer(esri('Reference/World_Boundaries_and_Places'), { maxZoom: 19 })]),
-    'OpenStreetMap': L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' })
+    'Streets': L.tileLayer(esri('World_Street_Map'), { maxZoom: 19, attribution: 'Tiles © Esri', updateWhenIdle: true, keepBuffer: 2 }),
+    'Satellite': L.layerGroup([L.tileLayer(esri('World_Imagery'), { maxZoom: 19, attribution: 'Tiles © Esri', updateWhenIdle: true, keepBuffer: 2 }), L.tileLayer(esri('Reference/World_Boundaries_and_Places'), { maxZoom: 19, updateWhenIdle: true, keepBuffer: 2 })]),
+    'OpenStreetMap': L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap', updateWhenIdle: true, keepBuffer: 2 })
   };
   const pick = LS.get('base', 'Streets'); (base[pick] || base.Streets).addTo(MAP);
   BASE = base; LAYERS_CTL = L.control.layers(base, null, { position: 'topright' }).addTo(MAP);
@@ -4921,7 +4978,7 @@ function initMap() {
     return d; };
   lg.addTo(MAP);
   if (typeof initHeat === 'function') initHeat();
-  MAP.on('zoomend', () => schedule());
+  MAP.on('zoomend moveend', () => schedule());
   MAP.on('click', e => { if (UI.incMode) { setIncident(e.latlng.lat, e.latlng.lng, 'Marked on map'); UI.incMode = false; MAP.getContainer().style.cursor = ''; } });
 }
 const MK = {};
@@ -4999,15 +5056,33 @@ function renderMap() {
   }
 }
 function selectDev(u, pan) {
-  UI.sel = u; if (UI.tab !== 'veh' && UI.tab !== 'inc') UI.tab = 'veh';
+  UI.sel = u; if (UI.tab !== 'veh' && UI.tab !== 'inc' && UI.tab !== 'active') UI.tab = 'veh';
   const Lv = LIVE[u]; if (pan !== false && Lv && Lv.lat != null) MAP.setView([Lv.lat, Lv.lng], Math.max(MAP.getZoom(), 14));
   schedule('force'); paneDirty = 'force';
-  setTimeout(() => { const el = document.querySelector(`.veh[data-u="${u}"]`); if (el) el.scrollIntoView({ block: 'nearest' }); }, 500);
+  setTimeout(() => { const el = document.querySelector(`.active-card[data-u="${u}"], .veh[data-u="${u}"]`); if (el) el.scrollIntoView({ block: 'nearest' }); }, 500);
+}
+
+function centerUnit(u) {
+  if (!u) return;
+  UI.sel = u;
+  if (UI.tab !== 'veh' && UI.tab !== 'inc' && UI.tab !== 'active') UI.tab = 'active';
+  const Lv = LIVE[u];
+  if (Lv && Lv.lat != null && MAP) {
+    MAP.setView([Lv.lat, Lv.lng], Math.max(MAP.getZoom(), 15));
+    if (typeof MK !== 'undefined' && MK[u]) {
+      try {
+        if (!MK[u].getTooltip()) MK[u].bindTooltip(dname(u), { permanent: false, direction: 'top' });
+        MK[u].openTooltip();
+      } catch (e) {}
+    }
+  }
+  schedule('force'); paneDirty = 'force';
+  setTimeout(() => { const el = document.querySelector(`.active-card[data-u="${u}"], .veh[data-u="${u}"]`); if (el) el.scrollIntoView({ block: 'nearest' }); }, 300);
 }
 
 /* ---------- tabs ---------- */
-const TABS = [['sum', 'Summary'], ['veh', 'Vehicles'], ['alerts', 'Alerts'], ['loc', 'Locations'], ['inc', 'Incidents'], ['replay', 'Replay'], ['report', 'Report'], ['setup', 'Setup']];
-const TAB_ICO = { sum: '📊', veh: '🚓', alerts: '🔔', loc: '📍', inc: '📝', replay: '⏯', report: '📄', setup: '⚙' };
+const TABS = [['sum', 'Summary'], ['active', 'Active'], ['veh', 'Vehicles'], ['alerts', 'Alerts'], ['loc', 'Locations'], ['inc', 'Incidents'], ['replay', 'Replay'], ['report', 'Report'], ['setup', 'Setup']];
+const TAB_ICO = { sum: '📊', active: '⚡', veh: '🚓', alerts: '🔔', loc: '📍', inc: '📝', replay: '⏯', report: '📄', setup: '⚙' };
 function alertCount() { return devIds().filter(u => sosOpen(u) || ['nosig', 'gpsoff'].includes(status(u).k)).length; }
 function renderTabs() {
   const n = alertCount();
@@ -5015,7 +5090,7 @@ function renderTabs() {
   if ($('#tabs').innerHTML !== h) $('#tabs').innerHTML = h;
 }
 function renderPane() {
-  const f = { sum: paneSum, veh: paneVeh, alerts: paneAlerts, loc: paneLoc, inc: paneInc, replay: paneReplay, report: paneReport, setup: paneSetup }[UI.tab] || paneSum;
+  const f = { sum: paneSum, active: paneActive, veh: paneVeh, alerts: paneAlerts, loc: paneLoc, inc: paneInc, replay: paneReplay, report: paneReport, setup: paneSetup }[UI.tab] || paneSum;
   let html;
   if (UI.tab === 'sum' && !+LS.get('sumOpen', 1)) html = `<div class="sumbar"><span>Summary hidden</span><button type="button" class="btn small" data-act="sumToggle">Show summary +</button></div>`;
   else if (UI.tab === 'sum') html = `<div class="sumbar sumtop"><span></span><button type="button" class="btn small" data-act="sumToggle" title="Hide the summary to give the Vehicles and Locations lists more room">Hide summary −</button></div>` + f();
@@ -5023,6 +5098,179 @@ function renderPane() {
   const st = $('#pane').scrollTop; $('#pane').innerHTML = html; $('#pane').scrollTop = st;
   if (UI.tab === 'setup') afterSetup();
 }
+
+function activeUnitCard(u) {
+  const d = DEV[u] || {}, Lv = LIVE[u] || {}, st = status(u), sos = sosOpen(u), off = offRoute(u);
+  const fo = forceOf(u);
+  const spd = Lv.spd != null ? Lv.spd : 0;
+  const batTxt = Lv.bat >= 0 ? `${Lv.bat}%${Lv.chg ? ' ⚡' : Lv.bat < 25 ? ' ⚠' : ''}` : '–';
+  const lastTxt = Lv.up ? ago(Lv.up) : '–';
+  const isMoving = st.k === 'move';
+  const statusBadge = sos ? `<span class="st" style="color:${C.sos}">🆘 SOS</span>` : `<span class="st" style="color:${st.c}">${esc(st.txt)}</span>`;
+
+  return `<div class="active-card ${UI.sel === u ? 'sel' : ''}" data-u="${u}" style="border-left-color:${sos ? C.sos : st.c || fcol(fo)}">
+    <div class="l1" style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+      <span style="font-weight:700;color:var(--navy);font-size:14px">${esc(dname(u))}${fo !== 'route' ? ` <span class="ftag" style="background:${fcol(fo)}">${esc(FORCE[fo].s)}</span>` : ''}</span>
+      ${statusBadge}
+    </div>
+    <div class="l2" style="margin-top:2px;color:var(--ink2);font-size:12px;display:flex;justify-content:space-between">
+      <span>${esc(d.officer || 'Officer not entered')}${d.mobile ? ' · ' + esc(d.mobile) : ''}</span>
+      <span>${esc([d.sd, d.ps].filter(Boolean).join(' · '))}</span>
+    </div>
+    <div class="active-metrics">
+      <div class="active-metric"><em>Status</em><b style="color:${st.c}">${isMoving ? 'Moving' : st.k === 'stop' ? 'Stopped' : esc(st.k)}</b></div>
+      <div class="active-metric"><em>Speed</em><b>${spd} km/h</b></div>
+      <div class="active-metric"><em>Battery</em><b style="${Lv.bat >= 0 && Lv.bat < 25 ? 'color:#c0392b' : ''}">${batTxt}</b></div>
+      <div class="active-metric"><em>Last seen</em><b>${lastTxt}</b></div>
+    </div>
+    ${off ? `<div style="font-size:11.5px;color:${C.nosig};font-weight:600;margin-bottom:6px">⚠ ${fKm(off)} off route</div>` : ''}
+    <div class="acts" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">
+      <button class="btn small primary" data-act="centerDev" data-u="${u}" title="Center this unit on the map">📍 Center on map</button>
+      ${d.mobile ? `<a class="btn small" href="tel:${esc(d.mobile)}">Call</a>` : ''}
+      <button class="btn small" data-act="msg" data-u="${u}">Message</button>
+      <button class="btn small" data-act="replayDev" data-u="${u}">Replay</button>
+    </div>
+  </div>`;
+}
+
+function paneActive() {
+  const ids = devIds();
+  const moving = ids.filter(u => status(u).k === 'move');
+  const stopped = ids.filter(u => status(u).k === 'stop');
+
+  const fastestUnit = moving.slice().sort((a, b) => ((LIVE[b] && LIVE[b].spd) || 0) - ((LIVE[a] && LIVE[a].spd) || 0))[0] || null;
+  const maxSpd = fastestUnit && LIVE[fastestUnit] && LIVE[fastestUnit].spd ? LIVE[fastestUnit].spd : 0;
+
+  const withBat = ids.filter(u => LIVE[u] && LIVE[u].bat >= 0);
+  const lowestBatUnit = withBat.slice().sort((a, b) => LIVE[a].bat - LIVE[b].bat)[0] || null;
+  const minBat = lowestBatUnit && LIVE[lowestBatUnit] ? LIVE[lowestBatUnit].bat : null;
+
+  const withUp = ids.filter(u => LIVE[u] && LIVE[u].up);
+  const latestUnit = withUp.slice().sort((a, b) => (LIVE[b].up || 0) - (LIVE[a].up || 0))[0] || null;
+  const latestUp = latestUnit && LIVE[latestUnit] ? LIVE[latestUnit].up : null;
+
+  const R = routes().filter(visible2);
+  const activeRoutes = [];
+  R.forEach(r => {
+    const us = ids.filter(u => DEV[u].ps === r.ps && norm(DEV[u].route) === norm(r.route));
+    if (us.length) {
+      const activeDev = us.find(u => ['move', 'stop', 'weak'].includes(status(u).k)) || us[0];
+      activeRoutes.push({ route: r, u: activeDev, allU: us });
+    }
+  });
+
+  let filteredIds = ids;
+  if (UI.activeF === 'move') filteredIds = moving;
+  else if (UI.activeF === 'stop') filteredIds = stopped;
+  else if (UI.activeF === 'speed' && fastestUnit) filteredIds = [fastestUnit];
+  else if (UI.activeF === 'bat' && lowestBatUnit) filteredIds = [lowestBatUnit];
+  else if (UI.activeF === 'last' && latestUnit) filteredIds = [latestUnit];
+
+  const q = (UI.activeQ || '').toLowerCase().trim();
+  if (q) {
+    filteredIds = filteredIds.filter(u => {
+      const d = DEV[u] || {};
+      return (dname(u) + ' ' + (d.officer || '') + ' ' + (d.mobile || '') + ' ' + (d.ps || '') + ' ' + (d.sd || '')).toLowerCase().includes(q);
+    });
+  }
+
+  const sub = UI.activeSub || 'units';
+
+  let h = `<div class="active-grid5">
+    <div class="active-stat-card ${UI.activeF === 'move' ? 'on' : ''}" data-act="activeFilter" data-f="move" data-u="${fastestUnit || ''}" style="--c:#1e9e57" title="${UI.activeF === 'move' ? 'Clear filter' : 'Filter moving units (click to filter/center)'}">
+      <span><i>${typeof svg === 'function' ? svg('move', 13) : '▶'}</i> Moving</span>
+      <b>${moving.length}</b>
+      <span class="note">${fastestUnit ? esc(dname(fastestUnit)) : 'None'}</span>
+    </div>
+    <div class="active-stat-card ${UI.activeF === 'stop' ? 'on' : ''}" data-act="activeFilter" data-f="stop" data-u="${stopped[0] || ''}" style="--c:#f0a500" title="${UI.activeF === 'stop' ? 'Clear filter' : 'Filter stopped units (click to filter/center)'}">
+      <span><i>${typeof svg === 'function' ? svg('pause', 13) : '⏸'}</i> Stopped</span>
+      <b>${stopped.length}</b>
+      <span class="note">${stopped[0] ? esc(dname(stopped[0])) : 'None'}</span>
+    </div>
+    <div class="active-stat-card ${fastestUnit ? 'can-center' : ''}" data-act="centerLatest" data-u="${fastestUnit || ''}" style="--c:#1f6fd1" title="Click to center fastest vehicle on map">
+      <span>⚡ Speed</span>
+      <b>${maxSpd > 0 ? maxSpd + ' <small style="font-size:10px">km/h</small>' : '0'}</b>
+      <span class="note">${fastestUnit ? esc(dname(fastestUnit)) : '–'}</span>
+    </div>
+    <div class="active-stat-card ${lowestBatUnit ? 'can-center' : ''}" data-act="centerLatest" data-u="${lowestBatUnit || ''}" style="--c:${minBat != null && minBat < 25 ? '#e0413a' : '#27ae60'}" title="Click to center lowest battery phone on map">
+      <span>🔋 Battery</span>
+      <b>${minBat != null ? minBat + '%' : '–'}</b>
+      <span class="note">${lowestBatUnit ? esc(dname(lowestBatUnit)) : '–'}</span>
+    </div>
+    <div class="active-stat-card ${latestUnit ? 'can-center' : ''}" data-act="centerLatest" data-u="${latestUnit || ''}" style="--c:#8e44ad" title="Click to center latest reporting phone on map">
+      <span>⏱ Last seen</span>
+      <b>${latestUp ? ago(latestUp) : '–'}</b>
+      <span class="note">${latestUnit ? esc(dname(latestUnit)) : '–'}</span>
+    </div>
+  </div>`;
+
+  h += `<div class="row" style="gap:6px;margin-bottom:8px">
+    <input type="text" id="activeQ" placeholder="Search active unit, route, or officer" value="${esc(UI.activeQ || '')}" style="flex:1">
+    ${UI.activeF ? `<button class="btn small" data-act="activeFilter" data-f="${UI.activeF}">Clear filter</button>` : ''}
+  </div>`;
+
+  h += `<div class="row" style="gap:6px;margin-bottom:10px">
+    <button type="button" class="btn small ${sub === 'units' ? 'primary' : ''}" data-act="activeSub" data-sub="units">Active Units (${ids.length})</button>
+    <button type="button" class="btn small ${sub === 'routes' ? 'primary' : ''}" data-act="activeSub" data-sub="routes">Active Routes (${activeRoutes.length} / ${R.length})</button>
+  </div>`;
+
+  if (sub === 'routes') {
+    let filteredRoutes = activeRoutes;
+    if (q) {
+      filteredRoutes = filteredRoutes.filter(item => {
+        const r = item.route, d = DEV[item.u] || {};
+        return (r.ps + ' ' + r.route + ' ' + (r.sd || '') + ' ' + (d.officer || '') + ' ' + (d.mobile || '')).toLowerCase().includes(q);
+      });
+    }
+
+    if (!filteredRoutes.length) {
+      h += `<p class="note">${activeRoutes.length ? 'No routes match your search.' : 'No routes currently have active units.'}</p>`;
+    } else {
+      h += filteredRoutes.map(item => {
+        const r = item.route, u = item.u, d = DEV[u] || {}, Lv = LIVE[u] || {}, st = status(u);
+        return `<div class="active-card ${UI.sel === u ? 'sel' : ''}" data-u="${u}" style="border-left-color:${st.c}">
+          <div class="l1" style="display:flex;align-items:center;justify-content:space-between">
+            <span style="font-weight:700;color:var(--navy);font-size:14px">${esc(r.ps)} – ${esc(r.route)}</span>
+            <span class="st" style="color:${st.c}">${esc(st.txt)}</span>
+          </div>
+          <div class="l2" style="margin-top:2px;color:var(--ink2);font-size:12px;display:flex;justify-content:space-between">
+            <span>Officer: <b>${esc(d.officer || r.officer || '–')}</b>${d.mobile || r.mobile ? ' · ' + esc(d.mobile || r.mobile) : ''}</span>
+            <span>${esc(r.sd || d.sd || '')}</span>
+          </div>
+          <div class="active-metrics">
+            <div class="active-metric"><em>Assigned Unit</em><b>${esc(dname(u))}</b></div>
+            <div class="active-metric"><em>Speed</em><b>${Lv.spd || 0} km/h</b></div>
+            <div class="active-metric"><em>Battery</em><b style="${Lv.bat >= 0 && Lv.bat < 25 ? 'color:#c0392b' : ''}">${Lv.bat >= 0 ? Lv.bat + '%' : '–'}</b></div>
+            <div class="active-metric"><em>Last seen</em><b>${Lv.up ? ago(Lv.up) : '–'}</b></div>
+          </div>
+          <div class="acts" style="display:flex;gap:6px;margin-top:6px">
+            <button class="btn small primary" data-act="centerDev" data-u="${u}">📍 Center on map</button>
+            ${d.mobile ? `<a class="btn small" href="tel:${esc(d.mobile)}">Call</a>` : ''}
+            <button class="btn small" data-act="msg" data-u="${u}">Message</button>
+          </div>
+        </div>`;
+      }).join('');
+    }
+  } else {
+    if (!filteredIds.length) {
+      h += `<p class="note">${ids.length ? 'No units match your filter/search.' : 'No route mobiles registered yet.'}</p>`;
+    } else {
+      let lastG = '';
+      filteredIds.forEach(u => {
+        const d = DEV[u] || {};
+        const g = [d.sd, d.ps].filter(Boolean).join(' · ');
+        if (g !== lastG) {
+          h += `<div class="grp" style="margin:10px 0 4px;font-weight:700;color:var(--ink2);font-size:11px;text-transform:uppercase;letter-spacing:.03em">${esc(g || 'Other Units')}</div>`;
+          lastG = g;
+        }
+        h += activeUnitCard(u);
+      });
+    }
+  }
+
+  return h;
+}
+
 
 function vehCard(u, extra) {
   const d = DEV[u], Lv = LIVE[u] || {}, st = status(u), sos = sosOpen(u), off = offRoute(u);
@@ -5193,24 +5441,15 @@ function paneSetup() {
   const s = S(), R = routes();   // Setup lists every route; the top-bar filters do not hide rows here
   const els = [...new Set([...allRoutes().map(r => (r.election || '').trim()), ...Object.values(CONF.stations || {}).map(x => (x.el || '').trim()), ...((LS.get('elecList', []) || [])), ELEC()].filter(Boolean))].sort();
   const elSel = id => `<select id="${id}"><option value="">All elections (${allRoutes().length} routes)</option>${els.map(e => `<option value="${esc(e)}" ${e === ELEC() ? 'selected' : ''}>${esc(e)} (${allRoutes().filter(r => (r.election || '').trim() === e).length} routes)</option>`).join('')}<option value="__new">+ Add a new election…</option></select>`;
-  let h = sec('routes', `1. Routes (${routes().length}${ELEC() ? ' — ' + esc(ELEC()) : ''})`, `<p class="note">Use Assign member to set the officer name, mobile number and password. The APK loads their assigned route after login. Routes marked Review coverage have proposed merges or splits; check their polling locations before assigning.</p>
+  let h = sec('routes', `Routes (${routes().length}${ELEC() ? ' — ' + esc(ELEC()) : ''})`, `<p class="note">Use Assign member to set the officer name, mobile number and password. The APK loads their assigned route after login. Routes marked Review coverage have proposed merges or splits; check their polling locations before assigning.</p>
     <div class="row"><label class="f" style="flex:1">Election <span class="u">(choose one: the list below and the phones show only that election's routes)</span>${elSel('setElec')}</label></div>
     <div class="row"><button class="btn small" data-act="routeAdd">Add a route</button><button class="btn small" data-act="routeImport">Import from Excel</button><button class="btn small" data-act="routeTemplate">Excel template</button><button class="btn small red" data-act="routeClearAll">Remove all routes</button>${ELEC() ? `<button class="btn small red" data-act="delElec">Delete election "${esc(ELEC())}"</button>` : ''}</div>
     <div class="tw"><table class="t"><thead><tr><th>Election</th><th>Sub-division</th><th>PS</th><th>Route</th><th>Villages</th><th>Officer</th><th></th></tr></thead><tbody>${R.map(r => `<tr><td>${esc(r.election || '')}</td><td>${esc(r.sd)}</td><td>${esc(r.ps)}</td><td><b>${esc(r.route)}</b>${r.coverageStatus === 'proposed' ? '<br><span class="note" style="color:#a16207">Review coverage</span>' : ''}</td><td>${esc(r.villages || '')}</td><td>${esc(r.officer || '')} ${esc(r.mobile || '')}${r.vehicle ? '<br><span class="note">' + esc(r.vehicle) + '</span>' : ''}</td><td style="white-space:nowrap"><button class="btn small" data-act="routeQr" data-id="${r.id}">QR</button><button class="btn small" data-act="routeEdit" data-id="${r.id}">Edit</button>${USER_ROLE === 'admin' ? `<button class="btn small primary" data-act="memberAssign" data-id="${r.id}">Assign member</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="7" class="note">No routes yet.</td></tr>'}</tbody></table></div>`);
-  h += sec('qr', '2. QR sheet and stop PIN', `<label class="f">PIN to stop tracking on a phone <span class="u">(only the IT Core should know it; change it before printing the QR sheet)</span><input type="text" id="setPin" value="${esc(s.pin)}" maxlength="8" style="max-width:140px"></label>
-    <div class="row"><button class="btn primary" data-act="printQr">Print QR sheet${UI.fPs ? ' — ' + esc(UI.fPs) : UI.fSd ? ' — ' + esc(UI.fSd) : ''}</button></div><p class="note">Six QR codes per A4 page. Scanning selects a route; the officer still needs an approved account and matching assignment. TRACK 2.1 uses the phone screen lock or a confirmation to stop duty.</p>`);
-  h += sec('ps', `3. Polling locations (${stations().length})`, `<p class="note">Shown on the map, used for the incident search, the off-route alert and the "visited" check. Columns: Polling location, Latitude, Longitude, Sensitivity, Police station, Route No. One row per location, even if it has several booths.</p>
+  h += sec('ps', `Polling locations (${stations().length})`, `<p class="note">Shown on the map, used for the incident search, the off-route alert and the "visited" check. Columns: Polling location, Latitude, Longitude, Sensitivity, Police station, Route No. One row per location, even if it has several booths.</p>
     <div class="row"><label class="f" style="flex:1">Election for these locations <span class="u">(the map shows the locations of the election chosen here)</span>${elSel('setElec2')}</label></div>
     <div class="row"><button class="btn small" data-act="psImport">Import from Excel</button>${ELEC() ? `<button class="btn small red" data-act="delElec">Delete election "${esc(ELEC())}"</button>` : ''}<button class="btn small" data-act="psTemplate">Excel template</button>${stations().length ? '<button class="btn small" data-act="psClear">Remove all</button>' : ''}</div>`);
   const D = Object.keys(DEV).filter(visible).sort((a, b) => dname(a).localeCompare(dname(b), undefined, { numeric: true }));
-  h += sec('dev', `4. Registered phones (${Object.keys(DEV).length})`, `<div class="tw"><table class="t"><thead><tr><th>Vehicle</th><th>Officer</th><th>Phone</th><th>Set up</th><th></th></tr></thead><tbody>${D.map(u => `<tr><td><b>${esc(dname(u))}</b><br><span class="note">${esc(DEV[u].sd || '')}</span></td><td>${esc(DEV[u].officer || '')}<br>${esc(DEV[u].mobile || '')}</td><td class="note">${esc(DEV[u].model || '')}<br>app ${esc(DEV[u].v || '')}</td><td class="note">${fDT(DEV[u].setup)}</td><td><button class="btn small" data-act="editDev" data-u="${u}">Edit</button></td></tr>`).join('') || '<tr><td colspan="5" class="note">None yet.</td></tr>'}</tbody></table></div>`);
-  h += sec('alerts', '5. Alert and map settings', `<label class="f">Google Maps key <span class="u">(optional; adds "Google Maps" and "Google Satellite" to the map layer button — the key from Google Cloud → Credentials, restricted to Maps JavaScript API)</span><div class="row" style="margin:0"><input type="text" id="setGkey" value="${esc(s.gkey || '')}" placeholder="AIza…" style="flex:1"><button class="btn small primary" data-act="saveGkey">Save key</button></div></label><div class="grid2"><label class="f">No signal after (minutes)<input type="number" id="setNosig" min="2" value="${s.nosig}"></label><label class="f">Stopped after (minutes)<input type="number" id="setStop" min="5" value="${s.stop}"></label>
-    <label class="f">Off route beyond (km from its polling locations)<input type="number" id="setOff" min="0.5" step="0.5" value="${s.offkm}"></label><label class="f">Trail on the map (minutes, 0 = none)<input type="number" id="setTrail" min="0" value="${s.trail}"></label></div>
-    <label class="row"><input type="checkbox" id="setSound" ${s.sound ? 'checked' : ''}> Alarm sound for SOS and lost signal</label><button class="btn small primary" data-act="saveSettings">Save settings</button>`);
-  h += sec('rules', '6. Database security rules', `<p class="note">Only the emails listed here can see the map. Phones can only write their own location. Paste the text in <b>Firebase console → Realtime Database → Rules</b> and press <b>Publish</b>.</p>
-    <label class="f">Control room / SP / SDPO emails (one per line)<textarea id="ruleEmails" rows="3">${esc(LS.get('ruleEmails', AU.email || ''))}</textarea></label>
-    <div class="row"><button class="btn small" data-act="makeRules">Make rules text</button><button class="btn small" data-act="copyRules">Copy</button></div><textarea id="rulesOut" rows="10" readonly style="font-family:monospace;font-size:11.5px"></textarea>`);
-  h += sec('end', '7. After the election', `<p class="note">Removes all locations, events and messages from Firebase. Download the reports first. Routes and polling locations are kept.</p><button class="btn small red" data-act="purge">Delete all tracking data</button>`);
+  h += sec('dev', `Registered phones (${Object.keys(DEV).length})`, `<div class="tw"><table class="t"><thead><tr><th>Vehicle</th><th>Officer</th><th>Phone</th><th>Set up</th><th></th></tr></thead><tbody>${D.map(u => `<tr><td><b>${esc(dname(u))}</b><br><span class="note">${esc(DEV[u].sd || '')}</span></td><td>${esc(DEV[u].officer || '')}<br>${esc(DEV[u].mobile || '')}</td><td class="note">${esc(DEV[u].model || '')}<br>app ${esc(DEV[u].v || '')}</td><td class="note">${fDT(DEV[u].setup)}</td><td><button class="btn small" data-act="editDev" data-u="${u}">Edit</button></td></tr>`).join('') || '<tr><td colspan="5" class="note">None yet.</td></tr>'}</tbody></table></div>`);
   return h;
 }
 function afterSetup() { if ($('#rulesOut')) $('#rulesOut').value = rulesText(); }
@@ -5353,11 +5592,18 @@ document.addEventListener('click', async e => {
   const t = e.target;
   const tb = t.closest('[data-tab]'); if (tb) { UI.tab = tb.dataset.tab; if (UI.tab !== 'replay') { LAYER_R && LAYER_R.clearLayers(); } else drawReplay(); renderTabs(); renderPane(); return; }
   const fs = t.closest('[data-fs]'); if (fs) { UI.fStatus = UI.fStatus === fs.dataset.fs ? '' : fs.dataset.fs; if (fs.dataset.fs === '') UI.fStatus = ''; UI.tab = 'veh'; schedule('force'); paneDirty = 'force'; return; }
-  const v = t.closest('.veh'); const a = t.closest('[data-act]');
-  if (v && !a && !t.closest('a')) { selectDev(v.dataset.u); return; }
+  const v = t.closest('.veh, .active-card'); const a = t.closest('[data-act]');
+  if (v && !a && !t.closest('a')) { if (v.classList.contains('active-card')) centerUnit(v.dataset.u); else selectDev(v.dataset.u); return; }
   if (!a) return; const act = a.dataset.act;
   try {
     if (act === 'sel') selectDev(a.dataset.u);
+    else if (act === 'centerDev') centerUnit(a.dataset.u);
+    else if (act === 'centerLatest') { if (a.dataset.u) centerUnit(a.dataset.u); }
+    else if (act === 'activeFilter') {
+      if (UI.activeF === a.dataset.f && a.dataset.u) { centerUnit(a.dataset.u); }
+      else { UI.activeF = UI.activeF === a.dataset.f ? '' : a.dataset.f; renderPane(); }
+    }
+    else if (act === 'activeSub') { UI.activeSub = a.dataset.sub; renderPane(); }
     else if (act === 'sumToggle') { const o = !+LS.get('sumOpen', 1); try { LS.set('sumOpen', o ? 1 : 0); } catch (x) {} renderPane(); }
     else if (act === 'msg') msgModal(a.dataset.u);
     else if (act === 'editDev') devModal(a.dataset.u);
@@ -5450,7 +5696,8 @@ async function loadReplay() {
 }
 document.addEventListener('input', e => {
   const t = e.target;
-  if (t.id === 'vq') { UI.q = t.value; const p = t.selectionStart; renderPane(); const n = $('#vq'); n.focus(); n.setSelectionRange(p, p); }
+  if (t.id === 'vq') { UI.q = t.value; const p = t.selectionStart; renderPane(); const n = $('#vq'); if (n) { n.focus(); n.setSelectionRange(p, p); } }
+  else if (t.id === 'activeQ') { UI.activeQ = t.value; const p = t.selectionStart; renderPane(); const n = $('#activeQ'); if (n) { n.focus(); n.setSelectionRange(p, p); } }
   else if (t.id === 'rpPos') { if (RP_TIMER) { clearInterval(RP_TIMER); RP_TIMER = null; } UI.replay.pos = +t.value / 1000; drawReplay(); const P = UI.replay.pts; t.nextElementSibling.textContent = fTs(P[Math.round(UI.replay.pos * (P.length - 1))][0]); }
 });
 document.addEventListener('change', e => {
@@ -5619,10 +5866,14 @@ function drawStations() {
   const LS_ = locStatus();
   const far = MAP.getZoom() < 12;
   const list = stations().filter(p => validLocation(p) && (!UI.fSd || !p.ps || routes().some(r => r.ps === p.ps && r.sd === UI.fSd) || !routes().length) && (!UI.fPs || p.ps === UI.fPs));
-  const sig = (far ? 'F' : 'N') + list.map(p => p.id + ':' + p.lat + ':' + p.lng + ':' + p.name + ':' + p.cat + cover(p.id).k + ((LS_[p.id] || {}).status || '') + (hot(LS_[p.id]) ? 'h' : '')).join(',') + (typeof votesSig === 'function' ? votesSig() : '');
+  const b = (typeof MAP !== 'undefined' && MAP && MAP.getBounds) ? MAP.getBounds().pad(0.3) : null;
+  const inView = p => !b || b.contains([+p.lat, +p.lng]) || hot(LS_[p.id]) || UI.locSel === p.id;
+  const visibleStations = list.filter(inView);
+  const bKey = b ? [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].map(n => n.toFixed(2)).join(',') : '';
+  const sig = (far ? 'F' : 'N') + ':' + bKey + ':' + visibleStations.length + ':' + visibleStations.map(p => p.id + ':' + cover(p.id).k + ((LS_[p.id] || {}).status || '') + (hot(LS_[p.id]) ? 'h' : '')).join(',') + (typeof votesSig === 'function' ? votesSig() : '');
   if (sig === stationsSig) return;
   stationsSig = sig; LAYER_S.clearLayers();
-  list.forEach(p => {
+  visibleStations.forEach(p => {
     const cv = cover(p.id), r = LS_[p.id], rk = sensRank(p.cat), v = VISIT[p.id];
     const border = rk === 2 ? '3px solid #111' : rk === 1 ? '2px solid #444' : '2px solid #fff';
     const size = rk === 2 ? 16 : 13;
@@ -5640,7 +5891,7 @@ function paneLoc() {
   updateVisits();
   const LS_ = locStatus();
   const all = stations().filter(p => (!UI.fPs || p.ps === UI.fPs) && (!UI.fSd || !routes().length || routes().some(r => r.ps === p.ps && r.sd === UI.fSd)));
-  if (!all.length) return `<div class="banner warn"><b>No polling locations loaded.</b> Import the police stations' Excel files in <b>Setup → 3. Polling locations</b>. Each location then turns green, yellow or red by the time since a route mobile last passed within ${S().visitR} m.</div>`;
+  if (!all.length) return `<div class="banner warn"><b>No polling locations loaded.</b> Import the police stations' Excel files in <b>Setup → Polling locations</b>. Each location then turns green, yellow or red by the time since a route mobile last passed within ${S().visitR} m.</div>`;
   const n = { g: 0, y: 0, r: 0 }; all.forEach(p => n[cover(p.id).k]++);
   const f = UI.locF || 'r';
   let L_ = all.map(p => ({ p, cv: cover(p.id), r: LS_[p.id], rk: sensRank(p.cat), v: VISIT[p.id] }));
@@ -5836,31 +6087,6 @@ async function showPhoto(pid) {
   } catch (e) { m.querySelector('#phBox').textContent = e.message; }
 }
 
-/* ---------- setup: poll-day settings ---------- */
-const _paneSetup = paneSetup;
-paneSetup = function () {
-  const s = S();
-  const NP = notePrefs();
-  const noteSec = sec('notes', '🔔 Notifications on this ' + (NATIVE ? 'phone' : 'computer'), `<p class="note">Choose which alerts ring and pop up on <b>this ${NATIVE ? 'phone' : 'computer'}</b> only. Other phones and computers keep their own choice. Everything still shows on the dashboard and in Alerts.</p>`
-    + NOTE_KINDS.map(([k, l]) => `<label class="row" style="gap:8px;margin:6px 0"><input type="checkbox" data-note="${k}" ${NP[k] !== false || k === 'sos' ? 'checked' : ''} ${k === 'sos' ? 'disabled' : ''}> ${esc(l)}${k === 'sos' ? ' <span class="note">(always on)</span>' : ''}</label>`).join(''));
-  return noteSec + _paneSetup() + sec('poll', '8. Poll-day settings', `<div class="grid2"><label class="f">Counted as a visit within (metres)<input type="number" id="setVisitR" min="50" step="50" value="${s.visitR}"></label><label class="f">Green if visited within (minutes)<input type="number" id="setGreen" min="10" value="${s.green}"></label>
-      <label class="f">Red if no visit for (minutes)<input type="number" id="setRed" min="20" value="${s.red}"></label><span></span>
-      <label class="f">Poll starts at<input type="time" id="setPollStart" value="${esc(s.pollStart)}"></label><label class="f">Poll closes at <span class="u">(countdown in the header)</span><input type="time" id="setPollEnd" value="${esc(s.pollEnd)}"></label>
-      <label class="f">Remind route mobiles for votes every <span class="u">(minutes, 0 = off)</span><input type="number" id="setVoteRem" min="0" step="15" value="${s.voteRemind}"></label></div><button class="btn small primary" data-act="savePoll">Save</button>
-      <p class="note">SOS backup dispatch requires an operator to send the message.</p>
-      <label class="row" style="margin-top:6px"><input type="checkbox" id="setGlide" ${glideOn() ? 'checked' : ''} onchange="setGlide(this.checked)"> Smooth vehicle movement on this computer <span class="use">(vehicles glide between GPS updates; switch off on a slow computer)</span></label>`)
-    + clearSec();
-};
-/* ---------- 9: clear test data before the real election ---------- */
-function clearSec() {
-  return sec('clear', '9. Clear test data', `<div class="box bad" style="border:1px solid #e3b4ad;background:#fdf1ef;border-radius:8px;padding:10px 12px">
-    <b style="color:#8a1c12">Use this once, after testing, before the real election.</b>
-    <p class="note" style="margin:4px 0">It removes all the <b>test</b> movement and reports — the route mobiles, their live positions and tracks, events (reached / SOS / location / votes / photos), messages, photos and incidents.</p>
-    <p class="note" style="margin:4px 0">It does <b>not</b> touch your routes, polling locations, PIN or settings, so you do not have to import the files again.</p>
-    <p class="note" style="margin:4px 0">Do this a day or two before the election, <b>not</b> on poll day. After it, each route mobile registers again on its own within a few minutes (or when its app is next opened) — nothing to do on the phones.</p></div>
-    <label class="f" style="margin-top:8px">To confirm, type <b>CLEAR</b><input type="text" id="clrWord" placeholder="CLEAR" style="max-width:160px"></label>
-    <button class="btn small danger" data-act="clearData">Clear test data now</button>`);
-}
 
 /* ---------- extra Excel sheets in the day report ---------- */
 function extraSheets(wb, dk, ALLP, sheet) {
@@ -6475,32 +6701,6 @@ paneVeh = function () {
   return `<div class="banner warn"><b>${w.all} phones are registered, but none is shown.</b><br>${esc(w.txt)}.<br>${w.otherEl ? 'Their police station / route names do not match the current route list (Settings → 1. Routes). ' : ''}${w.blk ? 'Blocked phones are listed below; use "Make this the route\'s phone". ' : ''}${w.filt ? 'Set the filters at the top to "All". ' : ''}</div>` + h;
 };
 
-/* Settings → one phone per route: every route lock, with Release (also works when the holding phone is not on the dashboard,
-   e.g. the app was re-installed on the same phone and got a new identity) */
-function lockRoute(k) { return routes().find(r => lockKey(r) === k); }
-const _paneSetupL = paneSetup;
-paneSetup = function () {
-  const ks = Object.keys(LOCK).filter(k => LOCK[k] && LOCK[k].uid).sort();
-  const rows = ks.map(k => { const L = LOCK[k], r = lockRoute(k), d = DEV[L.uid], Lv = LIVE[L.uid] || {};
-    return `<tr><td>${r ? esc(r.ps + ' – ' + r.route) : esc(k)}</td><td>${esc(L.mobile || '')}<br><span class="note">${esc(L.model || '')}</span></td><td>${d ? (Lv.up ? 'last seen ' + ago(Lv.up) : 'registered, no location yet') : '<b style="color:#c0392b">phone not on the dashboard</b>'}</td><td><button class="btn small" data-act="lockRelK" data-k="${esc(k)}">Release</button></td></tr>`; }).join('');
-  const body = `<p class="note">Each route runs on one phone only. The first phone that starts duty holds the route. If the officer re-installs the app, changes phone, or a phone shows <b>"Route already active on another phone"</b> although it is the correct phone, press <b>Release</b> for that route, then press START DUTY on the correct phone.</p>`
-    + (ks.length ? `<div class="tw"><table class="t"><thead><tr><th>Route</th><th>Phone holding it</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table></div><div class="row" style="margin-top:8px"><button class="btn small red" data-act="lockRelAll">Release all routes</button></div>` : '<p class="note">No route is held yet.</p>');
-  return sec('locks', `📵 One phone per route (${ks.length} held)`, body) + _paneSetupL();
-};
-document.addEventListener('click', async e => {
-  const a = e.target.closest && e.target.closest('[data-act="lockRelK"],[data-act="lockRelAll"]'); if (!a) return;
-  try {
-    if (a.dataset.act === 'lockRelK') {
-      const k = a.dataset.k, r = lockRoute(k);
-      if (!confirm(`Release ${r ? r.ps + ' – ' + r.route : k}?\n\nThe next phone that presses START DUTY for this route (with the registered mobile number) becomes the route's phone.`)) return;
-      await dbDel('lock/' + k); delete LOCK[k]; toast('Released. Ask the officer to press START DUTY.', 6000);
-    } else {
-      if (!confirm('Release ALL routes?\n\nEvery route can then be taken by the next phone that starts duty. Phones already running keep their route on their next check.')) return;
-      await dbDel('lock'); Object.keys(LOCK).forEach(k => delete LOCK[k]); toast('All routes released.');
-    }
-    schedule('force'); paneDirty = 'force'; renderPane();
-  } catch (er) { toast(er.message, 7000); }
-});
 
 /* ===== App version of each phone ===== */
 const APP_LATEST = '3.0';
@@ -6518,26 +6718,6 @@ function verTag(u) {
 const _vehCardV = vehCard;
 vehCard = function (u, extra) { return _vehCardV(u, extra).replace('<div class="l2"><span>', '<div class="l2"><span>' + verTag(u)); };
 
-/* add an App column to the held-routes table, and a full list of phones with their app version */
-const _paneSetupV = paneSetup;
-paneSetup = function () {
-  let h = _paneSetupV();
-  h = h.replace('<th>Phone holding it</th>', '<th>Phone holding it</th><th>App</th>');
-  // rebuild App cells: insert after the 2nd cell of every lock row
-  h = h.replace(/<tr><td>([^<]*)<\/td><td>([\s\S]*?)<\/td><td>([\s\S]*?)<\/td><td><button class="btn small" data-act="lockRelK" data-k="([^"]*)">/g, (m0, a, b, c, k) => {
-    const L = LOCK[k] || {}; const v = L.uid ? appVer(L.uid) : '';
-    return `<tr><td>${a}</td><td>${b}</td><td>${v ? `v${esc(v)}` : '–'}</td><td>${c}</td><td><button class="btn small" data-act="lockRelK" data-k="${k}">`;
-  });
-  const ids = Object.keys(DEV).filter(u => inElection(DEV[u].el) || onRoute(DEV[u]));
-  const rank = u => ({ old: 0, upd: 1, '': 2, ok: 3 })[verState(appVer(u))];
-  ids.sort((a, b) => rank(a) - rank(b) || dname(a).localeCompare(dname(b), undefined, { numeric: true }));
-  const nOld = ids.filter(u => verState(appVer(u)) === 'old').length, nUpd = ids.filter(u => verState(appVer(u)) === 'upd').length, nOk = ids.filter(u => verState(appVer(u)) === 'ok').length;
-  const body = `<p class="note">Latest TRACK Route app: <b>v${APP_LATEST}</b>. <span style="color:#c0392b">Red</span> = old app without the one-phone-per-route check (install v${APP_LATEST}). <span style="color:#b9770e">Amber</span> = v2.9: works fully, v${APP_LATEST} is optional. The version shows after the phone's next location send.</p>
-    <div class="row" style="gap:8px;margin:4px 0 8px"><span class="vtag" style="color:#c0392b;border-color:#c0392b">${nOld} old</span><span class="vtag" style="color:#b9770e;border-color:#b9770e">${nUpd} on v2.9 (OK)</span><span class="vtag" style="color:#1e7b45;border-color:#1e7b45">${nOk} latest</span></div>
-    <div class="tw"><table class="t"><thead><tr><th>Route</th><th>Officer · mobile</th><th>App</th><th>Phone</th><th>Last seen</th></tr></thead><tbody>${ids.map(u => { const d = DEV[u], Lv = LIVE[u] || {}, s = verState(appVer(u));
-      return `<tr style="${s === 'old' ? 'background:#fdecea' : s === 'upd' ? 'background:#fff6dd' : ''}"><td>${esc(dname(u))}${isBlocked(u) ? ' <b style="color:#c0392b">(blocked)</b>' : ''}</td><td>${esc(d.officer || '')}<br><span class="note">${esc(d.mobile || '')}</span></td><td><b>${appVer(u) ? 'v' + esc(appVer(u)) : '–'}</b></td><td class="note">${esc(d.model || '')}</td><td>${Lv.up ? ago(Lv.up) : '–'}</td></tr>`; }).join('')}</tbody></table></div>`;
-  return h.replace(/(<details[^>]*data-sec="locks")/, sec('vers', `📱 App versions on phones (${nOld ? nOld + ' on old app – update needed' : 'all on v2.9 or newer'})`, body) + '$1');
-};
 
 /* ===== Poll percentage, location-wise, in Excel at regular intervals (like the 9/11/1/3/5 o'clock returns) =====
    One column pair (votes, %) for every interval mark from the poll start, plus the latest figure.
@@ -6979,6 +7159,7 @@ const ICO = {
   report: '<path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/><path d="M10 13h6M10 17h6"/>',
   gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.6 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.6-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/>',
   phone: '<path d="M22 16.9v3a2 2 0 01-2.2 2 19.8 19.8 0 01-8.6-3.1 19.5 19.5 0 01-6-6A19.8 19.8 0 012.1 4.2 2 2 0 014.1 2h3a2 2 0 012 1.7c.1 1 .4 1.9.7 2.8a2 2 0 01-.5 2.1L8 9.9a16 16 0 006 6l1.3-1.3a2 2 0 012.1-.4c.9.3 1.8.6 2.8.7a2 2 0 011.7 2z"/>',
+  active: '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
   move: '<circle cx="13" cy="4" r="2"/><path d="M8 21l3-6 3 2v4"/><path d="M6 12l3-3 4 1 3 3 3 1"/><path d="M11 15l-2-5"/>',
   pause: '<path d="M9 5v14M15 5v14"/>',
   nosig: '<path d="M2 20h.01M7 20v-4M12 20v-8M17 20V8M22 4L2 20"/>',
@@ -6988,7 +7169,7 @@ const ICO = {
 const svg = (k, s) => `<svg class="ic" viewBox="0 0 24 24" width="${s || 20}" height="${s || 20}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICO[k] || ''}</svg>`;
 
 /* ---------- left menu (replaces the tab bar) ---------- */
-const MENU = [['sum', 'Dashboard', 'home'], ['veh', 'Live Tracking', 'pin'], ['loc', 'Polling Stations', 'school'], ['alerts', 'Alerts', 'bell'], ['inc', 'Incidents', 'flag'], ['replay', 'Replay', 'play'], ['report', 'Reports', 'report'], ['setup', 'Settings', 'gear']];
+const MENU = [['sum', 'Dashboard', 'home'], ['active', 'Active', 'active'], ['veh', 'Live Tracking', 'pin'], ['loc', 'Polling Stations', 'school'], ['alerts', 'Alerts', 'bell'], ['inc', 'Incidents', 'flag'], ['replay', 'Replay', 'play'], ['report', 'Reports', 'report'], ['setup', 'Settings', 'gear']];
 renderTabs = function () {
   const n = alertCount();
   const h = MENU.map(([k, t, i]) => `<button type="button" role="tab" aria-selected="${UI.tab === k}" data-tab="${k}" title="${t}">${svg(i)}<span>${t}</span>${k === 'alerts' && n ? `<b class="nb">${n}</b>` : ''}</button>`).join('');
@@ -7009,6 +7190,10 @@ renderCounts = function () {
 const isDash = () => UI.tab === 'sum' && !document.body.classList.contains('wall');
 function applyView() {
   const d = isDash(); document.body.classList.toggle('v-dash', d);
+  const setup = UI.tab === 'setup';
+  const setupChanged = document.body.classList.contains('v-setup') !== setup;
+  document.body.classList.toggle('v-setup', setup);
+  if (setupChanged && typeof MAP !== 'undefined' && MAP) setTimeout(() => MAP.invalidateSize(), 30);
   $('#dash').hidden = !d;
   const mapEl = $('#map'), want = d ? $('#dMap') : $('.work');
   if (mapEl && want && mapEl.parentNode !== want) {
@@ -7123,31 +7308,149 @@ start = function () {
 /* Live journey details: same Firebase stream and selected unit as the map. */
 (function () {
   const panel = document.createElement('section');
-  panel.className = 'trace-trip'; panel.setAttribute('aria-label', 'Live journey'); panel.hidden = true;
+  panel.className = 'trace-trip';
+  panel.setAttribute('aria-label', 'Live journey');
+  panel.hidden = true;
   document.body.appendChild(panel);
+
+  let dismissed = false;
+  let lastSel = typeof UI !== 'undefined' ? UI.sel : null;
+
   function renderTrip() {
-    if (document.querySelector('#app')?.hidden || typeof UI === 'undefined') { panel.hidden = true; return; }
-    const uid = UI.sel || (typeof devIds === 'function' ? devIds()[0] : null);
-    const live = uid && LIVE[uid];
-    if (!live || live.lat == null || live.lng == null) { panel.hidden = true; return; }
+    if (document.querySelector('#app')?.hidden || typeof UI === 'undefined') {
+      panel.hidden = true;
+      return;
+    }
+    if (UI.tab === 'setup') {
+      panel.hidden = true;
+      return;
+    }
+    if (UI.sel !== lastSel) {
+      lastSel = UI.sel;
+      if (UI.sel) dismissed = false;
+    }
+    if (dismissed) {
+      panel.hidden = true;
+      return;
+    }
+    const uid = UI.sel || (!dismissed && typeof devIds === 'function' ? devIds()[0] : null);
+    if (!uid) {
+      panel.hidden = true;
+      return;
+    }
+    const live = LIVE[uid];
+    if (!live || live.lat == null || live.lng == null) {
+      panel.hidden = true;
+      return;
+    }
     const points = TRAIL[uid] || [];
     let metres = 0;
-    for (let i = 1; i < points.length; i++) if (points[i][0] - points[i - 1][0] < 20 * 60000) metres += hav(points[i - 1][1], points[i - 1][2], points[i][1], points[i][2]);
+    for (let i = 1; i < points.length; i++) {
+      if (points[i][0] - points[i - 1][0] < 20 * 60000) {
+        metres += hav(points[i - 1][1], points[i - 1][2], points[i][1], points[i][2]);
+      }
+    }
     const age = Date.now() - (live.t || 0), stale = age > 2 * 60000;
     const sites = stations().filter(p => p.lat && p.lng && p.ps === (DEV[uid] || {}).ps && (!p.route || norm(p.route) === norm((DEV[uid] || {}).route)));
-    const nearest = sites.map(p => ({ name: p.name, m: hav(+live.lat, +live.lng, +p.lat, +p.lng) })).sort((a,b) => a.m - b.m)[0];
-    const incomingVoice = Object.values(EVT).filter(e => e.voice && e.uid && DEV[e.uid] && e.uid !== AU.uid).sort((a,b) => b.t - a.t)[0];
+    const nearest = sites.map(p => ({ name: p.name, m: hav(+live.lat, +live.lng, +p.lat, +p.lng) })).sort((a, b) => a.m - b.m)[0];
+    const incomingVoice = Object.values(EVT).filter(e => e.voice && e.uid && DEV[e.uid] && e.uid !== AU.uid).sort((a, b) => b.t - a.t)[0];
+
     panel.hidden = false;
-    panel.innerHTML = `<h3>● ${esc(dname(uid))} <small>· ${stale ? 'Location stale' : 'Live journey'}</small></h3>
+    panel.innerHTML = `
+      <div class="trip-head">
+        <h3>● ${esc(dname(uid))} <small>· ${stale ? 'Location stale' : 'Live journey'}</small></h3>
+        <button type="button" class="trip-close" id="tripClose" aria-label="Dismiss journey card" title="Dismiss">×</button>
+      </div>
       <small>Last GPS fix ${esc(ago(live.t))} · ${(+live.lat).toFixed(5)}, ${(+live.lng).toFixed(5)}</small>
-      <div class="trip-grid"><div><b>${Math.round(+live.spd || 0)} km/h</b><span>Speed</span></div><div><b>${+live.bat >= 0 ? Math.round(+live.bat) + '%' : '—'}</b><span>Battery</span></div><div><b>${fKm(metres)}</b><span>Today travelled</span></div></div>
-      <div class="trip-foot"><span>${live.gps === false ? 'GPS disabled' : 'GPS on'} · Signal ${+live.sig >= 0 ? live.sig + '/4' : 'unknown'}${nearest ? '<br>Nearest site: ' + esc(nearest.name) + ' · ' + fKm(nearest.m) + ' straight line' : ''}</span><button type="button" id="tripCenter">Center</button></div>
-      ${incomingVoice ? `<div class="trip-foot"><span>Voice from ${esc(dname(incomingVoice.uid))} · ${esc(ago(incomingVoice.t))}</span><button type="button" id="tripVoice">Play</button></div>` : ''}`;
-    panel.querySelector('#tripCenter').onclick = () => MAP.setView([+live.lat, +live.lng], Math.max(MAP.getZoom(), 14));
-    if (incomingVoice) panel.querySelector('#tripVoice').onclick = () => playVoice(incomingVoice.voice);
+      <div class="trip-grid">
+        <div><b>${Math.round(+live.spd || 0)} km/h</b><span>Speed</span></div>
+        <div><b>${+live.bat >= 0 ? Math.round(+live.bat) + '%' : '—'}</b><span>Battery</span></div>
+        <div><b>${fKm(metres)}</b><span>Today travelled</span></div>
+      </div>
+      <div class="trip-foot">
+        <span>${live.gps === false ? 'GPS disabled' : 'GPS on'} · Signal ${+live.sig >= 0 ? live.sig + '/4' : 'unknown'}${nearest ? '<br>Nearest site: ' + esc(nearest.name) + ' · ' + fKm(nearest.m) + ' straight line' : ''}</span>
+        <button type="button" id="tripCenter">Center</button>
+      </div>
+      ${incomingVoice ? `<div class="trip-foot"><span>Voice from ${esc(dname(incomingVoice.uid))} · ${esc(ago(incomingVoice.t))}</span><button type="button" id="tripVoice">Play</button></div>` : ''}
+    `;
+
+    const closeBtn = panel.querySelector('#tripClose');
+    if (closeBtn) {
+      closeBtn.onclick = (e) => {
+        e.stopPropagation();
+        dismissed = true;
+        panel.hidden = true;
+      };
+    }
+    const centerBtn = panel.querySelector('#tripCenter');
+    if (centerBtn) {
+      centerBtn.onclick = () => MAP.setView([+live.lat, +live.lng], Math.max(MAP.getZoom(), 14));
+    }
+    const voiceBtn = panel.querySelector('#tripVoice');
+    if (voiceBtn && incomingVoice) {
+      voiceBtn.onclick = () => playVoice(incomingVoice.voice);
+    }
   }
-  setInterval(renderTrip, 5000);
-  document.addEventListener('click', () => setTimeout(renderTrip, 100));
+
+  // Reactive updates on live data stream
+  if (typeof onLive === 'function') {
+    const origOnLive = onLive;
+    onLive = function (path) {
+      origOnLive.apply(this, arguments);
+      renderTrip();
+    };
+  }
+
+  // Reactive updates on general render cycles
+  if (typeof render === 'function') {
+    const origRender = render;
+    render = function () {
+      origRender.apply(this, arguments);
+      renderTrip();
+    };
+  }
+
+  // Reset dismissed state when a unit is selected/clicked
+  if (typeof selectDev === 'function') {
+    const origSelectDev = selectDev;
+    selectDev = function (u, pan) {
+      dismissed = false;
+      lastSel = u;
+      const res = origSelectDev.apply(this, arguments);
+      renderTrip();
+      return res;
+    };
+  }
+
+  if (typeof UI !== 'undefined') {
+    let currentSelVal = UI.sel;
+    try {
+      Object.defineProperty(UI, 'sel', {
+        get() { return currentSelVal; },
+        set(v) {
+          currentSelVal = v;
+          lastSel = v;
+          if (v) dismissed = false;
+          renderTrip();
+        },
+        configurable: true,
+        enumerable: true
+      });
+    } catch (e) { }
+  }
+
+  document.addEventListener('click', (e) => {
+    const vehEl = e.target.closest && e.target.closest('.veh[data-u], [data-act="sel"]');
+    if (vehEl && vehEl.dataset && vehEl.dataset.u) {
+      dismissed = false;
+      lastSel = vehEl.dataset.u;
+    }
+    setTimeout(renderTrip, 50);
+  });
+
+  setInterval(renderTrip, 3000);
+  window.renderTrip = renderTrip;
 })();
+
 
 </script></body></html>
