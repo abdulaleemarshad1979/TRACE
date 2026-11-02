@@ -17,6 +17,7 @@ import android.os.Looper;
 import android.util.Base64;
 import android.util.TypedValue;
 import android.view.View;
+import android.view.WindowInsets;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
@@ -31,10 +32,6 @@ import com.google.zxing.integration.android.IntentResult;
 import org.json.JSONObject;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.io.InputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
@@ -66,12 +63,12 @@ public final class MainActivity extends Activity {
     "Nidadavolu PS",
     "Samisragudem PS",
     "Undrajavaram PS",
-    "Peravali PS",
+    "Peravali ps",
     "Nallajarla PS",
-    "Mandapeta town PS",
-    "Mandapeta rural PS",
-    "Angara PS",
-    "Rayavaram PS"
+    "Mandapeta town",
+    "mandapeta rural",
+    "Angara",
+    "Rayavaram"
   };
 
   private static final int PERMISSION = 10, PHOTO = 11, STOP = 12;
@@ -79,9 +76,19 @@ public final class MainActivity extends Activity {
   private final Handler ui = new Handler(Looper.getMainLooper());
   private Session session;
   private Outbox outbox;
-  private TextView status, message, telemetry;
-  private EditText route, officer, mobile, station, reportNote, votes;
-  private Spinner psSpinner;
+
+  // Root view containers for Sign-In screen vs Main App screen
+  private LinearLayout signInView;
+  private LinearLayout mainAppView;
+
+  // Sign-in inputs
+  private Spinner loginPsSpinner;
+  private EditText loginRoute, loginOfficer, loginMobile, loginSd;
+  private TextView loginStatus;
+
+  // Main screen components
+  private TextView status, message, telemetry, officerBadge;
+  private EditText station, reportNote, votes;
   private Button duty, voice;
   private MediaRecorder recorder;
   private File audioFile;
@@ -108,46 +115,237 @@ public final class MainActivity extends Activity {
     session = new Session(this);
     outbox = new Outbox(this);
 
-    // Auto-configure backend defaults: No manual API key/DB URL input needed
-    if (session.get("key").isEmpty()) session.set("key", BuildConfig.STAGING_API_KEY);
-    if (session.get("db").isEmpty()) session.set("db", BuildConfig.STAGING_DATABASE_URL);
+    // Auto-configure backend defaults so officers never need to type database URLs or keys
+    if (session.get("email").isEmpty()) session.set("email", "admin@gmail.com");
     if (session.get("interval").isEmpty()) session.set("interval", "8000");
-    if (session.get("approved").isEmpty()) session.set("approved", "1");
-    if (session.uid().isEmpty()) session.uid();
-    fetchBackendConfig();
 
     getWindow().setStatusBarColor(Color.rgb(10, 10, 14));
     getWindow().setNavigationBarColor(Color.rgb(15, 15, 20));
 
+    // Master container
+    FrameLayout masterLayout = new FrameLayout(this);
+    masterLayout.setBackgroundColor(Color.rgb(10, 10, 14));
+
+    // Top inset padding to avoid camera notch/punch-hole
+    int topNotchPadding = dp(46);
+
+    // 1. Build Sign-In View
+    signInView = buildSignInScreen(topNotchPadding);
+    masterLayout.addView(signInView);
+
+    // 2. Build Main App View
+    mainAppView = buildMainAppScreen(topNotchPadding);
+    masterLayout.addView(mainAppView);
+
+    setContentView(masterLayout);
+
+    // Check if already signed in
+    boolean isSignedIn = session.get("signedIn").equals("1") && !session.get("ps").isEmpty();
+    showScreen(isSignedIn);
+
+    refreshDuty();
+    askPermissions();
+    ui.post(telemetryTick);
+  }
+
+  private void showScreen(boolean inMainApp) {
+    if (inMainApp) {
+      signInView.setVisibility(View.GONE);
+      mainAppView.setVisibility(View.VISIBLE);
+      updateOfficerBadge();
+      switchPage(0);
+    } else {
+      mainAppView.setVisibility(View.GONE);
+      signInView.setVisibility(View.VISIBLE);
+    }
+  }
+
+  private void updateOfficerBadge() {
+    if (officerBadge != null && session != null) {
+      String ps = session.get("ps");
+      String rt = session.get("route");
+      String off = session.get("officer");
+      officerBadge.setText((off.isEmpty() ? "Duty Officer" : off) + "  ·  " + ps + (rt.isEmpty() ? "" : " (" + rt + ")"));
+    }
+  }
+
+  // ==========================================
+  // SCREEN 1: SIGN IN PAGE
+  // ==========================================
+  private LinearLayout buildSignInScreen(int topPadding) {
+    LinearLayout root = new LinearLayout(this);
+    root.setOrientation(LinearLayout.VERTICAL);
+    root.setPadding(dp(22), topPadding, dp(22), dp(24));
+    root.setBackgroundColor(Color.rgb(10, 10, 14));
+
+    ScrollView scroll = new ScrollView(this);
+    scroll.setFillViewport(true);
+    LinearLayout box = new LinearLayout(this);
+    box.setOrientation(LinearLayout.VERTICAL);
+    scroll.addView(box);
+    root.addView(scroll, new LinearLayout.LayoutParams(-1, -1));
+
+    // Header Badge
+    TextView tag = new TextView(this);
+    tag.setText("EAST GODAVARI DISTRICT POLICE");
+    tag.setTextSize(11);
+    tag.setTextColor(Color.rgb(96, 165, 250));
+    tag.setTypeface(null, 1);
+    tag.setLetterSpacing(0.12f);
+    box.addView(tag);
+
+    TextView title = new TextView(this);
+    title.setText("TRACK  /  SIGN IN");
+    title.setTextSize(26);
+    title.setTextColor(Color.WHITE);
+    title.setTypeface(null, 1);
+    title.setLetterSpacing(0.06f);
+    title.setPadding(0, dp(4), 0, dp(4));
+    box.addView(title);
+
+    TextView desc = new TextView(this);
+    desc.setText("Patrol Tracking & Emergency Response System");
+    desc.setTextSize(13);
+    desc.setTextColor(Color.rgb(156, 163, 175));
+    desc.setPadding(0, 0, 0, dp(18));
+    box.addView(desc);
+
+    loginStatus = new TextView(this);
+    loginStatus.setText("Select your Police Station to begin duty");
+    loginStatus.setTextSize(13);
+    loginStatus.setTextColor(Color.rgb(52, 211, 153));
+    loginStatus.setPadding(0, 0, 0, dp(14));
+    box.addView(loginStatus);
+
+    section(box, "1. SELECT POLICE STATION");
+    loginPsSpinner = new Spinner(this);
+    ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, EAST_GODAVARI_PS);
+    loginPsSpinner.setAdapter(adapter);
+    loginPsSpinner.setBackground(shape(Color.rgb(24, 27, 36), Color.rgb(59, 130, 246)));
+    loginPsSpinner.setPadding(dp(12), dp(12), dp(12), dp(12));
+    LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(-1, dp(50));
+    sp.bottomMargin = dp(14);
+    box.addView(loginPsSpinner, sp);
+
+    String savedPs = session.get("ps");
+    if (!savedPs.isEmpty()) {
+      for (int i = 0; i < EAST_GODAVARI_PS.length; i++) {
+        if (EAST_GODAVARI_PS[i].equalsIgnoreCase(savedPs)) {
+          loginPsSpinner.setSelection(i);
+          break;
+        }
+      }
+    }
+
+    loginPsSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+      @Override public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+        if (position > 0) {
+          String selected = EAST_GODAVARI_PS[position];
+          String subDiv = getSubDivision(selected);
+          if (loginSd != null) loginSd.setText(subDiv);
+          loginStatus.setText("Station: " + selected);
+        }
+      }
+      @Override public void onNothingSelected(AdapterView<?> parent) {}
+    });
+
+    section(box, "2. OFFICER & ROUTE DETAILS");
+    loginSd = field(box, "Sub-Division", session.get("sd").isEmpty() ? "East Godavari" : session.get("sd"));
+    loginRoute = field(box, "Route Name (e.g. Route 1, Town Patrol)", session.get("route"));
+    loginOfficer = field(box, "Officer Name & Rank", session.get("officer"));
+    loginMobile = field(box, "Officer Mobile Number", session.get("mobile"));
+
+    section(box, "3. AUTHENTICATION & ENTRY");
+    Button enterBtn = new Button(this);
+    enterBtn.setText("SIGN IN  ➔  CONTINUE TO DUTY");
+    enterBtn.setTextSize(15);
+    enterBtn.setTypeface(null, 1);
+    enterBtn.setTextColor(Color.WHITE);
+    enterBtn.setBackground(shape(Color.rgb(37, 99, 235), Color.rgb(96, 165, 250)));
+    LinearLayout.LayoutParams enterP = new LinearLayout.LayoutParams(-1, dp(52));
+    enterP.bottomMargin = dp(10);
+    box.addView(enterBtn, enterP);
+    enterBtn.setOnClickListener(v -> performSignIn());
+
+    button(box, "📷 Scan Route QR Code", () -> new IntentIntegrator(this).setPrompt("Scan Route QR Assignment").initiateScan());
+
+    return root;
+  }
+
+  private void performSignIn() {
+    int pos = loginPsSpinner.getSelectedItemPosition();
+    if (pos == 0) {
+      loginStatus.setText("⚠️ Please select your Police Station first");
+      return;
+    }
+    String psSelected = EAST_GODAVARI_PS[pos];
+    String routeVal = value(loginRoute);
+    String officerVal = value(loginOfficer);
+    String mobileVal = value(loginMobile);
+    String sdVal = value(loginSd);
+    if (sdVal.isEmpty()) sdVal = getSubDivision(psSelected);
+
+    session.set("ps", psSelected);
+    session.set("sd", sdVal);
+    session.set("route", routeVal.isEmpty() ? "Patrol Route 1" : routeVal);
+    session.set("officer", officerVal.isEmpty() ? "Duty Officer" : officerVal);
+    session.set("mobile", mobileVal);
+    session.set("signedIn", "1");
+    session.set("approved", "1");
+
+    work(() -> {
+      try {
+        if (!session.configured() && !session.get("email").isEmpty()) {
+          try { session.signIn(session.get("email"), "Officer@1234"); } catch (Exception ignored) {}
+        }
+        JSONObject d = new JSONObject()
+          .put("sd", session.get("sd"))
+          .put("ps", session.get("ps"))
+          .put("route", session.get("route"))
+          .put("officer", session.get("officer"))
+          .put("mobile", session.get("mobile"))
+          .put("v", "TRACK Route 2.0 (East Godavari)");
+        session.dbPut("devices/" + session.uid(), d);
+      } catch (Exception ignored) {}
+    });
+
+    note("Signed In: " + psSelected);
+    showScreen(true);
+  }
+
+  // ==========================================
+  // SCREEN 2: MAIN APP (4 PAGES + BOTTOM NAV)
+  // ==========================================
+  private LinearLayout buildMainAppScreen(int topPadding) {
     LinearLayout root = new LinearLayout(this);
     root.setOrientation(LinearLayout.VERTICAL);
     root.setBackgroundColor(Color.rgb(10, 10, 14));
 
-    // Top Fixed District Police Header & Live Telemetry Badge
+    // Top Header with notch safety padding
     LinearLayout header = new LinearLayout(this);
     header.setOrientation(LinearLayout.VERTICAL);
-    header.setPadding(dp(18), dp(16), dp(18), dp(10));
+    header.setPadding(dp(18), topPadding, dp(18), dp(10));
     header.setBackgroundColor(Color.rgb(15, 17, 23));
 
     TextView title = new TextView(this);
-    title.setText("TRACK  /  ROUTE");
-    title.setTextSize(22);
+    title.setText("TRACK  ·  ACTIVE PATROL");
+    title.setTextSize(19);
     title.setTextColor(Color.WHITE);
     title.setTypeface(null, 1);
     title.setLetterSpacing(0.08f);
     header.addView(title);
 
-    TextView subtitle = new TextView(this);
-    subtitle.setText("East Godavari District Police");
-    subtitle.setTextSize(13);
-    subtitle.setTextColor(Color.rgb(160, 165, 180));
-    header.addView(subtitle);
+    officerBadge = new TextView(this);
+    officerBadge.setText("East Godavari District Police");
+    officerBadge.setTextSize(12);
+    officerBadge.setTextColor(Color.rgb(96, 165, 250));
+    header.addView(officerBadge);
 
     telemetry = new TextView(this);
     telemetry.setText("Telemetry starting…");
     telemetry.setTextSize(12);
     telemetry.setTextColor(Color.rgb(52, 211, 153));
-    telemetry.setPadding(0, dp(4), 0, 0);
+    telemetry.setPadding(0, dp(3), 0, 0);
     header.addView(telemetry);
 
     status = new TextView(this);
@@ -159,12 +357,11 @@ public final class MainActivity extends Activity {
 
     root.addView(header);
 
-    // Pages Container
+    // 4 Pages Container
     FrameLayout container = new FrameLayout(this);
     LinearLayout.LayoutParams containerParams = new LinearLayout.LayoutParams(-1, 0, 1.0f);
     root.addView(container, containerParams);
 
-    // Build the 4 distinct pages
     pages[0] = buildDutyPage();
     pages[1] = buildSosPage();
     pages[2] = buildPollingPage();
@@ -175,11 +372,11 @@ public final class MainActivity extends Activity {
       pages[i].setVisibility(i == 0 ? View.VISIBLE : View.GONE);
     }
 
-    // Bottom Navigation Bar with 4 sleek tabs: [Duty], [SOS], [Polling], [Comms]
+    // Bottom Navigation Bar - 4 tabs
     LinearLayout navBar = new LinearLayout(this);
     navBar.setOrientation(LinearLayout.HORIZONTAL);
     navBar.setBackgroundColor(Color.rgb(18, 20, 28));
-    navBar.setPadding(dp(4), dp(4), dp(4), dp(4));
+    navBar.setPadding(dp(4), dp(6), dp(4), dp(8));
 
     String[] navTitles = {"Duty", "SOS", "Polling", "Comms"};
     for (int i = 0; i < 4; i++) {
@@ -189,7 +386,7 @@ public final class MainActivity extends Activity {
       b.setTextSize(13);
       b.setTypeface(null, 1);
       b.setAllCaps(false);
-      LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, dp(48), 1.0f);
+      LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, dp(46), 1.0f);
       p.setMargins(dp(2), 0, dp(2), 0);
       b.setLayoutParams(p);
       b.setOnClickListener(v -> switchPage(pageIndex));
@@ -198,11 +395,7 @@ public final class MainActivity extends Activity {
     }
     root.addView(navBar);
 
-    setContentView(root);
-    updateNavButtons();
-    refreshDuty();
-    askPermissions();
-    ui.post(telemetryTick);
+    return root;
   }
 
   private void switchPage(int index) {
@@ -235,58 +428,38 @@ public final class MainActivity extends Activity {
     box.setPadding(dp(18), dp(14), dp(18), dp(20));
     scroll.addView(box);
 
-    section(box, "POLICE STATION SELECTION (29 STATIONS)");
-    psSpinner = new Spinner(this);
-    ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, EAST_GODAVARI_PS);
-    psSpinner.setAdapter(adapter);
-    psSpinner.setBackground(shape(Color.rgb(24, 27, 36), Color.rgb(59, 130, 246)));
-    psSpinner.setPadding(dp(10), dp(10), dp(10), dp(10));
-    LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(-1, dp(48));
-    sp.bottomMargin = dp(12);
-    box.addView(psSpinner, sp);
-
-    String savedPs = session.get("ps");
-    if (!savedPs.isEmpty()) {
-      for (int i = 0; i < EAST_GODAVARI_PS.length; i++) {
-        if (EAST_GODAVARI_PS[i].equalsIgnoreCase(savedPs)) {
-          psSpinner.setSelection(i);
-          break;
-        }
-      }
-    }
-
-    psSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-      @Override public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-        if (position > 0) {
-          String selected = EAST_GODAVARI_PS[position];
-          session.set("ps", selected);
-          String subDiv = getSubDivision(selected);
-          session.set("sd", subDiv);
-          note("Selected: " + selected + " (" + subDiv + ")");
-        }
-      }
-      @Override public void onNothingSelected(AdapterView<?> parent) {}
-    });
-
-    section(box, "OFFICER & ROUTE DETAILS");
-    route = field(box, "Route Name", session.get("route"));
-    officer = field(box, "Officer Name", session.get("officer"));
-    mobile = field(box, "Officer Mobile", session.get("mobile"));
-
-    section(box, "DUTY STATUS & CONTROLS");
+    section(box, "ACTIVE PATROL CONTROL");
     duty = new Button(this);
     duty.setText("START DUTY");
     duty.setTextSize(16);
     duty.setTypeface(null, 1);
     duty.setTextColor(Color.WHITE);
     duty.setBackground(shape(Color.rgb(34, 197, 94), Color.rgb(255, 255, 255)));
-    LinearLayout.LayoutParams dpLp = new LinearLayout.LayoutParams(-1, dp(54));
-    dpLp.bottomMargin = dp(10);
-    box.addView(duty, dpLp);
+    LinearLayout.LayoutParams dpParam = new LinearLayout.LayoutParams(-1, dp(58));
+    dpParam.bottomMargin = dp(14);
+    box.addView(duty, dpParam);
     duty.setOnClickListener(v -> toggleDuty());
 
-    button(box, "Scan Route QR", () -> new IntentIntegrator(this).setPrompt("Scan Route QR Assignment").initiateScan());
-    button(box, "Sign In / Confirm Duty", () -> confirmDuty());
+    section(box, "CURRENT PATROL ASSIGNMENT");
+    TextView unitCard = new TextView(this);
+    unitCard.setText("Station: " + session.get("ps") + "\nRoute: " + session.get("route") + "\nOfficer: " + session.get("officer"));
+    unitCard.setTextSize(14);
+    unitCard.setTextColor(Color.WHITE);
+    unitCard.setBackground(shape(Color.rgb(24, 27, 36), Color.rgb(51, 65, 85)));
+    unitCard.setPadding(dp(14), dp(14), dp(14), dp(14));
+    LinearLayout.LayoutParams ucP = new LinearLayout.LayoutParams(-1, -2);
+    ucP.bottomMargin = dp(14);
+    box.addView(unitCard, ucP);
+
+    section(box, "OFFICER SESSION");
+    button(box, "Switch Officer / Change Police Station", () -> {
+      if (session.get("duty").equals("1")) {
+        note("Stop Duty before switching accounts");
+        return;
+      }
+      session.set("signedIn", "0");
+      showScreen(false);
+    });
 
     return scroll;
   }
@@ -299,23 +472,23 @@ public final class MainActivity extends Activity {
     box.setPadding(dp(18), dp(14), dp(18), dp(20));
     scroll.addView(box);
 
-    section(box, "EMERGENCY / SOS DISPATCH");
+    section(box, "EMERGENCY ALERT DISPATCH");
     Button sosBtn = new Button(this);
-    sosBtn.setText("🚨  SOS • REQUEST HELP");
+    sosBtn.setText("🚨  SOS · REQUEST HELP");
     sosBtn.setTextSize(18);
     sosBtn.setTypeface(null, 1);
     sosBtn.setTextColor(Color.WHITE);
     sosBtn.setBackground(shape(Color.rgb(220, 38, 38), Color.rgb(239, 68, 68)));
-    LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(-1, dp(72));
+    LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(-1, dp(64));
     sp.bottomMargin = dp(16);
     box.addView(sosBtn, sp);
     sosBtn.setOnClickListener(v -> sos());
 
-    section(box, "QUICK SITUATION UPDATES");
-    button(box, "Report: Normal", () -> report("normal"));
-    button(box, "Report: Tension", () -> report("tension"));
-    button(box, "Report: Problem", () -> report("problem"));
-    button(box, "Reached Incident Spot", () -> report("reached"));
+    section(box, "QUICK SITUATION UPDATE");
+    button(box, "🟢 Report: Normal", () -> report("normal"));
+    button(box, "🟡 Report: Tension", () -> report("tension"));
+    button(box, "🔴 Report: Problem / Conflict", () -> report("problem"));
+    button(box, "📍 Reached Incident Spot", () -> report("reached"));
 
     return scroll;
   }
@@ -328,14 +501,13 @@ public final class MainActivity extends Activity {
     box.setPadding(dp(18), dp(14), dp(18), dp(20));
     scroll.addView(box);
 
-    section(box, "POLLING STATION & TURNOUT REPORTING");
-    station = field(box, "Polling Station Name / ID", "");
-    votes = field(box, "Votes Polled / Turnout Number", "");
-    votes.setInputType(2); // InputType.TYPE_CLASS_NUMBER
-    reportNote = field(box, "Incident / Situation Detail Notes", "");
+    section(box, "POLLING LOCATION REPORTING");
+    station = field(box, "Polling Station ID / Location Name", "");
+    votes = field(box, "Cumulative Votes Polled (Turnout)", "");
+    reportNote = field(box, "Incident / Observation Details", "");
 
-    button(box, "Send Turnout Count", () -> report("votes"));
-    button(box, "Submit Polling Report", () -> report("loc"));
+    button(box, "📊 Send Turnout Count", () -> report("votes"));
+    button(box, "📝 Submit Situation Report", () -> report("loc"));
 
     return scroll;
   }
@@ -348,15 +520,15 @@ public final class MainActivity extends Activity {
     box.setPadding(dp(18), dp(14), dp(18), dp(20));
     scroll.addView(box);
 
-    section(box, "COMMS & MEDIA DISPATCH");
-    button(box, "Take & Send Photo", () -> startActivityForResult(new Intent("android.media.action.IMAGE_CAPTURE"), PHOTO));
-    voice = button(box, "Record Voice Message", () -> toggleRecording());
-    button(box, "Play Latest Voice Reply", () -> playVoice());
+    section(box, "FIELD MEDIA & DISPATCH");
+    button(box, "📷 Take and Send Photo", () -> startActivityForResult(new Intent("android.media.action.IMAGE_CAPTURE"), PHOTO));
+    voice = button(box, "🎤 Record Voice Message", () -> toggleRecording());
+    button(box, "▶ Play Latest Voice Message", () -> playVoice());
 
-    section(box, "CONTROL ROOM INSTRUCTIONS");
-    message = addText(box, "Messages will appear here while duty is active.", 14);
+    section(box, "CONTROL ROOM FEED");
+    message = addText(box, "No new control room messages.", 14);
     message.setBackground(shape(Color.rgb(24, 27, 36), Color.rgb(55, 65, 81)));
-    message.setPadding(dp(14), dp(14), dp(14), dp(14));
+    message.setPadding(dp(12), dp(12), dp(12), dp(12));
 
     return scroll;
   }
@@ -400,10 +572,9 @@ public final class MainActivity extends Activity {
     b.setAllCaps(false);
     b.setTextSize(14);
     b.setTypeface(null, 1);
-    boolean primary = label.contains("Confirm") || label.contains("START");
     boolean sos = label.contains("SOS");
-    b.setTextColor(primary ? Color.BLACK : Color.WHITE);
-    b.setBackground(shape(primary ? Color.rgb(243, 244, 246) : (sos ? Color.rgb(220, 38, 38) : Color.rgb(30, 41, 59)),
+    b.setTextColor(Color.WHITE);
+    b.setBackground(shape(sos ? Color.rgb(220, 38, 38) : Color.rgb(30, 41, 59),
                           sos ? Color.rgb(239, 68, 68) : Color.rgb(71, 85, 105)));
     LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, dp(48));
     p.bottomMargin = dp(9);
@@ -415,72 +586,6 @@ public final class MainActivity extends Activity {
   private String value(EditText e) { return e == null ? "" : e.getText().toString().trim(); }
   private void work(Runnable r) { io.execute(r); }
   private void note(String s) { ui.post(() -> status.setText(s)); }
-
-  private void fetchBackendConfig() {
-    work(() -> {
-      String[] urls = {"http://10.0.2.2:8000/api/config", "http://127.0.0.1:8000/api/config"};
-      for (String u : urls) {
-        try {
-          HttpURLConnection c = (HttpURLConnection) new URL(u).openConnection();
-          c.setConnectTimeout(2000);
-          c.setReadTimeout(2000);
-          if (c.getResponseCode() == 200) {
-            try (InputStream in = c.getInputStream()) {
-              ByteArrayOutputStream bos = new ByteArrayOutputStream();
-              byte[] buf = new byte[2048]; int n;
-              while ((n = in.read(buf)) != -1) bos.write(buf, 0, n);
-              JSONObject cfg = new JSONObject(new String(bos.toByteArray(), StandardCharsets.UTF_8));
-              if (cfg.has("apiKey") && !cfg.getString("apiKey").isEmpty()) {
-                session.set("key", cfg.getString("apiKey"));
-              }
-              if (cfg.has("databaseURL") && !cfg.getString("databaseURL").isEmpty()) {
-                session.set("db", cfg.getString("databaseURL"));
-              }
-              break;
-            }
-          }
-          c.disconnect();
-        } catch (Exception ignored) {}
-      }
-    });
-  }
-
-  private void confirmDuty() {
-    int pos = psSpinner.getSelectedItemPosition();
-    String psSelected = pos > 0 ? EAST_GODAVARI_PS[pos] : session.get("ps");
-    if (psSelected.isEmpty() || pos == 0) {
-      note("Please select a Police Station first");
-      switchPage(0);
-      return;
-    }
-    String routeVal = value(route);
-    String officerVal = value(officer);
-    String mobileVal = value(mobile);
-    String sdVal = getSubDivision(psSelected);
-
-    session.set("ps", psSelected);
-    session.set("sd", sdVal);
-    session.set("route", routeVal.isEmpty() ? "Patrol Route 1" : routeVal);
-    session.set("officer", officerVal.isEmpty() ? "Duty Officer" : officerVal);
-    session.set("mobile", mobileVal);
-    session.set("approved", "1");
-
-    work(() -> {
-      try {
-        JSONObject d = new JSONObject()
-          .put("sd", session.get("sd"))
-          .put("ps", session.get("ps"))
-          .put("route", session.get("route"))
-          .put("officer", session.get("officer"))
-          .put("mobile", session.get("mobile"))
-          .put("v", "TRACK Route 2.0 (East Godavari)");
-        session.dbPut("devices/" + session.uid(), d);
-        note("Duty Confirmed · " + session.get("ps") + " / " + session.get("route"));
-      } catch (Exception e) {
-        note("Confirmed locally · " + session.get("ps"));
-      }
-    });
-  }
 
   private void askPermissions() {
     java.util.ArrayList<String> p = new java.util.ArrayList<>();
@@ -520,9 +625,9 @@ public final class MainActivity extends Activity {
       return;
     }
 
-    if (psSpinner.getSelectedItemPosition() == 0 && session.get("ps").isEmpty()) {
-      note("Select your Police Station before starting duty");
-      switchPage(0);
+    if (session.get("ps").isEmpty()) {
+      note("Police Station not set. Sign in first.");
+      showScreen(false);
       return;
     }
 
@@ -539,7 +644,6 @@ public final class MainActivity extends Activity {
       return;
     }
 
-    confirmDuty();
     session.set("sessionId", UUID.randomUUID().toString());
     session.set("duty", "1");
     startForegroundService(new Intent(this, TrackService.class));
@@ -603,11 +707,11 @@ public final class MainActivity extends Activity {
 
   private void sos() {
     queueEvent("sos");
-    note("🚨 SOS REQUEST DELIVERED");
+    note("🚨 SOS SENT TO CONTROL ROOM");
   }
 
   private void report(String type) {
-    if (session.uid().isEmpty()) { note("Confirm duty first"); return; }
+    if (session.uid().isEmpty()) { note("Sign in first"); return; }
     try {
       String name = value(station);
       String detail = value(reportNote);
@@ -655,14 +759,17 @@ public final class MainActivity extends Activity {
           String psVal = q.optString("ps");
           for (int i = 0; i < EAST_GODAVARI_PS.length; i++) {
             if (EAST_GODAVARI_PS[i].equalsIgnoreCase(psVal)) {
-              psSpinner.setSelection(i);
+              if (loginPsSpinner != null) loginPsSpinner.setSelection(i);
               break;
             }
           }
         }
-        if (q.has("r") && route != null) route.setText(q.optString("r"));
-        note("Route QR loaded: " + q.optString("ps"));
-      } catch (Exception e) { note("Invalid route QR"); }
+        if (q.has("sd") && loginSd != null) loginSd.setText(q.optString("sd"));
+        if (q.has("r") && loginRoute != null) loginRoute.setText(q.optString("r"));
+        if (loginStatus != null) loginStatus.setText("Route QR loaded: " + q.optString("ps"));
+      } catch (Exception e) {
+        if (loginStatus != null) loginStatus.setText("Invalid route QR");
+      }
       return;
     }
 
@@ -705,7 +812,7 @@ public final class MainActivity extends Activity {
         recorder.stop();
         recorder.release();
         recording = false;
-        voice.setText("Record Voice Message");
+        voice.setText("🎤 Record Voice Message");
         byte[] bytes = Files.readAllBytes(audioFile.toPath());
         if (bytes.length > 900000) {
           note("Recording too large; keep under 1 min");
@@ -754,7 +861,7 @@ public final class MainActivity extends Activity {
       recorder.prepare();
       recorder.start();
       recording = true;
-      voice.setText("Stop and Send Recording");
+      voice.setText("⏹ Stop and Send Recording");
       note("Recording audio…");
     } catch (Exception e) { note("Microphone failed: " + e.getMessage()); }
   }
@@ -785,7 +892,7 @@ public final class MainActivity extends Activity {
   @Override protected void onResume() {
     super.onResume();
     if (message != null) {
-      message.setText(session.get("lastMsg").isEmpty() ? "Messages will appear here while duty is active." : session.get("lastMsg"));
+      message.setText(session.get("lastMsg").isEmpty() ? "No new control room messages." : session.get("lastMsg"));
     }
   }
 
