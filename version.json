@@ -1,0 +1,8 @@
+{
+  "versionCode": 2,
+  "versionName": "2.0.0",
+  "appName": "TRACK Route",
+  "district": "East Godavari District Police",
+  "apkUrl": "https://raw.githubusercontent.com/abdulaleemarshad1979/TRACE/main/release/TRACK-Route-EastGodavari.apk",
+  "releaseNotes": "TRACK East Godavari District Police v2.0:\n• Dedicated Sign-In screen first\n• Official 29 East Godavari Police Stations selection bar\n• Notch and punch-hole safety insets fix\n• In-app auto-update checking\n• Background GPS tracking and offline outbox"
+}

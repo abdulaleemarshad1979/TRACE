@@ -203,6 +203,34 @@ def get_police_stations():
         "stations": EAST_GODAVARI_POLICE_STATIONS
     }
 
+@app.get("/api/app/version")
+def get_app_version():
+    """Return latest TRACK Route Android APK version metadata."""
+    v_path = os.path.join(os.path.dirname(__file__), "..", "version.json")
+    if os.path.exists(v_path):
+        try:
+            with open(v_path, "r") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {
+        "versionCode": 2,
+        "versionName": "2.0.0",
+        "appName": "TRACK Route",
+        "district": "East Godavari District Police",
+        "apkUrl": "https://raw.githubusercontent.com/abdulaleemarshad1979/TRACE/main/release/TRACK-Route-EastGodavari.apk",
+        "releaseNotes": "TRACK East Godavari District Police v2.0"
+    }
+
+@app.get("/api/app/download")
+def download_apk():
+    """Download the latest TRACK Route Android APK."""
+    apk_path = os.path.join(os.path.dirname(__file__), "..", "release", "TRACK-Route-EastGodavari.apk")
+    if os.path.exists(apk_path):
+        return FileResponse(apk_path, media_type="application/vnd.android.package-archive", filename="TRACK-Route-EastGodavari.apk")
+    raise HTTPException(404, "APK not found in release directory")
+
+
 @app.post("/api/telemetry")
 async def ingest_telemetry(fix: TelemetryFix):
     """Ingest single or continuous GPS telemetry fix from mobile unit."""

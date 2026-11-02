@@ -146,6 +146,7 @@ public final class MainActivity extends Activity {
     refreshDuty();
     askPermissions();
     ui.post(telemetryTick);
+    checkForUpdates(false);
   }
 
   private void showScreen(boolean inMainApp) {
@@ -451,7 +452,7 @@ public final class MainActivity extends Activity {
     ucP.bottomMargin = dp(14);
     box.addView(unitCard, ucP);
 
-    section(box, "OFFICER SESSION");
+    section(box, "OFFICER SESSION & UPDATES");
     button(box, "Switch Officer / Change Police Station", () -> {
       if (session.get("duty").equals("1")) {
         note("Stop Duty before switching accounts");
@@ -460,6 +461,7 @@ public final class MainActivity extends Activity {
       session.set("signedIn", "0");
       showScreen(false);
     });
+    button(box, "🚀 Check for App Updates", () -> checkForUpdates(true));
 
     return scroll;
   }
@@ -586,6 +588,60 @@ public final class MainActivity extends Activity {
   private String value(EditText e) { return e == null ? "" : e.getText().toString().trim(); }
   private void work(Runnable r) { io.execute(r); }
   private void note(String s) { ui.post(() -> status.setText(s)); }
+  private void checkForUpdates(boolean userInitiated) {
+    if (userInitiated) note("Checking for updates…");
+    work(() -> {
+      String[] urls = {
+        "https://raw.githubusercontent.com/abdulaleemarshad1979/TRACE/main/version.json",
+        "http://10.0.2.2:8000/api/app/version"
+      };
+      for (String u : urls) {
+        try {
+          java.net.HttpURLConnection conn = (java.net.HttpURLConnection) new java.net.URL(u).openConnection();
+          conn.setConnectTimeout(4000);
+          conn.setReadTimeout(4000);
+          if (conn.getResponseCode() == 200) {
+            java.io.InputStream in = conn.getInputStream();
+            java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+            byte[] buf = new byte[1024]; int n;
+            while ((n = in.read(buf)) != -1) out.write(buf, 0, n);
+            JSONObject v = new JSONObject(new String(out.toByteArray(), "UTF-8"));
+            int remoteCode = v.optInt("versionCode", 1);
+            int currentCode = 2;
+            try { currentCode = getPackageManager().getPackageInfo(getPackageName(), 0).versionCode; } catch (Exception ignored) {}
+            if (remoteCode > currentCode) {
+              String apkUrl = v.optString("apkUrl", "https://raw.githubusercontent.com/abdulaleemarshad1979/TRACE/main/release/TRACK-Route-EastGodavari.apk");
+              String notes = v.optString("releaseNotes", "New version of TRACK is available.");
+              String vName = v.optString("versionName", "Latest");
+              ui.post(() -> showUpdateDialog(vName, notes, apkUrl));
+              return;
+            } else if (userInitiated) {
+              ui.post(() -> note("TRACK is up to date (v" + v.optString("versionName", "2.0") + ")"));
+              return;
+            }
+          }
+        } catch (Exception ignored) {}
+      }
+      if (userInitiated) ui.post(() -> note("Checked for updates. You are on latest."));
+    });
+  }
+
+  private void showUpdateDialog(String versionName, String notes, String apkUrl) {
+    new AlertDialog.Builder(this)
+      .setTitle("🚀 Update Available (v" + versionName + ")")
+      .setMessage(notes + "\n\nA new update is ready on GitHub. Would you like to update now?")
+      .setCancelable(true)
+      .setPositiveButton("Update Now", (d, w) -> {
+        try {
+          Intent intent = new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(apkUrl));
+          startActivity(intent);
+        } catch (Exception e) {
+          note("Error opening updater: " + e.getMessage());
+        }
+      })
+      .setNegativeButton("Later", null)
+      .show();
+  }
 
   private void askPermissions() {
     java.util.ArrayList<String> p = new java.util.ArrayList<>();
