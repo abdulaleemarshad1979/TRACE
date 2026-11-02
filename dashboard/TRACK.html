@@ -4453,6 +4453,7 @@ const NATIVE = typeof window.Android !== 'undefined';
 const DEFAULT_CFG = {"k":"AIzaSyAArH0Q0UWaOHGh8yNbXQZYnw5IOTMMjpY","d":"https://officer-8eb52-default-rtdb.asia-southeast1.firebasedatabase.app","p":"officer-8eb52","sender":"257427563465","appId":"1:257427563465:web:5d0fa9eb5cef96a7af7e18"};
 let CFG = LS.get('cfg', null) || (TEST ? null : DEFAULT_CFG);      // {k: apiKey, d: databaseURL}
 let AU = LS.get('au', null);        // {rt, email, uid}
+if (AU && (!AU.rt || !AU.uid)) { AU = null; LS.set('au', null); }
 let ID_TOKEN = null, ID_EXP = 0, KEEP = true;
 
 function parseConfig(txt) {
@@ -4471,8 +4472,21 @@ function authErr(j) {
   if (/TOO_MANY/.test(m)) return 'Too many attempts. Wait a few minutes.';
   return m;
 }
+async function fetchWithTimeout(url, options = {}) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000);
+  try { return await fetch(url, { ...options, signal: controller.signal }); }
+  catch (e) { if (e.name === 'AbortError') throw new Error('Connection timed out. Check your internet connection and try again.'); throw e; }
+  finally { clearTimeout(timer); }
+}
+let tokenRefresh = null;
+async function token() {
+  if (ID_TOKEN && Date.now() < ID_EXP - 120000) return ID_TOKEN;
+  if (!tokenRefresh) tokenRefresh = refreshToken().finally(() => { tokenRefresh = null; });
+  return tokenRefresh;
+}
 async function signIn(email, pw, keep) {
-  const r = await fetch(`${AUTH_URL}/accounts:signInWithPassword?key=${CFG.k}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: pw, returnSecureToken: true }) });
+  const r = await fetchWithTimeout(`${AUTH_URL}/accounts:signInWithPassword?key=${CFG.k}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: pw, returnSecureToken: true }) });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(authErr(j));
   ID_TOKEN = j.idToken; ID_EXP = Date.now() + (+j.expiresIn || 3600) * 1000; KEEP = keep;
@@ -4480,10 +4494,10 @@ async function signIn(email, pw, keep) {
   LS.set('au', keep ? AU : null);
   bridgeAuth();
 }
-async function token() {
+async function refreshToken() {
   if (ID_TOKEN && Date.now() < ID_EXP - 120000) return ID_TOKEN;
   if (!AU) throw new Error('Not signed in');
-  const r = await fetch(`${TOKEN_URL}/token?key=${CFG.k}`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'grant_type=refresh_token&refresh_token=' + encodeURIComponent(AU.rt) });
+  const r = await fetchWithTimeout(`${TOKEN_URL}/token?key=${CFG.k}`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'grant_type=refresh_token&refresh_token=' + encodeURIComponent(AU.rt) });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) { const e = new Error(authErr(j)); e.auth = true; throw e; }
   ID_TOKEN = j.id_token; ID_EXP = Date.now() + (+j.expires_in || 3600) * 1000; AU.rt = j.refresh_token; AU.uid = j.user_id;
@@ -4495,7 +4509,7 @@ function signOut() { if (NATIVE) try { Android.signOut(); } catch (e) { } AU = n
 
 async function db(method, path, body, query) {
   const t = await token();
-  const r = await fetch(`${CFG.d}/${path}.json?auth=${t}${query || ''}`, { method, body: body === undefined ? undefined : JSON.stringify(body) });
+  const r = await fetchWithTimeout(`${CFG.d}/${path}.json?auth=${t}${query || ''}`, { method, body: body === undefined ? undefined : JSON.stringify(body) });
   if (!r.ok) { const tx = await r.text(); throw new Error(r.status === 401 || /Permission denied/i.test(tx) ? 'Permission denied — check the database rules (Setup tab).' : `Database error ${r.status}: ${tx.slice(0, 120)}`); }
   if (method !== 'GET') setTimeout(() => STREAMS.forEach(x => { if (x.mode === 'poll' && path.split('/')[0] === x.path) x.poll(); }), 300);
   return r.status === 204 ? null : r.json();
@@ -4537,13 +4551,13 @@ function stream(path, query, target, onChange, opt) {
       }
       s.ok = true; s.lastOk = Date.now(); s.err = '';
     }
-    catch (e) { s.ok = false; s.err = e.message; if (/Permission denied/.test(e.message)) showError(`Permission denied for "${path}". Check the database rules (Setup tab) and that you signed in with an email listed there.`); }
+    catch (e) { if (e.auth) { signOut(); return; } s.ok = false; s.err = e.message; if (/Permission denied/.test(e.message)) showError(`Permission denied for "${path}". Check the database rules (Setup tab) and that you signed in with an email listed there.`); }
     setConn();
   };
   s.startPoll = () => { if (s.mode !== 'poll') { try { localStorage.setItem('rm_poll', '1'); } catch (e) { } } if (s.es) s.es.close(); s.mode = 'poll'; clearInterval(s.timer); s.poll(); s.timer = setInterval(s.poll, s.every); };
   s.open = async () => {
     if (s.mode === 'poll') { s.startPoll(); return; }
-    let t; try { t = await token(); } catch (e) { s.err = e.message; setTimeout(s.open, 15000); return; }
+    let t; try { t = await token(); } catch (e) { if (e.auth) { signOut(); return; } s.err = e.message; s.ok = false; setConn(); setTimeout(s.open, 15000); return; }
     s.es = new EventSource(`${CFG.d}/${path}.json?auth=${t}${s.query}`);
     const h = patch => ev => { try { const m = JSON.parse(ev.data); apply(m.path, m.data, patch); s.ok = true; s.opened = true; s.err = ''; setConn(); } catch (e) { } };
     s.es.addEventListener('put', h(false));
@@ -4559,7 +4573,7 @@ function stream(path, query, target, onChange, opt) {
     };
   };
   s.restart = () => { if (s.mode === 'poll') { s.poll(); return; } if (s.es) s.es.close(); s.open(); };
-  STREAMS.push(s); s.open();
+  STREAMS.push(s); setConn(); s.open();
   return s;
 }
 function setConn() {
@@ -4604,7 +4618,7 @@ const forceCode = v => { const s = String(v || '').toLowerCase(); return /spec|s
 const forceLabel = c => (FORCE[c] || FORCE.route).n;
 const STATUS_TXT = { move: 'Moving', stop: 'Stopped', weak: 'GPS weak', gpsoff: 'GPS off', nosig: 'No signal', none: 'Not started' };
 
-const DEV = {}, LIVE = {}, EVT = {}, CONF = {"stations":{"ps_1":{"name":"I Town L&O PS Polling Center","ps":"I Town L&O PS","sd":"Rajahmundry Urban","lat":17.0051,"lng":81.7778,"cat":"Standard"},"ps_2":{"name":"II Town L&O PS Polling Center","ps":"II Town L&O PS","sd":"Rajahmundry Urban","lat":16.9924,"lng":81.7821,"cat":"Standard"},"ps_3":{"name":"III Town L&O PS Polling Center","ps":"III Town L&O PS","sd":"Rajahmundry Urban","lat":17.0142,"lng":81.7915,"cat":"Standard"},"ps_4":{"name":"Prakash Nagar PS Polling Center","ps":"Prakash Nagar PS","sd":"Rajahmundry Urban","lat":17.0215,"lng":81.785,"cat":"Standard"},"ps_5":{"name":"Bommuru PS Polling Center","ps":"Bommuru PS","sd":"Rajahmundry Urban","lat":16.9785,"lng":81.8152,"cat":"Standard"},"ps_6":{"name":"Rajanagaram PS Polling Center","ps":"Rajanagaram PS","sd":"Rajahmundry Rural","lat":17.085,"lng":81.9012,"cat":"Standard"},"ps_7":{"name":"Kadiyam PS Polling Center","ps":"Kadiyam PS","sd":"Rajahmundry Rural","lat":16.915,"lng":81.842,"cat":"Standard"},"ps_8":{"name":"Dowleswaram PS Polling Center","ps":"Dowleswaram PS","sd":"Rajahmundry Rural","lat":16.9421,"lng":81.7745,"cat":"Standard"},"ps_9":{"name":"Korukonda PS Polling Center","ps":"Korukonda PS","sd":"Rajahmundry Rural","lat":17.172,"lng":81.821,"cat":"Standard"},"ps_10":{"name":"Gokavaram PS Polling Center","ps":"Gokavaram PS","sd":"Rajahmundry Rural","lat":17.2415,"lng":81.882,"cat":"Standard"},"ps_11":{"name":"Seetha Nagaram PS Polling Center","ps":"Seetha Nagaram PS","sd":"Rajahmundry Rural","lat":17.2012,"lng":81.7015,"cat":"Standard"},"ps_12":{"name":"Anaparthi PS Polling Center","ps":"Anaparthi PS","sd":"Mandapeta Sub-division","lat":16.995,"lng":81.954,"cat":"Standard"},"ps_13":{"name":"Biccavolu PS Polling Center","ps":"Biccavolu PS","sd":"Mandapeta Sub-division","lat":17.021,"lng":82.045,"cat":"Standard"},"ps_14":{"name":"Rangampeta PS Polling Center","ps":"Rangampeta PS","sd":"Mandapeta Sub-division","lat":17.0512,"lng":81.982,"cat":"Standard"},"ps_15":{"name":"Kovvuru town PS Polling Center","ps":"Kovvuru town PS","sd":"Kovvur Sub-division","lat":17.0125,"lng":81.728,"cat":"Standard"},"ps_16":{"name":"Kovvuru rural PS Polling Center","ps":"Kovvuru rural PS","sd":"Kovvur Sub-division","lat":17.025,"lng":81.715,"cat":"Standard"},"ps_17":{"name":"Chagallu PS Polling Center","ps":"Chagallu PS","sd":"Kovvur Sub-division","lat":16.972,"lng":81.652,"cat":"Standard"},"ps_18":{"name":"Thallapudi PS Polling Center","ps":"Thallapudi PS","sd":"Kovvur Sub-division","lat":17.095,"lng":81.681,"cat":"Standard"},"ps_19":{"name":"Gopalapuram PS Polling Center","ps":"Gopalapuram PS","sd":"Kovvur Sub-division","lat":17.112,"lng":81.542,"cat":"Standard"},"ps_20":{"name":"Devarapalli PS Polling Center","ps":"Devarapalli PS","sd":"Kovvur Sub-division","lat":17.032,"lng":81.571,"cat":"Standard"},"ps_21":{"name":"Nidadavolu PS Polling Center","ps":"Nidadavolu PS","sd":"Kovvur Sub-division","lat":16.912,"lng":81.671,"cat":"Standard"},"ps_22":{"name":"Samisragudem PS Polling Center","ps":"Samisragudem PS","sd":"Kovvur Sub-division","lat":16.945,"lng":81.642,"cat":"Standard"},"ps_23":{"name":"Undrajavaram PS Polling Center","ps":"Undrajavaram PS","sd":"Kovvur Sub-division","lat":16.852,"lng":81.712,"cat":"Standard"},"ps_24":{"name":"Peravali PS Polling Center","ps":"Peravali PS","sd":"Kovvur Sub-division","lat":16.782,"lng":81.745,"cat":"Standard"},"ps_25":{"name":"Nallajarla PS Polling Center","ps":"Nallajarla PS","sd":"Kovvur Sub-division","lat":16.952,"lng":81.482,"cat":"Standard"},"ps_26":{"name":"Mandapeta town PS Polling Center","ps":"Mandapeta town PS","sd":"Mandapeta Sub-division","lat":16.865,"lng":81.932,"cat":"Standard"},"ps_27":{"name":"Mandapeta rural PS Polling Center","ps":"Mandapeta rural PS","sd":"Mandapeta Sub-division","lat":16.878,"lng":81.915,"cat":"Standard"},"ps_28":{"name":"Angara PS Polling Center","ps":"Angara PS","sd":"Mandapeta Sub-division","lat":16.821,"lng":81.985,"cat":"Standard"},"ps_29":{"name":"Rayavaram PS Polling Center","ps":"Rayavaram PS","sd":"Mandapeta Sub-division","lat":16.892,"lng":82.021,"cat":"Standard"}},"routes":{"rt_1":{"ps":"I Town L&O PS","route":"Route 1","sd":"Rajahmundry Urban","force":"route"},"rt_2":{"ps":"II Town L&O PS","route":"Route 1","sd":"Rajahmundry Urban","force":"route"},"rt_3":{"ps":"III Town L&O PS","route":"Route 1","sd":"Rajahmundry Urban","force":"route"},"rt_4":{"ps":"Prakash Nagar PS","route":"Route 1","sd":"Rajahmundry Urban","force":"route"},"rt_5":{"ps":"Bommuru PS","route":"Route 1","sd":"Rajahmundry Urban","force":"route"},"rt_6":{"ps":"Rajanagaram PS","route":"Route 1","sd":"Rajahmundry Rural","force":"route"},"rt_7":{"ps":"Kadiyam PS","route":"Route 1","sd":"Rajahmundry Rural","force":"route"},"rt_8":{"ps":"Dowleswaram PS","route":"Route 1","sd":"Rajahmundry Rural","force":"route"},"rt_9":{"ps":"Korukonda PS","route":"Route 1","sd":"Rajahmundry Rural","force":"route"},"rt_10":{"ps":"Gokavaram PS","route":"Route 1","sd":"Rajahmundry Rural","force":"route"},"rt_11":{"ps":"Seetha Nagaram PS","route":"Route 1","sd":"Rajahmundry Rural","force":"route"},"rt_12":{"ps":"Anaparthi PS","route":"Route 1","sd":"Mandapeta Sub-division","force":"route"},"rt_13":{"ps":"Biccavolu PS","route":"Route 1","sd":"Mandapeta Sub-division","force":"route"},"rt_14":{"ps":"Rangampeta PS","route":"Route 1","sd":"Mandapeta Sub-division","force":"route"},"rt_15":{"ps":"Kovvuru town PS","route":"Route 1","sd":"Kovvur Sub-division","force":"route"},"rt_16":{"ps":"Kovvuru rural PS","route":"Route 1","sd":"Kovvur Sub-division","force":"route"},"rt_17":{"ps":"Chagallu PS","route":"Route 1","sd":"Kovvur Sub-division","force":"route"},"rt_18":{"ps":"Thallapudi PS","route":"Route 1","sd":"Kovvur Sub-division","force":"route"},"rt_19":{"ps":"Gopalapuram PS","route":"Route 1","sd":"Kovvur Sub-division","force":"route"},"rt_20":{"ps":"Devarapalli PS","route":"Route 1","sd":"Kovvur Sub-division","force":"route"},"rt_21":{"ps":"Nidadavolu PS","route":"Route 1","sd":"Kovvur Sub-division","force":"route"},"rt_22":{"ps":"Samisragudem PS","route":"Route 1","sd":"Kovvur Sub-division","force":"route"},"rt_23":{"ps":"Undrajavaram PS","route":"Route 1","sd":"Kovvur Sub-division","force":"route"},"rt_24":{"ps":"Peravali PS","route":"Route 1","sd":"Kovvur Sub-division","force":"route"},"rt_25":{"ps":"Nallajarla PS","route":"Route 1","sd":"Kovvur Sub-division","force":"route"},"rt_26":{"ps":"Mandapeta town PS","route":"Route 1","sd":"Mandapeta Sub-division","force":"route"},"rt_27":{"ps":"Mandapeta rural PS","route":"Route 1","sd":"Mandapeta Sub-division","force":"route"},"rt_28":{"ps":"Angara PS","route":"Route 1","sd":"Mandapeta Sub-division","force":"route"},"rt_29":{"ps":"Rayavaram PS","route":"Route 1","sd":"Mandapeta Sub-division","force":"route"}},"settings":{"district":"East Godavari District Police","autoSos":false}};
+const DEV = {}, LIVE = {}, EVT = {}, CONF = {};
 const TRAIL = {};          // uid -> [[t, lat, lng, acc]] for today
 const SEEN_EVT = new Set();
 const UI = { tab: 'sum', sel: null, fStatus: '', fSd: LS.get('fSd', ''), fPs: LS.get('fPs', ''), fForce: LS.get('fForce', ''), q: '', inc: null, incMode: false, replay: null, setupOpen: LS.get('setupOpen', 'routes') };
@@ -4629,6 +4643,7 @@ const ELEC = () => (S().election || '').trim();
 const inElection = el => !ELEC() || !el || String(el).trim().toLowerCase() === ELEC().toLowerCase();
 const allRoutes = () => Object.entries(CONF.routes || {}).map(([id, r]) => Object.assign({ id }, r)).sort((a, b) => (a.sd + a.ps + a.route).localeCompare(b.sd + b.ps + b.route, undefined, { numeric: true }));
 const routes = () => allRoutes().filter(r => inElection(r.election));
+const validLocation = p => p && p.lat != null && p.lng != null && p.lat !== '' && p.lng !== '' && Number.isFinite(+p.lat) && Number.isFinite(+p.lng) && Math.abs(+p.lat) <= 90 && Math.abs(+p.lng) <= 180;
 const stations = () => Object.entries(CONF.stations || {}).map(([id, s]) => Object.assign({ id }, s)).filter(x => inElection(x.el));
 
 /* ---------- names and status ---------- */
@@ -4704,7 +4719,7 @@ function start() {
   $('#who').textContent = AU.email || '';
   bridgeAuth();
   initMap();
-  stream('devices', '', DEV, () => { loadTrails(); schedule(); }, { every: 120000 });
+  stream('devices', '', DEV, () => { loadTrails(); schedule(); }, { every: 15000 });
   stream('live', '', LIVE, path => { onLive(path); schedule(); }, { every: 15000 });
   stream('config', '', CONF, () => { googleLayers(); const n = Object.keys(CONF.stations || {}).length; if (n !== PS_N) { PS_N = n; fitted = false; stationsSig = ''; } schedule(true); }, { every: 300000 });
   stream('events', `&orderBy="t"&startAt=${dayStart(Date.now()) - 6 * HOUR}`, EVT, () => { onEvents(); schedule(); }, { every: 15000, inc: 't' });
@@ -4906,9 +4921,9 @@ function renderMap() {
   // phones
   const keep = new Set();
   const grouped = MAP.getZoom() < 12 && !UI.sel;
-  if (typeof drawGroups === 'function') drawGroups(grouped ? ids.filter(u => LIVE[u] && LIVE[u].lat != null && matchStatus(u)) : []);
+  if (typeof drawGroups === 'function') drawGroups(grouped ? ids.filter(u => validLocation(LIVE[u]) && matchStatus(u)) : []);
   ids.forEach(u => {
-    const Lv = LIVE[u]; if (!Lv || Lv.lat == null) return;
+    const Lv = LIVE[u]; if (!validLocation(Lv)) return;
     if (grouped || (!matchStatus(u) && UI.sel !== u)) return;
     keep.add(u);
     const st = status(u), sos = sosOpen(u), hd = typeof heading === 'function' ? heading(u) : null;
@@ -4923,8 +4938,8 @@ function renderMap() {
   if (s.trail > 0) keep.forEach(u => { const tr = (TRAIL[u] || []).filter(p => p[0] > Date.now() - s.trail * MIN && p[3] <= 150); if (tr.length > 1) L.polyline(tr.map(p => [p[1], p[2]]), { color: status(u).c, weight: UI.sel === u ? 5 : 3, opacity: .7 }).addTo(LAYER_T); });
   // first view: fit the phones AND the polling locations (filtered), so locations far from the phones are not off-screen
   if (!fitted) {
-    const pts = [...keep].map(u => [LIVE[u].lat, LIVE[u].lng]);
-    stations().forEach(p => { if (p.lat && p.lng && (!UI.fPs || p.ps === UI.fPs) && (!UI.fSd || !routes().length || routes().some(r => r.ps === p.ps && r.sd === UI.fSd))) pts.push([+p.lat, +p.lng]); });
+    const pts = ids.filter(u => validLocation(LIVE[u]) && matchStatus(u)).map(u => [+LIVE[u].lat, +LIVE[u].lng]);
+    stations().forEach(p => { if (validLocation(p) && (!UI.fPs || p.ps === UI.fPs) && (!UI.fSd || !routes().length || routes().some(r => r.ps === p.ps && r.sd === UI.fSd))) pts.push([+p.lat, +p.lng]); });
     if (pts.length) { fitted = true; try { MAP.invalidateSize(); } catch (e) { } MAP.fitBounds(L.latLngBounds(pts).pad(0.12), { maxZoom: 14 }); }
   }
 }
@@ -5458,8 +5473,8 @@ function drawStations() {
   updateVisits();
   const LS_ = locStatus();
   const far = MAP.getZoom() < 12;
-  const list = stations().filter(p => p.lat && (!UI.fSd || !p.ps || routes().some(r => r.ps === p.ps && r.sd === UI.fSd) || !routes().length) && (!UI.fPs || p.ps === UI.fPs));
-  const sig = (far ? 'F' : 'N') + list.map(p => p.id + cover(p.id).k + ((LS_[p.id] || {}).status || '') + (hot(LS_[p.id]) ? 'h' : '')).join(',') + (typeof votesSig === 'function' ? votesSig() : '');
+  const list = stations().filter(p => validLocation(p) && (!UI.fSd || !p.ps || routes().some(r => r.ps === p.ps && r.sd === UI.fSd) || !routes().length) && (!UI.fPs || p.ps === UI.fPs));
+  const sig = (far ? 'F' : 'N') + list.map(p => p.id + ':' + p.lat + ':' + p.lng + ':' + p.name + ':' + p.cat + cover(p.id).k + ((LS_[p.id] || {}).status || '') + (hot(LS_[p.id]) ? 'h' : '')).join(',') + (typeof votesSig === 'function' ? votesSig() : '');
   if (sig === stationsSig) return;
   stationsSig = sig; LAYER_S.clearLayers();
   list.forEach(p => {

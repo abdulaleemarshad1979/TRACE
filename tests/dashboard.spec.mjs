@@ -41,3 +41,30 @@ test('signed-in control room displays live unit and SOS', async ({ page }) => {
   await expect(page.locator('.trace-trip')).toContainText('28 km/h');
   await expect(page.locator('.trace-trip')).toContainText('81%');
 });
+
+test('groups on the initial map are fitted and malformed fixes do not hide valid phones', async ({ page }) => {
+  await page.route('https://*.tile.openstreetmap.org/**', route => route.abort());
+  await page.goto(url);
+  expect(await page.evaluate(() => Object.keys(CONF).length)).toBe(0);
+  const result = await page.evaluate(() => {
+    document.querySelector('#login').hidden = true;
+    document.querySelector('#app').hidden = false;
+    initMap();
+    DEV.remote = { ps: 'Test PS', route: 'Route 1', sd: 'Test' };
+    DEV.bad = { ps: 'Test PS', route: 'Route 2', sd: 'Test' };
+    LIVE.remote = { lat: 16.5, lng: 81.1, t: Date.now(), up: Date.now(), gps: true };
+    LIVE.bad = { lat: 'bad', lng: null, t: Date.now(), up: Date.now() };
+    MAP.setView([17, 81.8], 10);
+    fitted = false;
+    renderMap();
+    return { contains: MAP.getBounds().contains([16.5, 81.1]), fitted, invalidMarker: !!MK.bad };
+  });
+  expect(result).toEqual({ contains: true, fitted: true, invalidMarker: false });
+});
+
+test('incomplete saved sign-in returns to login instead of an empty live dashboard', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('rm_au', '{}'));
+  await page.goto(url);
+  await expect(page.locator('#loginForm')).toBeVisible();
+  await expect(page.locator('#app')).toBeHidden();
+});

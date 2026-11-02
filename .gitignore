@@ -29,3 +29,6 @@ google-services.json
 .idea/
 .vscode/
 .DS_Store
+
+# Private election imports and verification data
+.local-data/

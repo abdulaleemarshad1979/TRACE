@@ -40,6 +40,8 @@ public final class TrackService extends Service {
   private FusedLocationProviderClient fused;
   private LocationCallback callback;
   private Location last;
+  private LocationListener platformListener;
+  private boolean stopping;
   private long lastUploaded;
   private final Runnable tick = new Runnable() { public void run() { heartbeat(); loop.postDelayed(this, 30000); } };
   @Override public void onCreate() {
@@ -49,14 +51,26 @@ public final class TrackService extends Service {
     nm.createNotificationChannel(new NotificationChannel("messages", "Route messages", NotificationManager.IMPORTANCE_HIGH));
     startForeground(1, trackingNotification("Duty active • location tracking"));
     locations = (LocationManager) getSystemService(LOCATION_SERVICE);
+    if (!session.authenticated() || !session.get("duty").equals("1")) { stopSelf(); return; }
     fused = LocationServices.getFusedLocationProviderClient(this);
     if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
       long interval = 8000;
       try { interval = Math.max(5000, Math.min(10000, Long.parseLong(session.get("interval")))); } catch (Exception ignored) { }
       LocationRequest request = new LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, interval).setMinUpdateIntervalMillis(5000).setMinUpdateDistanceMeters(3).build();
       callback = new LocationCallback() { @Override public void onLocationResult(LocationResult result) { for (Location l : result.getLocations()) onLocationChanged(l); } };
-      fused.requestLocationUpdates(request, callback, Looper.getMainLooper());
-      fused.getLastLocation().addOnSuccessListener(l -> { if (l != null) onLocationChanged(l); });
+      // Android's GPS provider remains usable on phones without Google Play Services.
+      platformListener = new LocationListener() {
+        @Override public void onLocationChanged(Location l) { TrackService.this.onLocationChanged(l); }
+        @Override public void onStatusChanged(String p, int status, android.os.Bundle extras) { }
+        @Override public void onProviderEnabled(String p) { }
+        @Override public void onProviderDisabled(String p) { heartbeat(); }
+      };
+      try { locations.requestLocationUpdates(LocationManager.GPS_PROVIDER, interval, 3, platformListener, Looper.getMainLooper()); }
+      catch (Exception e) { session.set("syncError", "GPS provider unavailable"); }
+      try {
+        fused.requestLocationUpdates(request, callback, Looper.getMainLooper()).addOnFailureListener(e -> session.set("gpsProvider", "Android GPS"));
+        fused.getLastLocation().addOnSuccessListener(l -> { if (l != null) onLocationChanged(l); });
+      } catch (Exception ignored) { /* Android GPS remains active. */ }
     }
     loop.post(tick);
   }
@@ -67,6 +81,7 @@ public final class TrackService extends Service {
   @Override public int onStartCommand(Intent intent, int flags, int startId) { return START_STICKY; }
   @Override public IBinder onBind(Intent intent) { return null; }
   public void onLocationChanged(Location location) {
+    if (stopping || (last != null && location.getTime() <= last.getTime())) return;
     if (location.getTime() < System.currentTimeMillis() - 120000 || location.getTime() > System.currentTimeMillis() + 30000) return;
     if (last != null && location.getAccuracy() > last.getAccuracy() * 3 && System.currentTimeMillis() - lastUploaded < 60000) return;
     last = location; lastUploaded = System.currentTimeMillis(); heartbeat();
@@ -81,19 +96,21 @@ public final class TrackService extends Service {
   private int signal() {
     try {
       if (checkSelfPermission(Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED) return -1;
+      if (android.os.Build.VERSION.SDK_INT < 28) return -1;
       SignalStrength s = ((TelephonyManager) getSystemService(TELEPHONY_SERVICE)).getSignalStrength();
       return s == null ? -1 : s.getLevel();
     } catch (Exception e) { return -1; }
   }
   private void heartbeat() {
-    if (!session.configured() || session.uid().isEmpty()) return;
+    if (stopping || !session.configured() || !session.authenticated() || !session.get("duty").equals("1")) return;
     final long now = System.currentTimeMillis(); final Location l = last;
     final int bat = battery(), sig = signal(); final boolean gps = gpsOn();
     session.set("battery", String.valueOf(bat)); session.set("signal", String.valueOf(sig)); session.set("gps", gps ? "on" : "off");
     if (!gps) ((NotificationManager) getSystemService(NOTIFICATION_SERVICE)).notify(1, trackingNotification("GPS disabled • turn on location"));
     io.execute(() -> {
       try {
-        JSONObject live = new JSONObject().put("up", now).put("gps", gps).put("bat", bat).put("sig", sig).put("v", "TRACK Route 2.0").put("duty", true).put("sessionId", session.get("sessionId"));
+        if (stopping || !session.get("duty").equals("1")) return;
+        JSONObject live = new JSONObject().put("up", now).put("gps", gps).put("bat", bat).put("sig", sig).put("v", BuildConfig.VERSION_NAME).put("duty", true).put("sessionId", session.get("sessionId"));
         if (l != null) {
           live.put("lat", l.getLatitude()).put("lng", l.getLongitude()).put("t", l.getTime()).put("acc", l.getAccuracy()).put("spd", Math.round(l.getSpeed() * 3.6f)).put("hdg", l.getBearing());
           if (now - lastUploaded < 5000) {
@@ -104,8 +121,9 @@ public final class TrackService extends Service {
         }
         outbox.add("live/" + session.uid(), live);
         outbox.flush(session);
+        session.set("syncError", ""); session.set("lastSync", String.valueOf(System.currentTimeMillis()));
         pollMessage();
-      } catch (Exception ignored) { /* queued writes retry on the next heartbeat */ }
+      } catch (Exception e) { session.set("syncError", "Location upload failed. Check connection and account assignment."); }
     });
   }
   private void pollMessage() {
@@ -120,6 +138,16 @@ public final class TrackService extends Service {
     } catch (Exception ignored) { }
   }
   @Override public void onDestroy() {
-    loop.removeCallbacks(tick); if (fused != null && callback != null) fused.removeLocationUpdates(callback); io.shutdown(); super.onDestroy();
+    stopping = true;
+    if (locations != null && platformListener != null) locations.removeUpdates(platformListener);
+    loop.removeCallbacks(tick);
+    if (fused != null && callback != null) fused.removeLocationUpdates(callback);
+    if (session.authenticated() && !session.get("duty").equals("1")) io.execute(() -> {
+      try {
+        JSONObject ended = new JSONObject().put("up", 0).put("duty", false).put("gps", false);
+        outbox.add("live/" + session.uid(), ended); outbox.flush(session);
+      } catch (Exception e) { session.set("syncError", "Duty end queued for retry"); }
+    });
+    io.shutdown(); super.onDestroy();
   }
 }

@@ -5,6 +5,10 @@ TRACK is an emergency response, patrol tracking, and election duty monitoring sy
 
 ---
 
+## Current deployment
+
+Open [TRACK Monitor](https://officer-8eb52.web.app). Android 2.1.0 requires an approved email/password account and loads routes from Firebase. See [release and operations instructions](docs/RELEASE-AND-OPERATIONS.md) for account assignments, imported-data discrepancies, verification and future updates.
+
 ## Key Highlights
 
 - 📱 **TRACK Route (Android Native Java)**:

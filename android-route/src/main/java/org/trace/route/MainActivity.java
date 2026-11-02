@@ -63,12 +63,12 @@ public final class MainActivity extends Activity {
     "Nidadavolu PS",
     "Samisragudem PS",
     "Undrajavaram PS",
-    "Peravali ps",
+    "Peravali PS",
     "Nallajarla PS",
-    "Mandapeta town",
-    "mandapeta rural",
-    "Angara",
-    "Rayavaram"
+    "Mandapeta town PS",
+    "Mandapeta rural PS",
+    "Angara PS",
+    "Rayavaram PS"
   };
 
   private static final int PERMISSION = 10, PHOTO = 11, STOP = 12;
@@ -82,13 +82,21 @@ public final class MainActivity extends Activity {
   private LinearLayout mainAppView;
 
   // Sign-in inputs
-  private Spinner loginPsSpinner;
-  private EditText loginRoute, loginOfficer, loginMobile, loginSd;
+  private Spinner loginPsSpinner, loginRouteSpinner;
+  private EditText loginEmail, loginPassword;
+  private JSONObject routeCatalog = new JSONObject();
+  private final java.util.ArrayList<JSONObject> routeChoices = new java.util.ArrayList<>();
+  private boolean signingIn, checkingUpdate;
+  private TextView assignmentCard;
+  private EditText loginOfficer, loginMobile, loginSd;
   private TextView loginStatus;
 
   // Main screen components
   private TextView status, message, telemetry, officerBadge;
-  private EditText station, reportNote, votes;
+  private EditText reportNote, votes;
+  private Spinner pollingSpinner;
+  private JSONObject stationCatalog = new JSONObject();
+  private final java.util.ArrayList<JSONObject> pollingChoices = new java.util.ArrayList<>();
   private Button duty, voice;
   private MediaRecorder recorder;
   private File audioFile;
@@ -104,7 +112,7 @@ public final class MainActivity extends Activity {
         int q = outbox != null ? outbox.size() : 0;
         telemetry.setText(bat.isEmpty()
           ? "Telemetry ready · " + q + " queued"
-          : "Battery " + bat + "% · Signal " + session.get("signal") + "/4 · GPS " + session.get("gps") + " · " + q + " queued");
+          : "Battery " + bat + "% · Signal " + session.get("signal") + "/4 · GPS " + session.get("gps") + " · " + q + " queued" + (session.get("syncError").isEmpty() ? "" : " · Upload retry needed"));
       }
       ui.postDelayed(this, 5000);
     }
@@ -114,9 +122,9 @@ public final class MainActivity extends Activity {
     super.onCreate(state);
     session = new Session(this);
     outbox = new Outbox(this);
+    try { stationCatalog = new JSONObject(session.get("stationCatalog")); } catch (Exception ignored) { }
 
     // Auto-configure backend defaults so officers never need to type database URLs or keys
-    if (session.get("email").isEmpty()) session.set("email", "admin@gmail.com");
     if (session.get("interval").isEmpty()) session.set("interval", "8000");
 
     getWindow().setStatusBarColor(Color.rgb(10, 10, 14));
@@ -140,7 +148,8 @@ public final class MainActivity extends Activity {
     setContentView(masterLayout);
 
     // Check if already signed in
-    boolean isSignedIn = session.get("signedIn").equals("1") && !session.get("ps").isEmpty();
+    boolean isSignedIn = session.get("signedIn").equals("1") && session.authenticated() && !session.get("ps").isEmpty();
+    if (!isSignedIn) { session.set("duty", "0"); stopService(new Intent(this, TrackService.class)); }
     showScreen(isSignedIn);
 
     refreshDuty();
@@ -154,6 +163,8 @@ public final class MainActivity extends Activity {
       signInView.setVisibility(View.GONE);
       mainAppView.setVisibility(View.VISIBLE);
       updateOfficerBadge();
+      refreshPollingChoices();
+      if (assignmentCard != null) assignmentCard.setText("Station: " + session.get("ps") + "\nRoute: " + session.get("route") + "\nOfficer: " + session.get("officer"));
       switchPage(0);
     } else {
       mainAppView.setVisibility(View.GONE);
@@ -191,7 +202,7 @@ public final class MainActivity extends Activity {
     tag.setText("EAST GODAVARI DISTRICT POLICE");
     tag.setTextSize(11);
     tag.setTextColor(Color.rgb(96, 165, 250));
-    tag.setTypeface(null, 1);
+    tag.setTypeface(null, android.graphics.Typeface.BOLD);
     tag.setLetterSpacing(0.12f);
     box.addView(tag);
 
@@ -199,7 +210,7 @@ public final class MainActivity extends Activity {
     title.setText("TRACK  /  SIGN IN");
     title.setTextSize(26);
     title.setTextColor(Color.WHITE);
-    title.setTypeface(null, 1);
+    title.setTypeface(null, android.graphics.Typeface.BOLD);
     title.setLetterSpacing(0.06f);
     title.setPadding(0, dp(4), 0, dp(4));
     box.addView(title);
@@ -212,15 +223,21 @@ public final class MainActivity extends Activity {
     box.addView(desc);
 
     loginStatus = new TextView(this);
-    loginStatus.setText("Select your Police Station to begin duty");
+    loginStatus.setText("Sign in with your approved email and password to load routes.");
     loginStatus.setTextSize(13);
     loginStatus.setTextColor(Color.rgb(52, 211, 153));
     loginStatus.setPadding(0, 0, 0, dp(14));
     box.addView(loginStatus);
 
-    section(box, "1. SELECT POLICE STATION");
+    section(box, "1. SIGN IN TO YOUR ACCOUNT");
+    loginEmail = field(box, "Approved email address", session.get("email"));
+    loginEmail.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);
+    loginPassword = field(box, "Password", "");
+    loginPassword.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+    button(box, "Sign in and load my routes", this::authenticate);
+    section(box, "2. SELECT POLICE STATION & ROUTE");
     loginPsSpinner = new Spinner(this);
-    ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, EAST_GODAVARI_PS);
+    ArrayAdapter<String> adapter = spinnerAdapter(java.util.Arrays.asList(EAST_GODAVARI_PS));
     loginPsSpinner.setAdapter(adapter);
     loginPsSpinner.setBackground(shape(Color.rgb(24, 27, 36), Color.rgb(59, 130, 246)));
     loginPsSpinner.setPadding(dp(12), dp(12), dp(12), dp(12));
@@ -244,7 +261,7 @@ public final class MainActivity extends Activity {
           String selected = EAST_GODAVARI_PS[position];
           String subDiv = getSubDivision(selected);
           if (loginSd != null) loginSd.setText(subDiv);
-          loginStatus.setText("Station: " + selected);
+          refreshRouteChoices();
         }
       }
       @Override public void onNothingSelected(AdapterView<?> parent) {}
@@ -252,7 +269,8 @@ public final class MainActivity extends Activity {
 
     section(box, "2. OFFICER & ROUTE DETAILS");
     loginSd = field(box, "Sub-Division", session.get("sd").isEmpty() ? "East Godavari" : session.get("sd"));
-    loginRoute = field(box, "Route Name (e.g. Route 1, Town Patrol)", session.get("route"));
+    loginRouteSpinner = new Spinner(this);
+    box.addView(loginRouteSpinner, new LinearLayout.LayoutParams(-1, dp(52)));
     loginOfficer = field(box, "Officer Name & Rank", session.get("officer"));
     loginMobile = field(box, "Officer Mobile Number", session.get("mobile"));
 
@@ -260,7 +278,7 @@ public final class MainActivity extends Activity {
     Button enterBtn = new Button(this);
     enterBtn.setText("SIGN IN  ➔  CONTINUE TO DUTY");
     enterBtn.setTextSize(15);
-    enterBtn.setTypeface(null, 1);
+    enterBtn.setTypeface(null, android.graphics.Typeface.BOLD);
     enterBtn.setTextColor(Color.WHITE);
     enterBtn.setBackground(shape(Color.rgb(37, 99, 235), Color.rgb(96, 165, 250)));
     LinearLayout.LayoutParams enterP = new LinearLayout.LayoutParams(-1, dp(52));
@@ -273,45 +291,103 @@ public final class MainActivity extends Activity {
     return root;
   }
 
-  private void performSignIn() {
-    int pos = loginPsSpinner.getSelectedItemPosition();
-    if (pos == 0) {
-      loginStatus.setText("⚠️ Please select your Police Station first");
-      return;
-    }
-    String psSelected = EAST_GODAVARI_PS[pos];
-    String routeVal = value(loginRoute);
-    String officerVal = value(loginOfficer);
-    String mobileVal = value(loginMobile);
-    String sdVal = value(loginSd);
-    if (sdVal.isEmpty()) sdVal = getSubDivision(psSelected);
-
-    session.set("ps", psSelected);
-    session.set("sd", sdVal);
-    session.set("route", routeVal.isEmpty() ? "Patrol Route 1" : routeVal);
-    session.set("officer", officerVal.isEmpty() ? "Duty Officer" : officerVal);
-    session.set("mobile", mobileVal);
-    session.set("signedIn", "1");
-    session.set("approved", "1");
-
+  private void authenticate() {
+    if (signingIn) return;
+    String email = value(loginEmail), password = loginPassword.getText().toString();
+    if (email.isEmpty() || password.isEmpty()) { loginStatus.setText("Enter your approved email and password."); return; }
+    signingIn = true; loginStatus.setText("Signing in and loading your assignment…");
     work(() -> {
       try {
-        if (!session.configured() && !session.get("email").isEmpty()) {
-          try { session.signIn(session.get("email"), "Officer@1234"); } catch (Exception ignored) {}
+        session.signIn(email, password);
+        JSONObject available = session.dbGet("config/routes");
+        JSONObject sites = session.dbGet("config/stations");
+        JSONObject assigned = "route".equals(session.get("role")) ? session.dbGet("assignments/" + session.uid()) : null;
+        if (assigned != null && (assigned.optString("ps").isEmpty() || assigned.optString("route").isEmpty()))
+          throw new SecurityException("No route assigned to this account. Contact the control room.");
+        JSONObject allowed = new JSONObject();
+        java.util.Iterator<String> keys = available.keys();
+        while (keys.hasNext()) {
+          String id = keys.next(); JSONObject r = available.getJSONObject(id);
+          if (assigned == null || (assigned.optString("ps").equals(r.optString("ps")) && assigned.optString("route").equals(r.optString("route")))) allowed.put(id, r);
         }
-        JSONObject d = new JSONObject()
-          .put("sd", session.get("sd"))
-          .put("ps", session.get("ps"))
-          .put("route", session.get("route"))
-          .put("officer", session.get("officer"))
-          .put("mobile", session.get("mobile"))
-          .put("v", "TRACK Route 2.0 (East Godavari)");
-        session.dbPut("devices/" + session.uid(), d);
-      } catch (Exception ignored) {}
+        if (allowed.length() == 0) throw new SecurityException("No matching route in the control-room list. Ask the control room to check your assignment.");
+        ui.post(() -> {
+          routeCatalog = allowed; stationCatalog = sites;
+          session.set("stationCatalog", sites.toString());
+          loginPassword.setText("");
+          if (assigned != null) {
+            for (int i = 1; i < EAST_GODAVARI_PS.length; i++) if (EAST_GODAVARI_PS[i].equals(assigned.optString("ps"))) loginPsSpinner.setSelection(i);
+            loginOfficer.setText(assigned.optString("officer")); loginMobile.setText(assigned.optString("mobile"));
+          }
+          refreshRouteChoices(); loginStatus.setText("Signed in. Select your assigned route, then continue.");
+        });
+      } catch (Exception e) {
+        session.clear();
+        ui.post(() -> { routeCatalog = new JSONObject(); refreshRouteChoices(); loginStatus.setText("Sign-in failed: " + e.getMessage()); });
+      } finally { ui.post(() -> signingIn = false); }
     });
+  }
 
-    note("Signed In: " + psSelected);
-    showScreen(true);
+  private void refreshRouteChoices() {
+    if (loginRouteSpinner == null) return;
+    routeChoices.clear();
+    String selected = EAST_GODAVARI_PS[loginPsSpinner.getSelectedItemPosition()];
+    java.util.Iterator<String> keys = routeCatalog.keys();
+    while (keys.hasNext()) { JSONObject r = routeCatalog.optJSONObject(keys.next()); if (r != null && selected.equals(r.optString("ps"))) routeChoices.add(r); }
+    routeChoices.sort((a,b) -> a.optString("route").compareTo(b.optString("route")));
+    java.util.ArrayList<String> labels = new java.util.ArrayList<>();
+    for (JSONObject r : routeChoices) labels.add(r.optString("route"));
+    if (labels.isEmpty()) labels.add("Sign in and select an assigned station");
+    loginRouteSpinner.setAdapter(spinnerAdapter(labels));
+    loginRouteSpinner.setEnabled(!routeChoices.isEmpty());
+  }
+
+  private ArrayAdapter<String> spinnerAdapter(java.util.List<String> labels) {
+    return new ArrayAdapter<String>(this, android.R.layout.simple_spinner_dropdown_item, labels) {
+      @Override public View getView(int position, View convert, android.view.ViewGroup parent) {
+        View v = super.getView(position, convert, parent);
+        if (v instanceof TextView) { ((TextView) v).setTextColor(Color.WHITE); ((TextView) v).setTextSize(14); }
+        return v;
+      }
+    };
+  }
+
+  private void refreshPollingChoices() {
+    if (pollingSpinner == null) return;
+    pollingChoices.clear(); java.util.ArrayList<String> labels = new java.util.ArrayList<>();
+    java.util.Iterator<String> keys = stationCatalog.keys();
+    while (keys.hasNext()) {
+      String id = keys.next(); JSONObject p = stationCatalog.optJSONObject(id);
+      if (p != null && session.get("ps").equals(p.optString("ps")) && session.get("route").equals(p.optString("route"))) {
+        try { p.put("id", id); } catch (Exception ignored) { }
+        pollingChoices.add(p); labels.add(p.optString("name"));
+      }
+    }
+    if (labels.isEmpty()) labels.add("No polling locations assigned to this route");
+    pollingSpinner.setAdapter(spinnerAdapter(labels)); pollingSpinner.setEnabled(!pollingChoices.isEmpty());
+  }
+
+  private void performSignIn() {
+    if (signingIn) return;
+    if (!session.authenticated() || routeChoices.isEmpty()) { loginStatus.setText("Sign in and select an assigned route first."); return; }
+    JSONObject selected = routeChoices.get(loginRouteSpinner.getSelectedItemPosition());
+    String officer = value(loginOfficer), mobile = value(loginMobile);
+    if (officer.isEmpty()) { loginStatus.setText("Enter your name and rank."); return; }
+    signingIn = true; loginStatus.setText("Registering with the control room…");
+    work(() -> {
+      try {
+        // Do not let a previous account's queued writes block this account's location.
+        // Older accounts retain their queue; flush only sends the current account’s records.
+        JSONObject d = new JSONObject().put("sd", selected.optString("sd")).put("ps", selected.optString("ps"))
+          .put("route", selected.optString("route")).put("officer", officer).put("mobile", mobile)
+          .put("force", "route").put("el", selected.optString("election")).put("v", BuildConfig.VERSION_NAME);
+        session.dbPut("devices/" + session.uid(), d);
+        for (String key : new String[]{"sd", "ps", "route", "officer", "mobile", "el"}) session.set(key, d.optString(key));
+        session.set("signedIn", "1"); session.set("approved", "1");
+        ui.post(() -> { note("Connected to the control room. Start duty to share location."); showScreen(true); });
+      } catch (Exception e) { ui.post(() -> loginStatus.setText("Registration failed: " + e.getMessage())); }
+      finally { ui.post(() -> signingIn = false); }
+    });
   }
 
   // ==========================================
@@ -332,7 +408,7 @@ public final class MainActivity extends Activity {
     title.setText("TRACK  ·  ACTIVE PATROL");
     title.setTextSize(19);
     title.setTextColor(Color.WHITE);
-    title.setTypeface(null, 1);
+    title.setTypeface(null, android.graphics.Typeface.BOLD);
     title.setLetterSpacing(0.08f);
     header.addView(title);
 
@@ -385,7 +461,7 @@ public final class MainActivity extends Activity {
       Button b = new Button(this);
       b.setText(navTitles[i]);
       b.setTextSize(13);
-      b.setTypeface(null, 1);
+      b.setTypeface(null, android.graphics.Typeface.BOLD);
       b.setAllCaps(false);
       LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, dp(46), 1.0f);
       p.setMargins(dp(2), 0, dp(2), 0);
@@ -433,7 +509,7 @@ public final class MainActivity extends Activity {
     duty = new Button(this);
     duty.setText("START DUTY");
     duty.setTextSize(16);
-    duty.setTypeface(null, 1);
+    duty.setTypeface(null, android.graphics.Typeface.BOLD);
     duty.setTextColor(Color.WHITE);
     duty.setBackground(shape(Color.rgb(34, 197, 94), Color.rgb(255, 255, 255)));
     LinearLayout.LayoutParams dpParam = new LinearLayout.LayoutParams(-1, dp(58));
@@ -443,6 +519,7 @@ public final class MainActivity extends Activity {
 
     section(box, "CURRENT PATROL ASSIGNMENT");
     TextView unitCard = new TextView(this);
+    assignmentCard = unitCard;
     unitCard.setText("Station: " + session.get("ps") + "\nRoute: " + session.get("route") + "\nOfficer: " + session.get("officer"));
     unitCard.setTextSize(14);
     unitCard.setTextColor(Color.WHITE);
@@ -458,7 +535,8 @@ public final class MainActivity extends Activity {
         note("Stop Duty before switching accounts");
         return;
       }
-      session.set("signedIn", "0");
+      session.clear();
+      routeCatalog = new JSONObject(); refreshRouteChoices();
       showScreen(false);
     });
     button(box, "🚀 Check for App Updates", () -> checkForUpdates(true));
@@ -478,7 +556,7 @@ public final class MainActivity extends Activity {
     Button sosBtn = new Button(this);
     sosBtn.setText("🚨  SOS · REQUEST HELP");
     sosBtn.setTextSize(18);
-    sosBtn.setTypeface(null, 1);
+    sosBtn.setTypeface(null, android.graphics.Typeface.BOLD);
     sosBtn.setTextColor(Color.WHITE);
     sosBtn.setBackground(shape(Color.rgb(220, 38, 38), Color.rgb(239, 68, 68)));
     LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(-1, dp(64));
@@ -504,8 +582,10 @@ public final class MainActivity extends Activity {
     scroll.addView(box);
 
     section(box, "POLLING LOCATION REPORTING");
-    station = field(box, "Polling Station ID / Location Name", "");
+    pollingSpinner = new Spinner(this);
+    box.addView(pollingSpinner, new LinearLayout.LayoutParams(-1, dp(60)));
     votes = field(box, "Cumulative Votes Polled (Turnout)", "");
+    votes.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
     reportNote = field(box, "Incident / Observation Details", "");
 
     button(box, "📊 Send Turnout Count", () -> report("votes"));
@@ -549,7 +629,7 @@ public final class MainActivity extends Activity {
 
   private int dp(int n) { return Math.round(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, n, getResources().getDisplayMetrics())); }
   private GradientDrawable shape(int fill, int border) { GradientDrawable d = new GradientDrawable(); d.setColor(fill); d.setCornerRadius(dp(8)); d.setStroke(dp(1), border); return d; }
-  private void section(LinearLayout box, String label) { TextView t = addText(box, label, 11); t.setTextColor(Color.rgb(148, 163, 184)); t.setLetterSpacing(0.12f); t.setTypeface(null, 1); t.setPadding(0, dp(16), 0, dp(6)); }
+  private void section(LinearLayout box, String label) { TextView t = addText(box, label, 11); t.setTextColor(Color.rgb(148, 163, 184)); t.setLetterSpacing(0.12f); t.setTypeface(null, android.graphics.Typeface.BOLD); t.setPadding(0, dp(16), 0, dp(6)); }
   private TextView addText(LinearLayout box, String s, int size) { TextView v = new TextView(this); v.setText(s); v.setTextSize(size); v.setTextColor(Color.rgb(226, 232, 240)); v.setPadding(0, dp(4), 0, dp(4)); box.addView(v); return v; }
 
   private EditText field(LinearLayout box, String hint, String value) {
@@ -573,7 +653,7 @@ public final class MainActivity extends Activity {
     b.setText(label);
     b.setAllCaps(false);
     b.setTextSize(14);
-    b.setTypeface(null, 1);
+    b.setTypeface(null, android.graphics.Typeface.BOLD);
     boolean sos = label.contains("SOS");
     b.setTextColor(Color.WHITE);
     b.setBackground(shape(sos ? Color.rgb(220, 38, 38) : Color.rgb(30, 41, 59),
@@ -589,44 +669,35 @@ public final class MainActivity extends Activity {
   private void work(Runnable r) { io.execute(r); }
   private void note(String s) { ui.post(() -> status.setText(s)); }
   private void checkForUpdates(boolean userInitiated) {
+    if (checkingUpdate) return;
+    checkingUpdate = true;
     if (userInitiated) note("Checking for updates…");
     work(() -> {
-      String[] urls = {
-        "https://raw.githubusercontent.com/abdulaleemarshad1979/TRACE/main/version.json",
-        "http://10.0.2.2:8000/api/app/version"
-      };
-      for (String u : urls) {
-        try {
-          java.net.HttpURLConnection conn = (java.net.HttpURLConnection) new java.net.URL(u).openConnection();
-          conn.setConnectTimeout(4000);
-          conn.setReadTimeout(4000);
-          if (conn.getResponseCode() == 200) {
-            java.io.InputStream in = conn.getInputStream();
-            java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
-            byte[] buf = new byte[1024]; int n;
-            while ((n = in.read(buf)) != -1) out.write(buf, 0, n);
-            JSONObject v = new JSONObject(new String(out.toByteArray(), "UTF-8"));
-            int remoteCode = v.optInt("versionCode", 1);
-            int currentCode = 2;
-            try { currentCode = getPackageManager().getPackageInfo(getPackageName(), 0).versionCode; } catch (Exception ignored) {}
-            if (remoteCode > currentCode) {
-              String apkUrl = v.optString("apkUrl", "https://raw.githubusercontent.com/abdulaleemarshad1979/TRACE/main/release/TRACK-Route-EastGodavari.apk");
-              String notes = v.optString("releaseNotes", "New version of TRACK is available.");
-              String vName = v.optString("versionName", "Latest");
-              ui.post(() -> showUpdateDialog(vName, notes, apkUrl));
-              return;
-            } else if (userInitiated) {
-              ui.post(() -> note("TRACK is up to date (v" + v.optString("versionName", "2.0") + ")"));
-              return;
-            }
-          }
-        } catch (Exception ignored) {}
-      }
-      if (userInitiated) ui.post(() -> note("Checked for updates. You are on latest."));
+      java.net.HttpURLConnection conn = null;
+      try {
+        conn = (java.net.HttpURLConnection) new java.net.URL("https://raw.githubusercontent.com/abdulaleemarshad1979/TRACE/main/version.json").openConnection();
+        conn.setConnectTimeout(8000); conn.setReadTimeout(8000); conn.setUseCaches(false);
+        conn.setRequestProperty("Cache-Control", "no-cache");
+        if (conn.getResponseCode() != 200) throw new java.io.IOException("Update server unavailable");
+        JSONObject v;
+        try (java.io.InputStream in = conn.getInputStream(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+          byte[] buf = new byte[4096]; int n;
+          while ((n = in.read(buf)) != -1) { out.write(buf, 0, n); if (out.size() > 65536) throw new java.io.IOException("Invalid update manifest"); }
+          v = new JSONObject(out.toString("UTF-8"));
+        }
+        int remoteCode = v.getInt("versionCode");
+        String apkUrl = v.getString("apkUrl");
+        if (!UpdatePolicy.validDownloadUrl(apkUrl) || remoteCode <= 0) throw new java.io.IOException("Invalid update manifest");
+        if (UpdatePolicy.isNewer(BuildConfig.VERSION_CODE, remoteCode)) {
+          if (userInitiated || !session.get("dismissedUpdate").equals(String.valueOf(remoteCode)))
+            ui.post(() -> { if (!isFinishing() && !isDestroyed()) showUpdateDialog(v.optString("versionName"), v.optString("releaseNotes"), apkUrl, remoteCode); });
+        } else if (userInitiated) note("TRACK is up to date (v" + BuildConfig.VERSION_NAME + ")");
+      } catch (Exception e) { if (userInitiated) note("Could not check for updates. Check your internet connection and try again."); }
+      finally { if (conn != null) conn.disconnect(); ui.post(() -> checkingUpdate = false); }
     });
   }
 
-  private void showUpdateDialog(String versionName, String notes, String apkUrl) {
+  private void showUpdateDialog(String versionName, String notes, String apkUrl, int remoteCode) {
     new AlertDialog.Builder(this)
       .setTitle("🚀 Update Available (v" + versionName + ")")
       .setMessage(notes + "\n\nA new update is ready on GitHub. Would you like to update now?")
@@ -639,14 +710,16 @@ public final class MainActivity extends Activity {
           note("Error opening updater: " + e.getMessage());
         }
       })
-      .setNegativeButton("Later", null)
+      .setNegativeButton("Later", (d, w) -> session.set("dismissedUpdate", String.valueOf(remoteCode)))
       .show();
   }
 
   private void askPermissions() {
     java.util.ArrayList<String> p = new java.util.ArrayList<>();
-    if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED)
+    if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
       p.add(Manifest.permission.ACCESS_FINE_LOCATION);
+      p.add(Manifest.permission.ACCESS_COARSE_LOCATION);
+    }
     if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED)
       p.add(Manifest.permission.RECORD_AUDIO);
     if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
@@ -681,7 +754,7 @@ public final class MainActivity extends Activity {
       return;
     }
 
-    if (session.get("ps").isEmpty()) {
+    if (!session.authenticated() || session.get("ps").isEmpty()) {
       note("Police Station not set. Sign in first.");
       showScreen(false);
       return;
@@ -709,8 +782,8 @@ public final class MainActivity extends Activity {
   }
 
   private void stopDuty() {
-    stopService(new Intent(this, TrackService.class));
     session.set("duty", "0");
+    stopService(new Intent(this, TrackService.class));
     queueEvent("stop");
     try {
       JSONObject ended = new JSONObject().put("up", 0).put("duty", false).put("gps", false);
@@ -763,13 +836,14 @@ public final class MainActivity extends Activity {
 
   private void sos() {
     queueEvent("sos");
-    note("🚨 SOS SENT TO CONTROL ROOM");
+    note("SOS queued; waiting for delivery confirmation");
   }
 
   private void report(String type) {
     if (session.uid().isEmpty()) { note("Sign in first"); return; }
     try {
-      String name = value(station);
+      JSONObject location = pollingChoices.isEmpty() ? new JSONObject() : pollingChoices.get(pollingSpinner.getSelectedItemPosition());
+      String name = location.optString("name");
       String detail = value(reportNote);
       if (name.isEmpty() && !type.equals("reached") && !type.equals("normal") && !type.equals("tension") && !type.equals("problem")) {
         note("Enter polling station or location");
@@ -781,12 +855,16 @@ public final class MainActivity extends Activity {
         .put("uid", session.uid())
         .put("t", t)
         .put("ps", session.get("ps"))
-        .put("sid", name)
+        .put("sid", location.optString("id"))
         .put("sname", name)
         .put("note", detail);
 
       if (!type.equals("votes") && !type.equals("reached")) e.put("status", type);
-      if (type.equals("votes") && !value(votes).isEmpty()) e.put("n", Integer.parseInt(value(votes)));
+      if (type.equals("votes")) {
+        int count = Integer.parseInt(value(votes));
+        if (count < 0) throw new IllegalArgumentException("Votes cannot be negative");
+        e.put("n", count);
+      }
       if (!session.get("lastLat").isEmpty()) {
         e.put("lat", Double.parseDouble(session.get("lastLat")));
         e.put("lng", Double.parseDouble(session.get("lastLng")));
@@ -821,7 +899,8 @@ public final class MainActivity extends Activity {
           }
         }
         if (q.has("sd") && loginSd != null) loginSd.setText(q.optString("sd"));
-        if (q.has("r") && loginRoute != null) loginRoute.setText(q.optString("r"));
+        refreshRouteChoices();
+        for (int i = 0; i < routeChoices.size(); i++) if (routeChoices.get(i).optString("route").equals(q.optString("r"))) loginRouteSpinner.setSelection(i);
         if (loginStatus != null) loginStatus.setText("Route QR loaded: " + q.optString("ps"));
       } catch (Exception e) {
         if (loginStatus != null) loginStatus.setText("Invalid route QR");
@@ -835,7 +914,7 @@ public final class MainActivity extends Activity {
       return;
     }
 
-    if (requestCode != PHOTO || resultCode != RESULT_OK || data == null || !(data.getExtras().get("data") instanceof Bitmap)) return;
+    if (requestCode != PHOTO || resultCode != RESULT_OK || data == null || data.getExtras() == null || !(data.getExtras().get("data") instanceof Bitmap)) return;
     try {
       Bitmap b = (Bitmap) data.getExtras().get("data");
       ByteArrayOutputStream stream = new ByteArrayOutputStream();

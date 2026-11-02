@@ -25,6 +25,9 @@ final class Outbox extends SQLiteOpenHelper {
     try (Cursor c = getReadableDatabase().rawQuery("SELECT id,path,json FROM pending ORDER BY id", null)) {
       while (c.moveToNext()) {
         String path = c.getString(1), json = c.getString(2);
+        if (path.startsWith("live/") || path.startsWith("track/")) {
+          if (!path.split("/")[1].equals(session.uid())) continue;
+        } else if (!new JSONObject(json).optString("uid").equals(session.uid())) continue;
         try { session.dbPut(path, json.startsWith("[") ? new org.json.JSONArray(json) : new JSONObject(json)); }
         catch (Exception writeError) {
           if (!path.startsWith("events/") || !sameEvent(session.dbGet(path), new JSONObject(json))) throw writeError;
