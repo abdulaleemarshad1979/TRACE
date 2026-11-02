@@ -1,4 +1,4 @@
-# TRACK 2.1.0 deployment
+# TRACK 2.2.0 deployment
 
 Monitor: https://officer-8eb52.web.app
 
@@ -6,13 +6,13 @@ The monitor and Android app use the same configured Firebase Realtime Database. 
 
 ## Sign-in and duty
 
-1. Use an existing Firebase Authentication email/password account. A Gmail address is accepted when registered in that project; this is not a Google OAuth sign-in.
-2. The account must have `roles/{uid}` set to `route` or `admin`. A route account also needs `assignments/{uid}` with an exact `ps` and `route` from `config/routes`. An administrator can select any imported route.
-3. Tap **Sign in and load my routes**, choose the station and route, enter the officer name, then continue. Registration must succeed before the duty screen opens.
-4. Allow precise location, turn on GPS and tap **START DUTY**. The foreground notification remains visible while location sharing is active. The control-room map receives fixes through `live/{uid}` and history through `track/{uid}`.
-5. Polling reports select real location IDs from the assigned route. A delivery message appears only after the server accepts a report. Failed uploads remain queued and are shown as needing a retry.
+1. Sign into the monitor as the control-room administrator, then open **Settings → Routes → Assign member** beside the chosen route.
+2. Enter officer name/rank, a 10-digit Indian mobile number (or +91 format), and a password of at least 8 characters. For an existing mobile login, use its current password. This form does not reset passwords.
+3. For a route marked **Review coverage**, inspect the displayed polling locations and confirm the coverage before assigning it.
+4. Give that member the mobile number/password and the 2.2.0 APK. The member taps **Sign in and load my route**; only the assigned route is shown, with officer details filled automatically. Tap **Continue to duty**, grant precise location, turn GPS on and tap **START DUTY**.
+5. One account identifies one phone. An account cannot be moved from another route or modified while on duty through this form. Administrator/monitor accounts are never demoted to route accounts.
 
-An account identifies one tracked phone. Do not share the same account across multiple phones. Existing route accounts with old test assignments must be assigned an actual route by the control-room administrator before duty.
+Mobile logins use a normalized internal Firebase email identifier (`phone91…@members.track.invalid`), with Firebase Authentication handling passwords. The dashboard creates the member through the [Firebase Auth REST API](https://firebase.google.com/docs/reference/rest/auth), without replacing the administrator session. Roles, assignment, route member details and coverage review are saved together in one database update. Passwords are never stored in the Realtime Database. Existing administrator email logins remain supported. An account created before an interrupted database save can safely be retried using the same credentials.
 
 Android 12 requires coarse and fine location permissions to be requested together; see [Android location permission guidance](https://developer.android.com/develop/sensors-and-location/location/permissions/runtime).
 
@@ -20,7 +20,11 @@ Android 12 requires coarse and fine location permissions to be requested togethe
 
 `tools/import-election.py --downloads DIR --output PRIVATE_DIR` requires openpyxl. It processes only the six named input files, expands merged cells, normalizes station names, and uses the Routes sheets. The East Zone copy takes precedence over the overlapping generic workbook. It produces `election-config.json` and `import-report.json` with source sheet/row references.
 
-The import completed on 2 November 2026 contains 178 route assignments and 706 location records across 24 distinct police stations. The supplied image has 25 rows because Rajanagaram PS occurs under two mandals. These totals differ from the image's 152 routes and 698 locations. Seven locations lack usable coordinates, and Rajanagaram Route 9 has no usable location row. These are source-data issues requiring review before operational use. No coordinate was invented to fill a gap. The local review workbook lists every route, location and coordinate issue.
+The initial import contained 178 routes and 706 location records. The user requested 152 routes based on the image and all six workbooks. The image's station counts add to 150; the North Zone workbook's abstract, Data and Routes sheets all support 7 Gokavaram routes instead of the image's 5, reconciling the total to 152.
+
+The deployed catalog now has 152 routes and all 706 original locations. Twenty-two routes contain **proposed** coverage changes to meet the requested station counts: closest-centroid consolidation of old route groups, and a latitude-ordered split for Chagallu's ninth route. These are explicitly labeled and require operator review in the member-assignment form. They are not claimed to be official boundaries supplied by the workbooks. The combined Kovvur count is divided 4 town + 4 rural; Nidadavolu/Samisragudem is divided 2 + 6. Empty Rajanagaram Route 9 was removed. Unchanged route labels retain their source numbering, so numbering can have gaps.
+
+`tools/reconcile-routes.py` produces a proposed plan from private input and target-count JSON, preserving original route references on affected locations. A pre-change database backup and comparison workbook are kept locally. The review workbook is `Downloads/TRACK-152-Routes-Review.xlsx`. Seven locations still lack usable source coordinates; none were invented.
 
 Keep exports in `.local-data/` (gitignored), never in public hosting or the public GitHub repository. Database rules protect operational data; unauthenticated reads are denied.
 
@@ -38,8 +42,8 @@ CI builds/tests the source and verifies the published APK version, checksum and 
 
 ## Verification completed
 
-- Android build, two update-policy unit tests and Android lint passed.
-- Four dashboard browser tests passed, including live telemetry/SOS and initial map fitting with grouped units and malformed fixes.
+- Android build, update-policy and mobile-login normalization unit tests, and Android lint passed.
+- Dashboard browser checks cover all eight tabs at five widths, mobile account provisioning, assignment restrictions, coverage review, live telemetry/SOS and initial map fitting.
 - Firebase role/ownership emulator tests passed.
 - The APK signature matches the preceding distributed APK.
 - Uploaded route/location JSON matches the database read-back exactly; anonymous route reads return HTTP 401.

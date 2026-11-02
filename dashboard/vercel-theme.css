@@ -19,3 +19,56 @@ input:focus,select:focus,textarea:focus{outline:2px solid #a1a1aa;outline-offset
 .trace-trip{position:fixed;left:84px;bottom:24px;z-index:1100;width:min(350px,calc(100vw - 110px));padding:14px 16px;background:#fff;color:#18181b;border:1px solid #d4d4d8;border-radius:11px;box-shadow:0 12px 32px #0002;font-variant-numeric:tabular-nums}
 .trace-trip h3{margin:0 0 8px;font-size:14px;letter-spacing:-.02em}.trace-trip small{color:#71717a}.trace-trip .trip-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0}.trace-trip .trip-grid b{display:block;font-size:17px}.trace-trip .trip-grid span{font-size:11px;color:#71717a}.trace-trip .trip-foot{display:flex;justify-content:space-between;gap:8px;align-items:center;border-top:1px solid #e4e4e7;padding-top:8px;font-size:12px}.trace-trip button{background:#09090b;color:#fff;border:0;border-radius:6px;padding:5px 9px;cursor:pointer}
 @media(max-width:700px){.trace-trip{left:10px;bottom:10px;width:min(300px,calc(100vw - 20px));padding:10px}.trace-trip .trip-grid b{font-size:15px}}
+
+/* Keep the filter and status rows aligned at every dashboard width. */
+.rd main.body > .bar{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;flex:none}
+.rd .bar .filters{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:min(100%,760px);min-width:0}
+.rd .bar .filters select{width:100%;min-width:0;max-width:100%}
+.rd .bar .filters select{width:100%!important}
+.rd .c-rt .mts,.rd .c-uw .mts{grid-template-columns:repeat(2,minmax(0,1fr))}
+.rd .bar .counts{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));width:100%;margin:0;min-width:0}
+.rd .counts .cnt{min-width:0;gap:9px;padding:8px 10px}
+.rd .counts .cnt span{min-width:0}
+.rd .counts .cnt em{white-space:normal;line-height:1.25}
+.rd .dash{overflow-x:hidden;scrollbar-gutter:stable}
+.rd .card .ch{flex-wrap:wrap;align-items:flex-start}
+.rd .card .ch h4{min-width:0;flex:1 1 160px;line-height:1.35}
+.rd .card .ch .lnk{flex:none;margin-left:auto;white-space:nowrap}
+.rd .donut{flex-wrap:wrap;justify-content:center;gap:18px;padding:6px 0}
+.rd .donut .ring{width:144px;height:144px}
+.rd .donut .ring>div{width:96px;height:96px}
+.rd .donut ul{flex:1 1 175px;min-width:0;max-width:100%}
+.rd .donut li{display:grid;grid-template-columns:11px minmax(0,1fr) auto;gap:8px;align-items:center}
+.rd .donut li .donut-label{font-size:13.5px;line-height:1.35;color:#334155;overflow-wrap:anywhere}
+.rd .donut li b{margin:0;font-variant-numeric:tabular-nums}
+.rd .pane{min-width:0;overflow-wrap:anywhere}
+.rd .pane .row{flex-wrap:wrap}
+.rd .pane .row > input,.rd .pane .row > select{min-width:0;max-width:100%}
+.rd .pane .tw{max-width:100%;overflow:auto}
+.rd .mapbox .stamp{max-width:calc(100% - 24px);white-space:normal;text-align:center;line-height:1.25}
+.member-modal .card{width:min(560px,100%);max-height:calc(100dvh - 32px);overflow:auto}
+.member-modal h2{overflow-wrap:anywhere;margin-top:0}
+.member-modal .assignment-route{padding:12px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;overflow-wrap:anywhere}
+.member-modal .f{margin-top:12px}
+.member-modal .err{min-height:20px;margin-top:10px}
+body.v-dash #panelBtn{display:none}
+@media(max-width:1100px){
+  .rd .bar .counts{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .rd .work{grid-template-columns:minmax(0,1fr) minmax(300px,42%)}
+}
+@media(max-width:760px){
+  .rd .hdr{flex-wrap:wrap}
+  .rd .hdr .ttl{flex:1 1 160px}
+  .rd .hright{flex:1 1 100%;margin:0;flex-wrap:wrap;gap:6px}
+  .rd .hright .clock{margin-right:auto}
+  .rd .bar .filters{grid-template-columns:1fr;width:100%}
+  .rd .bar .counts{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .rd .counts .cnt{gap:6px;padding:7px 6px}
+  .rd .counts .cnt i{width:26px;height:26px}
+  .rd .dash{overflow:visible;scrollbar-gutter:auto}
+  .rd .work{grid-template-columns:minmax(0,1fr)}
+  .rd .pane .grid2{grid-template-columns:minmax(0,1fr)}
+  .rd .lyr{left:48px;max-width:calc(100% - 100px);padding:8px;font-size:12px}
+  .rd .lyr label{white-space:normal}
+  .trace-trip{left:10px;bottom:76px;max-width:calc(100vw - 20px)}
+}

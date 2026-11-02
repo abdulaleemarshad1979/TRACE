@@ -4596,6 +4596,7 @@ const forceLabel = c => (FORCE[c] || FORCE.route).n;
 const STATUS_TXT = { move: 'Moving', stop: 'Stopped', weak: 'GPS weak', gpsoff: 'GPS off', nosig: 'No signal', none: 'Not started' };
 
 const DEV = {}, LIVE = {}, EVT = {}, CONF = {};
+let USER_ROLE = '';
 const TRAIL = {};          // uid -> [[t, lat, lng, acc]] for today
 const SEEN_EVT = new Set();
 const UI = { tab: 'sum', sel: null, fStatus: '', fSd: LS.get('fSd', ''), fPs: LS.get('fPs', ''), fForce: LS.get('fForce', ''), q: '', inc: null, incMode: false, replay: null, setupOpen: LS.get('setupOpen', 'routes') };
@@ -4695,6 +4696,7 @@ function start() {
   $('#app').hidden = false; $('#login').hidden = true;
   $('#who').textContent = AU.email || '';
   bridgeAuth();
+  dbGet('roles/' + AU.uid).then(role => { USER_ROLE = role; schedule(true); }).catch(() => { USER_ROLE = ''; });
   initMap();
   stream('devices', '', DEV, () => { loadTrails(); schedule(); }, { every: 15000 });
   stream('live', '', LIVE, path => { onLive(path); schedule(); }, { every: 15000 });
@@ -5115,12 +5117,12 @@ function paneSetup() {
   const s = S(), R = routes();   // Setup lists every route; the top-bar filters do not hide rows here
   const els = [...new Set([...allRoutes().map(r => (r.election || '').trim()), ...Object.values(CONF.stations || {}).map(x => (x.el || '').trim()), ...((LS.get('elecList', []) || [])), ELEC()].filter(Boolean))].sort();
   const elSel = id => `<select id="${id}"><option value="">All elections (${allRoutes().length} routes)</option>${els.map(e => `<option value="${esc(e)}" ${e === ELEC() ? 'selected' : ''}>${esc(e)} (${allRoutes().filter(r => (r.election || '').trim() === e).length} routes)</option>`).join('')}<option value="__new">+ Add a new election…</option></select>`;
-  let h = sec('routes', `1. Routes (${routes().length}${ELEC() ? ' — ' + esc(ELEC()) : ''})`, `<p class="note">One row per route mobile. Phones pick their route from this list (or scan its QR code).</p>
+  let h = sec('routes', `1. Routes (${routes().length}${ELEC() ? ' — ' + esc(ELEC()) : ''})`, `<p class="note">Use Assign member to set the officer name, mobile number and password. The APK loads their assigned route after login. Routes marked Review coverage have proposed merges or splits; check their polling locations before assigning.</p>
     <div class="row"><label class="f" style="flex:1">Election <span class="u">(choose one: the list below and the phones show only that election's routes)</span>${elSel('setElec')}</label></div>
     <div class="row"><button class="btn small" data-act="routeAdd">Add a route</button><button class="btn small" data-act="routeImport">Import from Excel</button><button class="btn small" data-act="routeTemplate">Excel template</button><button class="btn small red" data-act="routeClearAll">Remove all routes</button>${ELEC() ? `<button class="btn small red" data-act="delElec">Delete election "${esc(ELEC())}"</button>` : ''}</div>
-    <div class="tw"><table class="t"><thead><tr><th>Election</th><th>Sub-division</th><th>PS</th><th>Route</th><th>Villages</th><th>Officer</th><th></th></tr></thead><tbody>${R.map(r => `<tr><td>${esc(r.election || '')}</td><td>${esc(r.sd)}</td><td>${esc(r.ps)}</td><td><b>${esc(r.route)}</b></td><td>${esc(r.villages || '')}</td><td>${esc(r.officer || '')} ${esc(r.mobile || '')}${r.vehicle ? '<br><span class="note">' + esc(r.vehicle) + '</span>' : ''}</td><td style="white-space:nowrap"><button class="btn small" data-act="routeQr" data-id="${r.id}">QR</button><button class="btn small" data-act="routeEdit" data-id="${r.id}">Edit</button></td></tr>`).join('') || '<tr><td colspan="7" class="note">No routes yet.</td></tr>'}</tbody></table></div>`);
+    <div class="tw"><table class="t"><thead><tr><th>Election</th><th>Sub-division</th><th>PS</th><th>Route</th><th>Villages</th><th>Officer</th><th></th></tr></thead><tbody>${R.map(r => `<tr><td>${esc(r.election || '')}</td><td>${esc(r.sd)}</td><td>${esc(r.ps)}</td><td><b>${esc(r.route)}</b>${r.coverageStatus === 'proposed' ? '<br><span class="note" style="color:#a16207">Review coverage</span>' : ''}</td><td>${esc(r.villages || '')}</td><td>${esc(r.officer || '')} ${esc(r.mobile || '')}${r.vehicle ? '<br><span class="note">' + esc(r.vehicle) + '</span>' : ''}</td><td style="white-space:nowrap"><button class="btn small" data-act="routeQr" data-id="${r.id}">QR</button><button class="btn small" data-act="routeEdit" data-id="${r.id}">Edit</button>${USER_ROLE === 'admin' ? `<button class="btn small primary" data-act="memberAssign" data-id="${r.id}">Assign member</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="7" class="note">No routes yet.</td></tr>'}</tbody></table></div>`);
   h += sec('qr', '2. QR sheet and stop PIN', `<label class="f">PIN to stop tracking on a phone <span class="u">(only the IT Core should know it; change it before printing the QR sheet)</span><input type="text" id="setPin" value="${esc(s.pin)}" maxlength="8" style="max-width:140px"></label>
-    <div class="row"><button class="btn primary" data-act="printQr">Print QR sheet${UI.fPs ? ' — ' + esc(UI.fPs) : UI.fSd ? ' — ' + esc(UI.fSd) : ''}</button></div><p class="note">Six QR codes per A4 page. Keep the sheet with the IT Core: anyone scanning a QR can join as that route.</p>`);
+    <div class="row"><button class="btn primary" data-act="printQr">Print QR sheet${UI.fPs ? ' — ' + esc(UI.fPs) : UI.fSd ? ' — ' + esc(UI.fSd) : ''}</button></div><p class="note">Six QR codes per A4 page. Scanning selects a route; the officer still needs an approved account and matching assignment. TRACK 2.1 uses the phone screen lock or a confirmation to stop duty.</p>`);
   h += sec('ps', `3. Polling locations (${stations().length})`, `<p class="note">Shown on the map, used for the incident search, the off-route alert and the "visited" check. Columns: Polling location, Latitude, Longitude, Sensitivity, Police station, Route No. One row per location, even if it has several booths.</p>
     <div class="row"><label class="f" style="flex:1">Election for these locations <span class="u">(the map shows the locations of the election chosen here)</span>${elSel('setElec2')}</label></div>
     <div class="row"><button class="btn small" data-act="psImport">Import from Excel</button>${ELEC() ? `<button class="btn small red" data-act="delElec">Delete election "${esc(ELEC())}"</button>` : ''}<button class="btn small" data-act="psTemplate">Excel template</button>${stations().length ? '<button class="btn small" data-act="psClear">Remove all</button>' : ''}</div>`);
@@ -5155,6 +5157,95 @@ function routeModal(id) {
   const base = id ? CONF.routes[id] : { election: ELEC(), sd: UI.fSd, ps: UI.fPs }; const r = Object.assign({}, base, { forceL: forceLabel(base.force || 'route') });
   formModal(id ? 'Edit route' : 'Add a route', ROUTE_F, r, async o => { if (!o.ps || !o.route) throw new Error('Police station and route are needed.'); o.force = forceCode(o.forceL); delete o.forceL; await dbPut(`config/routes/${id || 'r' + uid8()}`, o); toast('Saved'); }, id ? async () => dbDel(`config/routes/${id}`) : null);
 }
+async function saveMemberAssignment(routeId, member) {
+  const route = CONF.routes && CONF.routes[routeId];
+  if (!route) throw new Error('This route no longer exists. Reload and choose a route.');
+  if (await dbGet('roles/' + AU.uid) !== 'admin') throw new Error('Only a control-room administrator can assign members.');
+  const uid = member.uid.trim(), officer = member.officer.trim(), mobile = member.mobile.trim();
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(uid)) throw new Error('Copy the User UID from Firebase Authentication. Do not enter an email here.');
+  if (!officer) throw new Error('Enter the officer name and rank.');
+  if (mobile && !/^[+0-9 ()-]{7,20}$/.test(mobile)) throw new Error('Enter a valid mobile number.');
+  const role = await dbGet('roles/' + uid);
+  if (role && role !== 'route') throw new Error('This account is an administrator or monitor. Use a separate officer account.');
+  const existing = await dbGet('assignments/' + uid);
+  if (existing && (existing.ps !== route.ps || existing.route !== route.route))
+    throw new Error('This member is assigned to another route. Keep one officer account per route; use an unassigned account.');
+  if (route.memberUid && route.memberUid !== uid) throw new Error('This route already has an assigned member. Use that account or ask the administrator to review the existing assignment.');
+  const live = await dbGet('live/' + uid);
+  if (live && live.duty === true) throw new Error('Stop duty on this member’s phone before changing the assignment.');
+  const assignment = { ps: route.ps, route: route.route, sd: route.sd || '', election: route.election || '', officer, mobile };
+  const review = route.coverageStatus === 'proposed' ? { ['config/routes/' + routeId + '/coverageStatus']: 'reviewed', ['config/routes/' + routeId + '/coverageReviewedBy']: AU.uid, ['config/routes/' + routeId + '/coverageReviewedAt']: Date.now() } : {};
+  if (route.coverageStatus === 'proposed' && member.coverageReviewed !== 'on') throw new Error('Review the changed polling coverage before assigning this route.');
+  await dbPatch('', { ['roles/' + uid]: 'route', ['assignments/' + uid]: assignment,
+    ['config/routes/' + routeId + '/memberUid']: uid, ['config/routes/' + routeId + '/officer']: officer,
+    ['config/routes/' + routeId + '/mobile']: mobile, ...review });
+  Object.assign(route, { memberUid: uid, officer, mobile });
+  if (route.coverageStatus === 'proposed') route.coverageStatus = 'reviewed';
+  schedule(true);
+}
+function memberPhone(value) {
+  const digits = String(value || '').replace(/[\s()+-]/g, '');
+  const national = digits.startsWith('91') && digits.length === 12 ? digits.slice(2) : digits;
+  if (!/^[6-9][0-9]{9}$/.test(national)) throw new Error('Enter a valid 10-digit Indian mobile number, optionally starting with +91.');
+  return '+91' + national;
+}
+async function memberAuth(action, payload) {
+  const response = await fetchWithTimeout(`${AUTH_URL}/accounts:${action}?key=${encodeURIComponent(CFG.k)}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) { const error = new Error(result.error?.message || 'Account request failed. Try again.'); error.code = result.error?.message; throw error; }
+  return result;
+}
+async function provisionMember(routeId, member) {
+  if (await dbGet('roles/' + AU.uid) !== 'admin') throw new Error('Only a control-room administrator can assign members.');
+  const route = CONF.routes?.[routeId];
+  if (!route) throw new Error('Route not found. Reload and select a route.');
+  if (route.coverageStatus === 'proposed' && member.coverageReviewed !== 'on') throw new Error('Review and confirm the listed polling locations before assigning this changed route.');
+  const mobile = memberPhone(member.mobile), officer = member.officer.trim(), password = member.password;
+  if (!officer) throw new Error('Enter the officer name and rank.');
+  if (!password || password.length < 8) throw new Error('Use a password with at least 8 characters.');
+  if (route.memberUid && memberPhone(route.mobile) !== mobile) throw new Error('This route already has a member. Review that assignment before replacing it.');
+  const email = 'phone' + mobile.slice(1) + '@members.track.invalid';
+  let account;
+  try { account = await memberAuth('signUp', { email, password, returnSecureToken: true }); }
+  catch (error) {
+    if (error.code !== 'EMAIL_EXISTS') throw new Error(error.code?.startsWith('WEAK_PASSWORD') ? 'The password does not meet the account password policy.' : 'Could not create the member account. Please try again.');
+    try { account = await memberAuth('signInWithPassword', { email, password, returnSecureToken: true }); }
+    catch (_) { throw new Error('This mobile number already has an account. Enter its current password.'); }
+  }
+  // Do not replace the administrator session with the member credentials.
+  // On an uncertain save response, retain the account so retrying is safe.
+  await saveMemberAssignment(routeId, { uid: account.localId, officer, mobile, coverageReviewed: member.coverageReviewed });
+}
+async function memberModal(routeId) {
+  if (await dbGet('roles/' + AU.uid) !== 'admin') throw new Error('Only a control-room administrator can assign members.');
+  const r = CONF.routes[routeId]; if (!r) throw new Error('Route not found.');
+  const modal = document.createElement('div'); modal.className = 'modal member-modal';
+  modal.setAttribute('role', 'dialog'); modal.setAttribute('aria-modal', 'true'); modal.setAttribute('aria-labelledby', 'memberTitle');
+  modal.innerHTML = `<form class="card"><h2 id="memberTitle">Assign a member</h2>
+    <div class="assignment-route"><strong>${esc(r.ps)} · ${esc(r.route)}</strong><br>${esc(r.sd || '')}</div>
+    ${r.coverageStatus === 'proposed' ? `<div class="banner warn"><b>Review changed coverage</b><p>This route was consolidated or split to reach 152 routes. Original routes: ${esc((r.sourceRoutes || []).join(', '))}.</p><ul>${Object.values(CONF.stations || {}).filter(s => s.ps === r.ps && s.route === r.route).map(s => `<li>${esc(s.name)}</li>`).join('')}</ul><label><input type="checkbox" name="coverageReviewed" required> I have checked these polling locations and approve this route coverage.</label></div>` : ''}
+    <p class="note">Create the member’s login and assign this route. Give the member their mobile number and password; signing in on the APK shows their assigned route. Use one account per phone.</p>
+    <label class="f">Officer name and rank<input name="officer" required value="${esc(r.officer || '')}"></label>
+    <label class="f">Mobile number<input name="mobile" type="tel" required autocomplete="off" placeholder="10-digit mobile number" value="${esc(r.mobile || '')}"></label>
+    <label class="f">Password<input name="password" type="password" required minlength="8" autocomplete="new-password" placeholder="At least 8 characters"></label>
+    <p class="note">For an existing mobile login, enter its current password. Passwords are never displayed in the route list. Saving again does not change an existing password.</p>
+    <div class="err" role="alert"></div><div class="row" style="justify-content:flex-end"><button class="btn" type="button" data-close>Cancel</button><button class="btn primary" type="submit">Save assignment</button></div></form>`;
+  document.body.appendChild(modal);
+  modal.querySelector('[data-close]').onclick = () => modal.remove();
+  modal.addEventListener('keydown', e => { if (e.key === 'Escape' && !modal.querySelector('[type=submit]').disabled) modal.remove(); });
+  modal.querySelector('form').onsubmit = async e => {
+    e.preventDefault(); const button = modal.querySelector('[type=submit]'); if (button.disabled) return;
+    button.disabled = true; button.textContent = 'Saving…'; modal.querySelector('.err').textContent = '';
+    const data = Object.fromEntries(new FormData(e.target));
+    try { await provisionMember(routeId, data); modal.remove(); toast('Member assigned. Use the mobile number and password on the APK.', 6000); }
+    catch (error) { modal.querySelector('.err').textContent = error.message; }
+    finally { button.disabled = false; button.textContent = 'Save assignment'; }
+  };
+  modal.querySelector('[name=officer]').focus();
+}
+
 function devModal(u) {
   formModal('Edit vehicle ' + dname(u), [['sd', 'Sub-division'], ['ps', 'Police station'], ['route', 'Route'], ['officer', 'Officer (rank and name)'], ['mobile', 'Officer mobile']], DEV[u],
     async o => { await dbPatch(`devices/${u}`, o); toast('Saved. The phone shows the new name within 5 minutes.'); },
@@ -5208,6 +5299,7 @@ document.addEventListener('click', async e => {
     else if (act === 'rpPlay') { if (RP_TIMER) { clearInterval(RP_TIMER); RP_TIMER = null; } else { if (UI.replay.pos >= 1) UI.replay.pos = 0; RP_TIMER = setInterval(() => { UI.replay.pos = Math.min(1, UI.replay.pos + 0.004); drawReplay(); if ($('#rpPos')) { $('#rpPos').value = Math.round(UI.replay.pos * 1000); const P = UI.replay.pts; $('#rpPos').nextElementSibling.textContent = fTs(P[Math.round(UI.replay.pos * (P.length - 1))][0]); } if (UI.replay.pos >= 1) { clearInterval(RP_TIMER); RP_TIMER = null; renderPane(); } }, 80); } renderPane(); }
     else if (act === 'report') await makeReport($('#repD').value);
     else if (act === 'routeAdd') routeModal();
+    else if (act === 'memberAssign') await memberModal(a.dataset.id);
     else if (act === 'delElec') {
       const name = ELEC(); if (!name) return;
       const R = allRoutes().filter(r => (r.election || '').trim() === name), P = Object.entries(CONF.stations || {}).filter(([, x]) => (x.el || '').trim() === name);
@@ -6858,7 +6950,7 @@ function dashDonut() {
   const T = ids.length; let a = 0;
   const grad = T ? seg.map(([k, , c]) => { const s = a; a += n[k] * 360 / T; return `${c} ${s}deg ${a}deg`; }).join(',') : '#e3e8ef 0deg 360deg';
   return `<div class="donut"><div class="ring" style="background:conic-gradient(${grad})"><div><b>${T}</b><span>Units</span></div></div>
-    <ul>${seg.map(([k, l, c]) => `<li><i style="background:${c}"></i>${l}<b>${n[k]} <small>(${pct(n[k], T)}%)</small></b></li>`).join('')}</ul></div>
+    <ul>${seg.map(([k, l, c]) => `<li><i style="background:${c}"></i><span class="donut-label">${l}</span><b>${n[k]} <small>(${pct(n[k], T)}%)</small></b></li>`).join('')}</ul></div>
     <div class="sbar">${seg.filter(([k]) => n[k]).map(([k, , c]) => `<i style="background:${c};flex:${n[k]}"></i>`).join('') || '<i style="flex:1;background:#e3e8ef"></i>'}</div>`;
 }
 function dashAlerts() {

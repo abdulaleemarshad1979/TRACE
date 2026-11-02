@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { initializeTestEnvironment, assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
-import { get, ref, set } from 'firebase/database';
+import { get, ref, set, update } from 'firebase/database';
 
 test('Realtime Database grants only approved roles and route ownership', async () => {
   const env = await initializeTestEnvironment({
@@ -35,6 +35,13 @@ test('Realtime Database grants only approved roles and route ownership', async (
     await assertSucceeds(set(ref(routeA, 'track/routeA/20261102/mobile/1'), [1, 2, 3, 4]));
     await assertFails(set(ref(routeB, 'track/routeA/20261102/mobile/2'), [1, 2, 3, 4]));
     await assertSucceeds(set(ref(admin, 'assignments/routeA'), { ps: 'PS-1', route: 'R-1' }));
+    const assignment = { 'roles/newMember': 'route', 'assignments/newMember': { ps: 'PS-3', route: 'R-3' }, 'config/routes/r3/memberUid': 'newMember' };
+    await assertFails(update(ref(monitor), assignment));
+    await assertFails(update(ref(routeA), assignment));
+    await assertSucceeds(update(ref(admin), assignment));
+    const member = env.authenticatedContext('newMember').database();
+    await assertSucceeds(get(ref(member, 'assignments/newMember')));
+    await assertSucceeds(set(ref(member, 'devices/newMember'), { ps: 'PS-3', route: 'R-3' }));
     await assertFails(set(ref(routeA, 'assignments/routeA'), { ps: 'PS-X', route: 'R-X' }));
     await assertSucceeds(set(ref(routeA, 'devices/routeA'), { ps: 'PS-1', route: 'R-1' }));
     await assertFails(set(ref(routeA, 'devices/routeA'), { ps: 'PS-X', route: 'R-1' }));

@@ -84,6 +84,7 @@ public final class MainActivity extends Activity {
   // Sign-in inputs
   private Spinner loginPsSpinner, loginRouteSpinner;
   private EditText loginEmail, loginPassword;
+  private LinearLayout loginAssignment;
   private JSONObject routeCatalog = new JSONObject();
   private final java.util.ArrayList<JSONObject> routeChoices = new java.util.ArrayList<>();
   private boolean signingIn, checkingUpdate;
@@ -223,19 +224,24 @@ public final class MainActivity extends Activity {
     box.addView(desc);
 
     loginStatus = new TextView(this);
-    loginStatus.setText("Sign in with your approved email and password to load routes.");
+    loginStatus.setText("Use the mobile number and password given by the control room. Your assigned route loads automatically.");
     loginStatus.setTextSize(13);
     loginStatus.setTextColor(Color.rgb(52, 211, 153));
     loginStatus.setPadding(0, 0, 0, dp(14));
     box.addView(loginStatus);
 
     section(box, "1. SIGN IN TO YOUR ACCOUNT");
-    loginEmail = field(box, "Approved email address", session.get("email"));
-    loginEmail.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);
+    loginEmail = field(box, "Mobile number (admin: email)", session.get("login"));
+    loginEmail.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
     loginPassword = field(box, "Password", "");
     loginPassword.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
-    button(box, "Sign in and load my routes", this::authenticate);
-    section(box, "2. SELECT POLICE STATION & ROUTE");
+    button(box, "Sign in and load my route", this::authenticate);
+    loginAssignment = new LinearLayout(this);
+    loginAssignment.setOrientation(LinearLayout.VERTICAL);
+    box.addView(loginAssignment, new LinearLayout.LayoutParams(-1, -2));
+    box = loginAssignment;
+    loginAssignment.setVisibility(View.GONE);
+    section(box, "YOUR ASSIGNED ROUTE");
     loginPsSpinner = new Spinner(this);
     ArrayAdapter<String> adapter = spinnerAdapter(java.util.Arrays.asList(EAST_GODAVARI_PS));
     loginPsSpinner.setAdapter(adapter);
@@ -267,16 +273,16 @@ public final class MainActivity extends Activity {
       @Override public void onNothingSelected(AdapterView<?> parent) {}
     });
 
-    section(box, "2. OFFICER & ROUTE DETAILS");
+    section(box, "OFFICER DETAILS");
     loginSd = field(box, "Sub-Division", session.get("sd").isEmpty() ? "East Godavari" : session.get("sd"));
     loginRouteSpinner = new Spinner(this);
     box.addView(loginRouteSpinner, new LinearLayout.LayoutParams(-1, dp(52)));
     loginOfficer = field(box, "Officer Name & Rank", session.get("officer"));
     loginMobile = field(box, "Officer Mobile Number", session.get("mobile"));
 
-    section(box, "3. AUTHENTICATION & ENTRY");
+    section(box, "CONTINUE TO DUTY");
     Button enterBtn = new Button(this);
-    enterBtn.setText("SIGN IN  ➔  CONTINUE TO DUTY");
+    enterBtn.setText("CONTINUE TO DUTY  ➔");
     enterBtn.setTextSize(15);
     enterBtn.setTypeface(null, android.graphics.Typeface.BOLD);
     enterBtn.setTextColor(Color.WHITE);
@@ -294,7 +300,8 @@ public final class MainActivity extends Activity {
   private void authenticate() {
     if (signingIn) return;
     String email = value(loginEmail), password = loginPassword.getText().toString();
-    if (email.isEmpty() || password.isEmpty()) { loginStatus.setText("Enter your approved email and password."); return; }
+    if (email.isEmpty() || password.isEmpty()) { loginStatus.setText("Enter your mobile number and password."); return; }
+    loginAssignment.setVisibility(View.GONE);
     signingIn = true; loginStatus.setText("Signing in and loading your assignment…");
     work(() -> {
       try {
@@ -318,8 +325,14 @@ public final class MainActivity extends Activity {
           if (assigned != null) {
             for (int i = 1; i < EAST_GODAVARI_PS.length; i++) if (EAST_GODAVARI_PS[i].equals(assigned.optString("ps"))) loginPsSpinner.setSelection(i);
             loginOfficer.setText(assigned.optString("officer")); loginMobile.setText(assigned.optString("mobile"));
+            loginSd.setText(assigned.optString("sd"));
           }
-          refreshRouteChoices(); loginStatus.setText("Signed in. Select your assigned route, then continue.");
+          loginPsSpinner.setEnabled(assigned == null);
+          loginOfficer.setEnabled(assigned == null); loginMobile.setEnabled(assigned == null); loginSd.setEnabled(assigned == null);
+          refreshRouteChoices();
+          loginRouteSpinner.setEnabled(assigned == null);
+          loginAssignment.setVisibility(View.VISIBLE);
+          loginStatus.setText(assigned == null ? "Signed in as administrator. Select a route, then continue." : "Assigned: " + assigned.optString("ps") + " · " + assigned.optString("route") + ". Continue to duty below.");
         });
       } catch (Exception e) {
         session.clear();
@@ -339,7 +352,7 @@ public final class MainActivity extends Activity {
     for (JSONObject r : routeChoices) labels.add(r.optString("route"));
     if (labels.isEmpty()) labels.add("Sign in and select an assigned station");
     loginRouteSpinner.setAdapter(spinnerAdapter(labels));
-    loginRouteSpinner.setEnabled(!routeChoices.isEmpty());
+    loginRouteSpinner.setEnabled(!routeChoices.isEmpty() && !"route".equals(session.get("role")));
   }
 
   private ArrayAdapter<String> spinnerAdapter(java.util.List<String> labels) {

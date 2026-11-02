@@ -34,7 +34,8 @@ final class Session {
     if (!db.startsWith("https://")) throw new IllegalArgumentException("Database URL must use HTTPS");
     set("key", key.trim()); set("db", db.replaceAll("/+$", "").trim());
   }
-  synchronized void signIn(String email, String password) throws Exception {
+  synchronized void signIn(String login, String password) throws Exception {
+    String email = LoginIdentity.email(login);
     JSONObject body = new JSONObject().put("email", email).put("password", password).put("returnSecureToken", true);
     JSONObject j = request("POST", "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=" + enc(get("key")), body.toString());
     idToken = j.getString("idToken"); expiry = System.currentTimeMillis() + j.optLong("expiresIn", 3600) * 1000;
@@ -42,11 +43,12 @@ final class Session {
     String role = dbGet("roles/" + uid()).optString("value");
     if (!"route".equals(role) && !"admin".equals(role)) { clear(); throw new SecurityException("This account is not approved for route duty. Contact the control room."); }
     set("role", role);
+    set("login", login.trim());
   }
   void clear() { prefs.edit().remove("refresh").remove("uid").remove("email").remove("approved").remove("role").remove("signedIn").apply(); idToken = ""; }
   synchronized String token() throws Exception {
     if (!idToken.isEmpty() && System.currentTimeMillis() < expiry - 120000) return idToken;
-    if (get("refresh").isEmpty()) throw new SecurityException("Sign in with your approved email and password first.");
+    if (get("refresh").isEmpty()) throw new SecurityException("Sign in with your assigned mobile number and password first.");
     String form = "grant_type=refresh_token&refresh_token=" + enc(get("refresh"));
     JSONObject j = request("POST", "https://securetoken.googleapis.com/v1/token?key=" + enc(get("key")), form);
     idToken = j.getString("id_token"); expiry = System.currentTimeMillis() + j.optLong("expires_in", 3600) * 1000;

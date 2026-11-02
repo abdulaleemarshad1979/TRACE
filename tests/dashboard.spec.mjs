@@ -68,3 +68,149 @@ test('incomplete saved sign-in returns to login instead of an empty live dashboa
   await expect(page.locator('#loginForm')).toBeVisible();
   await expect(page.locator('#app')).toBeHidden();
 });
+
+async function controlRoom(page, overrides = {}) {
+  const writes = [];
+  await page.addInitScript(() => {
+    localStorage.setItem('rm_cfg', JSON.stringify({ k: 'test-key', d: 'https://trace-demo.firebaseio.test', p: 'trace-demo' }));
+    localStorage.setItem('rm_au', JSON.stringify({ rt: 'test-refresh', uid: 'admin-1', email: 'admin@example.test' }));
+    localStorage.setItem('rm_poll', '1');
+  });
+  const data = {
+    '/roles/admin-1.json': 'admin',
+    '/config.json': {
+      routes: { r1: { ps: 'Example Rural Police Station', route: 'Route 12', sd: 'Example Sub-division', villages: 'First village, Second village, Third village', officer: '', election: 'Election 2026', force: 'route' } },
+      stations: { s1: { name: 'Example primary school polling location', ps: 'Example Rural Police Station', route: 'Route 12', lat: 17, lng: 81.8, sens: 'Normal' } },
+      settings: { election: '', autoSos: false }
+    },
+    '/devices.json': {}, '/live.json': {}, '/events.json': {}, ...overrides
+  };
+  await page.route('https://securetoken.googleapis.com/**', route => route.fulfill({ json: { id_token: 'test-id', expires_in: '3600', refresh_token: 'test-refresh', user_id: 'admin-1' } }));
+  await page.route('https://trace-demo.firebaseio.test/**', route => {
+    const request = route.request(), pathname = new URL(request.url()).pathname;
+    if (request.method() === 'PATCH') writes.push({ pathname, body: request.postDataJSON() });
+    return route.fulfill({ json: data[pathname] ?? null });
+  });
+  await page.route(/https:\/\/.*(?:tile\.openstreetmap\.org|arcgisonline\.com)\//, route => route.abort());
+  await page.goto(url);
+  await expect(page.locator('#app')).toBeVisible();
+  await expect.poll(() => page.evaluate(() => USER_ROLE)).toBe(data['/roles/admin-1.json']);
+  await expect.poll(() => page.evaluate(() => Object.keys(CONF.routes || {}).length)).toBe(1);
+  await expect(page.locator('#counts .cnt')).toHaveCount(6);
+  await expect(page.locator('#fSd')).toContainText('All sub-divisions');
+  return writes;
+}
+
+for (const width of [1920, 1536, 1280, 768, 390]) {
+  test(`all eight tabs fit at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await controlRoom(page);
+    for (const tab of ['sum', 'veh', 'loc', 'alerts', 'inc', 'replay', 'report', 'setup']) {
+      await page.locator(`#tabs [data-tab="${tab}"]`).click();
+      await expect(page.locator(`#tabs [data-tab="${tab}"]`)).toHaveAttribute('aria-selected', 'true');
+      const issues = await page.evaluate(() => {
+        const failures = [];
+        if (document.documentElement.scrollWidth > innerWidth + 1) failures.push('page horizontal overflow');
+        for (const el of document.querySelectorAll('.hdr, .bar, .cnt, .pane, .donut li, .dash .ch')) {
+          if (!el.getClientRects().length) continue;
+          const r = el.getBoundingClientRect();
+          if (r.left < -1 || r.right > innerWidth + 1) failures.push(`${el.className} outside viewport`);
+          if (el.scrollWidth > el.clientWidth + 2) failures.push(`${el.className} content clipped`);
+        }
+        return failures;
+      });
+      expect(issues, `${tab} at ${width}px`).toEqual([]);
+      if (tab === 'sum' && [1536, 390].includes(width)) await page.screenshot({ path: `.local-data/layout-${width}.png`, fullPage: true });
+    }
+  });
+}
+
+test('administrator creates a mobile login and assigns its route without changing admin session', async ({ page }) => {
+  const writes = await controlRoom(page);
+  const authRequests = [];
+  await page.route('https://identitytoolkit.googleapis.com/**', route => {
+    authRequests.push(route.request().postDataJSON());
+    return route.fulfill({ json: { localId: 'officer-1', idToken: 'member-id', refreshToken: 'member-refresh' } });
+  });
+  await page.locator('#tabs [data-tab="setup"]').click();
+  await page.getByRole('button', { name: 'Assign member', exact: true }).click();
+  const modal = page.getByRole('dialog', { name: 'Assign a member' });
+  await modal.getByLabel('Officer name and rank').fill('Example Officer');
+  await modal.getByLabel('Mobile number').fill('9876543210');
+  await modal.getByLabel('Password', { exact: true }).fill('Example-test-password');
+  await modal.getByRole('button', { name: 'Save assignment' }).click();
+  await expect(modal).toBeHidden();
+  expect(writes).toEqual([{ pathname: '/.json', body: {
+    'roles/officer-1': 'route',
+    'assignments/officer-1': { ps: 'Example Rural Police Station', route: 'Route 12', sd: 'Example Sub-division', election: 'Election 2026', officer: 'Example Officer', mobile: '+919876543210' },
+    'config/routes/r1/memberUid': 'officer-1', 'config/routes/r1/officer': 'Example Officer', 'config/routes/r1/mobile': '+919876543210'
+  } }]);
+  expect(authRequests).toEqual([{ email: 'phone919876543210@members.track.invalid', password: 'Example-test-password', returnSecureToken: true }]);
+  expect(await page.evaluate(() => AU.uid)).toBe('admin-1');
+  expect(JSON.stringify(writes)).not.toContain('password');
+});
+
+test('existing mobile login requires its password and preserves the current admin login', async ({ page }) => {
+  const writes = await controlRoom(page);
+  let validPassword = false;
+  await page.route('https://identitytoolkit.googleapis.com/**', route => {
+    if (route.request().url().includes('signUp')) return route.fulfill({ status: 400, json: { error: { message: 'EMAIL_EXISTS' } } });
+    return validPassword ? route.fulfill({ json: { localId: 'officer-1' } }) : route.fulfill({ status: 400, json: { error: { message: 'INVALID_LOGIN_CREDENTIALS' } } });
+  });
+  const attempt = () => page.evaluate(async () => {
+    try { await provisionMember('r1', { mobile: '+91 98765 43210', officer: 'Officer', password: 'Example-password' }); return 'saved'; }
+    catch (e) { return e.message; }
+  });
+  expect(await attempt()).toContain('current password');
+  expect(writes).toHaveLength(0);
+  validPassword = true;
+  expect(await attempt()).toBe('saved');
+  expect(writes).toHaveLength(1);
+  expect(await page.evaluate(() => AU.uid)).toBe('admin-1');
+});
+
+test('assignment rejects privileged accounts, other routes and active duty without writes', async ({ page }) => {
+  const writes = await controlRoom(page, {
+    '/roles/privileged.json': 'admin',
+    '/assignments/assigned.json': { ps: 'Other PS', route: 'Route 1' },
+    '/live/active.json': { duty: true }
+  });
+  for (const [uid, message] of [['privileged', 'administrator or monitor'], ['assigned', 'another route'], ['active', 'Stop duty']]) {
+    const error = await page.evaluate(async uid => {
+      try { await saveMemberAssignment('r1', { uid, officer: 'Example Officer', mobile: '' }); }
+      catch (e) { return e.message; }
+    }, uid);
+    expect(error).toContain(message);
+  }
+  expect(writes).toEqual([]);
+});
+
+test('monitor cannot assign members', async ({ page }) => {
+  const writes = await controlRoom(page, { '/roles/admin-1.json': 'monitor' });
+  await page.locator('#tabs [data-tab="setup"]').click();
+  await expect(page.getByRole('button', { name: 'Assign member', exact: true })).toHaveCount(0);
+  expect(await page.evaluate(async () => {
+    try { await saveMemberAssignment('r1', { uid: 'officer-1', officer: 'Officer', mobile: '' }); }
+    catch (e) { return e.message; }
+  })).toContain('Only a control-room administrator');
+  expect(writes).toEqual([]);
+});
+
+test('changed coverage requires review before creating member credentials', async ({ page }) => {
+  const writes = await controlRoom(page);
+  await page.evaluate(() => CONF.routes.r1.coverageStatus = 'proposed');
+  const error = await page.evaluate(async () => {
+    try { await provisionMember('r1', { mobile: '9876543210', officer: 'Officer', password: 'Example-password' }); }
+    catch (e) { return e.message; }
+  });
+  expect(error).toContain('Review and confirm');
+  expect(writes).toEqual([]);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.locator('#tabs [data-tab="setup"]').click();
+  await page.getByRole('button', { name: 'Assign member', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByText('Example primary school polling location')).toBeVisible();
+  const box = await dialog.locator('form').boundingBox();
+  expect(box.x + box.width).toBeLessThanOrEqual(390);
+  expect(box.y + box.height).toBeLessThanOrEqual(844);
+});
