@@ -55,4 +55,11 @@ The milestone requested by the user is **not complete** until a real Route phone
 - `npm test`: 2 Playwright dashboard tests passed with mock Firebase responses.
 - `npm run test:rules`: local Firebase Realtime Database emulator test passed for authorized and denied reads/writes.
 - `./gradlew :android-route:assembleDebug`: debug build succeeded.
-- No staging Firebase credentials or physical Android phone were available for the full eight-step flow.
+- At the time of these initial local tests, no staging Firebase configuration or physical Android phone was available for the full eight-step flow.
+
+## Staging configuration, 2026-11-02
+
+- Received the `officer-8eb52` Firebase web config and the exact Realtime Database URL. The debug APK and single-file website now use those staging values by default.
+- An unauthenticated read-only probe to a nonexistent path returned HTTP 401. This confirms anonymous access was denied for that request; it does not verify that this repository's complete rule set has been deployed.
+- The rebuilt APK installed on the emulator and its UI showed the staging API key and database URL prefilled. Dashboard Playwright tests and local Realtime Database rules tests passed again.
+- The officer/admin test UIDs and a real phone have not been supplied. Authenticated streaming, offline upload after reconnection, and authorized Stop Duty against this Firebase project remain untested.

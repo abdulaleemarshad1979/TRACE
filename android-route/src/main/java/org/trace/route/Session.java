@@ -16,7 +16,13 @@ final class Session {
   private String idToken = "";
   private long expiry = 0;
   Session(Context c) { prefs = c.getSharedPreferences("trace", Context.MODE_PRIVATE); }
-  String get(String key) { return prefs.getString(key, ""); }
+  String get(String key) {
+    String value = prefs.getString(key, "");
+    if (!value.isEmpty()) return value;
+    if (key.equals("key")) return BuildConfig.STAGING_API_KEY;
+    if (key.equals("db")) return BuildConfig.STAGING_DATABASE_URL;
+    return value;
+  }
   void set(String key, String value) { prefs.edit().putString(key, value).apply(); }
   String uid() { return get("uid"); }
   boolean configured() { return !get("key").isEmpty() && get("db").startsWith("https://") && !get("refresh").isEmpty(); }

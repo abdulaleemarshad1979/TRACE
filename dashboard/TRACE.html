@@ -4450,7 +4450,7 @@ const AUTH_URL = TEST ? TEST.auth : 'https://identitytoolkit.googleapis.com/v1';
 const TOKEN_URL = TEST ? TEST.tok : 'https://securetoken.googleapis.com/v1';
 const NATIVE = typeof window.Android !== 'undefined';
 
-const DEFAULT_CFG = null;
+const DEFAULT_CFG = {"k":"AIzaSyAArH0Q0UWaOHGh8yNbXQZYnw5IOTMMjpY","d":"https://officer-8eb52-default-rtdb.asia-southeast1.firebasedatabase.app","p":"officer-8eb52","sender":"257427563465","appId":"1:257427563465:web:5d0fa9eb5cef96a7af7e18"};
 let CFG = LS.get('cfg', null) || (TEST ? null : DEFAULT_CFG);      // {k: apiKey, d: databaseURL}
 let AU = LS.get('au', null);        // {rt, email, uid}
 let ID_TOKEN = null, ID_EXP = 0, KEEP = true;
@@ -4460,7 +4460,6 @@ function parseConfig(txt) {
   const p = /projectId\s*["']?\s*:\s*["']([^"']+)["']/.exec(txt);
   if (!k) throw new Error('apiKey not found in the text.');
   let db = d ? d[1] : '';
-  if (!db && p) db = `https://${p[1]}-default-rtdb.asia-southeast1.firebasedatabase.app`;
   if (!db) throw new Error('databaseURL not found. Create the Realtime Database first, then copy the config again.');
   return { k: k[1], d: db.replace(/\/+$/, ''), p: p ? p[1] : '', sender: (/messagingSenderId\s*[\"']?\s*:\s*[\"']([^\"']+)/.exec(txt)||[])[1] || '', appId: (/appId\s*[\"']?\s*:\s*[\"']([^\"']+)/.exec(txt)||[])[1] || '' };
 }

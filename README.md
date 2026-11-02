@@ -16,12 +16,14 @@ python -m venv .venv
 
 Open `dashboard/TRACE.html` in Chrome, or host that one file over HTTPS. The installable debug APK is `android-route/build/outputs/apk/debug/android-route-debug.apk`. The Android build needs API 35 and Google Play services on the test phone for Fused Location Provider. The dashboard needs network access for Firebase and map tiles, but no custom web server.
 
+The current debug APK and generated dashboard are preconfigured for the separate `officer-8eb52` staging project using `config/staging.json`. The file contains only Firebase client configuration. Sign-in is still required, and Realtime Database rules control access. A local browser that previously saved another project can select **Change project** and paste the staging config with its exact `databaseURL`.
+
 `GET http://localhost:8000/health` returns 200 even before Firebase is configured; protected API endpoints return 503 until configuration is supplied.
 
 ## Create a separate staging Firebase project
 
 1. In [Firebase Console](https://console.firebase.google.com/), create a **new project for testing**. Do not reuse the project embedded in the supplied old dashboard.
-2. Add a **Web app** in Project settings → Your apps. Copy its `apiKey` and `databaseURL`. If the config lacks `databaseURL`, create a Realtime Database first and then copy its URL from the Data tab.
+2. Add a **Web app** in Project settings → Your apps. Copy its `apiKey` and exact `databaseURL`. The current `config/staging.json` already contains the values supplied for `officer-8eb52`; if the console config lacks `databaseURL`, copy it from the Realtime Database Data tab.
 3. Enable Authentication → Sign-in method → **Email/Password**. Create one admin and one Route test user in Authentication → Users, then copy both UIDs. Do not share account passwords in chat.
 4. Create a Realtime Database in your chosen region. Install `firebase/database.rules.json` under Realtime Database → Rules. The rules deny anonymous access.
 5. In the Database **Data** tab, bootstrap `roles/{admin UID} = "admin"`. Add `assignments/{route UID}` with `sd`, `ps`, `route`, `officer`, `mobile`, and set `roles/{route UID} = "route"`. The admin can also use authenticated `PUT /assignments/{uid}` in FastAPI after its credentials are configured.

@@ -1,8 +1,14 @@
 plugins { id 'com.android.application' }
+def staging = new groovy.json.JsonSlurper().parse(file('../config/staging.json'))
 android {
     namespace 'org.trace.route'
     compileSdk 35
-    defaultConfig { applicationId 'org.trace.route'; minSdk 26; targetSdk 35; versionCode 1; versionName '1.0' }
+    defaultConfig {
+        applicationId 'org.trace.route'; minSdk 26; targetSdk 35; versionCode 1; versionName '1.0'
+        buildConfigField 'String', 'STAGING_API_KEY', groovy.json.JsonOutput.toJson(staging.apiKey)
+        buildConfigField 'String', 'STAGING_DATABASE_URL', groovy.json.JsonOutput.toJson(staging.databaseURL)
+    }
+    buildFeatures { buildConfig true }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
 }
 dependencies {

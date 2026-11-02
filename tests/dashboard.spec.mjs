@@ -4,11 +4,12 @@ import path from 'node:path';
 
 const url = pathToFileURL(path.resolve('dashboard/TRACE.html')).href;
 
-test('requires explicit Firebase project configuration', async ({ page }) => {
+test('uses the exact staging Realtime Database and waits for sign-in', async ({ page }) => {
   await page.goto(url);
-  await expect(page.locator('#projForm')).toBeVisible();
-  await expect(page.locator('#cfgText')).toBeVisible();
+  await expect(page.locator('#loginForm')).toBeVisible();
+  await expect(page.locator('#projForm')).toBeHidden();
   await expect(page.locator('#app')).toBeHidden();
+  expect(await page.evaluate(() => CFG.d)).toBe('https://officer-8eb52-default-rtdb.asia-southeast1.firebasedatabase.app');
 });
 
 test('signed-in control room displays live unit and SOS', async ({ page }) => {

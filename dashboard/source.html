@@ -4437,7 +4437,6 @@ function parseConfig(txt) {
   const p = /projectId\s*["']?\s*:\s*["']([^"']+)["']/.exec(txt);
   if (!k) throw new Error('apiKey not found in the text.');
   let db = d ? d[1] : '';
-  if (!db && p) db = `https://${p[1]}-default-rtdb.asia-southeast1.firebasedatabase.app`;
   if (!db) throw new Error('databaseURL not found. Create the Realtime Database first, then copy the config again.');
   return { k: k[1], d: db.replace(/\/+$/, ''), p: p ? p[1] : '' };
 }
