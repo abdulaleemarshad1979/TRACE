@@ -2,6 +2,8 @@
 
 TRACE Monitor is a **single HTML website**. TRACE Route is a **native Java Android app** with a location foreground service. The dashboard is built from the supplied TRACE HTML so its map, incidents, alerts, reports, Excel, QR and messaging workflows remain available. A separate FastAPI service provides authenticated fleet, alert and summary endpoints plus route assignment; the website and phone use Firebase Realtime Database directly for live synchronization.
 
+The staging Monitor website is live at **https://officer-8eb52.web.app**. Its Firebase Realtime Database rules are deployed, and an officer test account has the `Test police station` / `Test route 1` assignment. A real-phone eight-step trial is still required before live tracking can be called accepted. See `docs/staging-setup.md` for the exact test procedure.
+
 ## Build and run locally
 
 ```sh
@@ -14,7 +16,7 @@ python -m venv .venv
 .venv/bin/uvicorn python.main:app --port 8000
 ```
 
-Open `dashboard/TRACE.html` in Chrome, or host that one file over HTTPS. The installable debug APK is `android-route/build/outputs/apk/debug/android-route-debug.apk`. The Android build needs API 35 and Google Play services on the test phone for Fused Location Provider. The dashboard needs network access for Firebase and map tiles, but no custom web server.
+Open `dashboard/TRACE.html` in Chrome, or use the hosted Monitor website above. The installable debug APK is `android-route/build/outputs/apk/debug/android-route-debug.apk`. The Android build needs API 35 and Google Play services on the test phone for Fused Location Provider. The dashboard needs network access for Firebase and map tiles, but no custom web server.
 
 The current debug APK and generated dashboard are preconfigured for the separate `officer-8eb52` staging project using `config/staging.json`. The file contains only Firebase client configuration. Sign-in is still required, and Realtime Database rules control access. A local browser that previously saved another project can select **Change project** and paste the staging config with its exact `databaseURL`.
 

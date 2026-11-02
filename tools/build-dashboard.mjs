@@ -39,4 +39,6 @@ html = html.replace('</script></body></html>', `\n${trip}\n</script></body></htm
 const embeddedKeys = [...new Set(html.match(/AIza[0-9A-Za-z_-]{25,}/g) || [])];
 if (embeddedKeys.some(key => key !== staging.apiKey) || html.includes('function autoDispatch')) throw new Error('Unexpected API key or auto dispatch remains');
 fs.writeFileSync(path.join(root, 'dashboard/TRACE.html'), html);
+fs.mkdirSync(path.join(root, 'dist'), { recursive: true });
+fs.writeFileSync(path.join(root, 'dist/index.html'), html);
 console.log(`Built dashboard/TRACE.html (${Buffer.byteLength(html)} bytes)`);
