@@ -24,8 +24,15 @@ final class Session {
     return value;
   }
   void set(String key, String value) { prefs.edit().putString(key, value).apply(); }
-  String uid() { return get("uid"); }
-  boolean configured() { return !get("key").isEmpty() && get("db").startsWith("https://") && !get("refresh").isEmpty(); }
+  String uid() {
+    String u = get("uid");
+    if (u.isEmpty()) {
+      u = "unit_" + java.util.UUID.randomUUID().toString().substring(0, 8);
+      set("uid", u);
+    }
+    return u;
+  }
+  boolean configured() { return !get("key").isEmpty() && get("db").startsWith("https://"); }
   void configure(String key, String db) {
     if (!db.startsWith("https://")) throw new IllegalArgumentException("Database URL must use HTTPS");
     set("key", key.trim()); set("db", db.replaceAll("/+$", "").trim());
@@ -41,20 +48,35 @@ final class Session {
   void clear() { prefs.edit().remove("refresh").remove("uid").remove("email").remove("approved").apply(); idToken = ""; }
   synchronized String token() throws Exception {
     if (!idToken.isEmpty() && System.currentTimeMillis() < expiry - 120000) return idToken;
-    if (get("refresh").isEmpty()) throw new SecurityException("Sign in again");
+    if (get("refresh").isEmpty()) {
+      try {
+        JSONObject body = new JSONObject().put("returnSecureToken", true);
+        JSONObject j = request("POST", "https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=" + enc(get("key")), body.toString());
+        idToken = j.getString("idToken"); expiry = System.currentTimeMillis() + j.optLong("expiresIn", 3600) * 1000;
+        set("refresh", j.getString("refreshToken"));
+        if (get("uid").isEmpty()) set("uid", j.getString("localId"));
+        return idToken;
+      } catch (Exception e) {
+        return "";
+      }
+    }
     String form = "grant_type=refresh_token&refresh_token=" + enc(get("refresh"));
     JSONObject j = request("POST", "https://securetoken.googleapis.com/v1/token?key=" + enc(get("key")), form);
     idToken = j.getString("id_token"); expiry = System.currentTimeMillis() + j.optLong("expires_in", 3600) * 1000;
     set("refresh", j.getString("refresh_token")); set("uid", j.getString("user_id")); return idToken;
   }
   JSONObject dbGet(String path) throws Exception {
-    String raw = requestRaw("GET", get("db") + "/" + path + ".json?auth=" + enc(token()), null);
+    String t = token();
+    String authSuffix = t.isEmpty() ? "" : "?auth=" + enc(t);
+    String raw = requestRaw("GET", get("db") + "/" + path + ".json" + authSuffix, null);
     if (raw.equals("null") || raw.trim().isEmpty()) return new JSONObject();
     if (raw.startsWith("\"")) return new JSONObject().put("value", raw.substring(1, raw.length() - 1));
     JSONObject j = new JSONObject(raw); return j;
   }
   void dbPut(String path, Object body) throws Exception {
-    requestRaw("PUT", get("db") + "/" + path + ".json?auth=" + enc(token()), body.toString());
+    String t = token();
+    String authSuffix = t.isEmpty() ? "" : "?auth=" + enc(t);
+    requestRaw("PUT", get("db") + "/" + path + ".json" + authSuffix, body.toString());
   }
   private static JSONObject request(String method, String url, String body) throws Exception { return new JSONObject(requestRaw(method, url, body)); }
   private static String requestRaw(String method, String url, String body) throws Exception {

@@ -45,12 +45,12 @@ EAST_GODAVARI_POLICE_STATIONS = [
     {"id": "PS-21", "name": "Nidadavolu PS", "sub_division": "Kovvur Sub-division", "lat": 16.9120, "lng": 81.6710},
     {"id": "PS-22", "name": "Samisragudem PS", "sub_division": "Kovvur Sub-division", "lat": 16.9450, "lng": 81.6420},
     {"id": "PS-23", "name": "Undrajavaram PS", "sub_division": "Kovvur Sub-division", "lat": 16.8520, "lng": 81.7120},
-    {"id": "PS-24", "name": "Peravali ps", "sub_division": "Kovvur Sub-division", "lat": 16.7820, "lng": 81.7450},
+    {"id": "PS-24", "name": "Peravali PS", "sub_division": "Kovvur Sub-division", "lat": 16.7820, "lng": 81.7450},
     {"id": "PS-25", "name": "Nallajarla PS", "sub_division": "Kovvur Sub-division", "lat": 16.9520, "lng": 81.4820},
-    {"id": "PS-26", "name": "Mandapeta town", "sub_division": "Mandapeta Sub-division", "lat": 16.8650, "lng": 81.9320},
-    {"id": "PS-27", "name": "mandapeta rural", "sub_division": "Mandapeta Sub-division", "lat": 16.8780, "lng": 81.9150},
-    {"id": "PS-28", "name": "Angara", "sub_division": "Mandapeta Sub-division", "lat": 16.8210, "lng": 81.9850},
-    {"id": "PS-29", "name": "Rayavaram", "sub_division": "Mandapeta Sub-division", "lat": 16.8920, "lng": 82.0210},
+    {"id": "PS-26", "name": "Mandapeta town PS", "sub_division": "Mandapeta Sub-division", "lat": 16.8650, "lng": 81.9320},
+    {"id": "PS-27", "name": "Mandapeta rural PS", "sub_division": "Mandapeta Sub-division", "lat": 16.8780, "lng": 81.9150},
+    {"id": "PS-28", "name": "Angara PS", "sub_division": "Mandapeta Sub-division", "lat": 16.8210, "lng": 81.9850},
+    {"id": "PS-29", "name": "Rayavaram PS", "sub_division": "Mandapeta Sub-division", "lat": 16.8920, "lng": 82.0210},
 ]
 
 # Database setup (SQLite for lightweight standalone operation)
@@ -101,7 +101,7 @@ def init_db():
 init_db()
 
 app = FastAPI(
-    title="TRACK Operations & Dispatch API — East Godavari District Police",
+    title="TRACK Operations & Dispatch API - East Godavari District Police",
     description="High-performance backend for live patrol tracking, emergency SOS, and field coordination.",
     version="2.0.0"
 )
@@ -152,8 +152,8 @@ class EventReport(BaseModel):
 @app.get("/health")
 def health():
     return {
-        "status": "healthy",
-        "app": "TRACK",
+        "status": "ok",
+        "app": "TRACK Operations & Dispatch API",
         "district": "East Godavari District Police",
         "police_stations_count": len(EAST_GODAVARI_POLICE_STATIONS),
         "live_units_online": len(LIVE_FLEET),
@@ -174,11 +174,23 @@ def get_config():
 
     return {
         "app_name": "TRACK",
-        "district": "East Godavari District Police",
+        "district": "East Godavari District",
+        "districtName": "East Godavari District Police",
         "headquarters": "Rajamahendravaram",
+        "center": [17.0005, 81.8040],
+        "coordinates": [17.0005, 81.8040],
         "map_center": {"lat": 17.0005, "lng": 81.8040, "zoom": 11},
-        "police_stations": EAST_GODAVARI_POLICE_STATIONS,
+        "zoom": 11,
+        "apiKey": firebase_cfg.get("apiKey", ""),
+        "databaseURL": firebase_cfg.get("databaseURL", ""),
+        "projectId": firebase_cfg.get("projectId", ""),
+        "authDomain": firebase_cfg.get("authDomain", ""),
+        "storageBucket": firebase_cfg.get("storageBucket", ""),
+        "messagingSenderId": firebase_cfg.get("messagingSenderId", ""),
+        "appId": firebase_cfg.get("appId", ""),
         "firebase": firebase_cfg,
+        "totalPoliceStations": len(EAST_GODAVARI_POLICE_STATIONS),
+        "police_stations": EAST_GODAVARI_POLICE_STATIONS,
         "polling_interval_ms": 8000
     }
 
@@ -256,6 +268,7 @@ async def log_event(event: EventReport):
     return {"status": "ok", "id": evt_id, "delivered": True}
 
 @app.get("/api/fleet")
+@app.get("/fleet")
 def get_fleet():
     """Return all currently active units with latest GPS and battery."""
     now = int(time.time() * 1000)
@@ -263,9 +276,10 @@ def get_fleet():
     for uid, data in LIVE_FLEET.items():
         is_online = (now - data.get("up", 0)) < (3 * 60 * 1000)
         units.append({**data, "online": is_online})
-    return {"total": len(units), "units": units}
+    return {"total": len(units), "units": units, "vehicles": units}
 
 @app.get("/api/alerts")
+@app.get("/alerts")
 def get_alerts():
     """Return active emergency SOS and critical situation alerts."""
     return {"total": len(ACTIVE_ALERTS), "alerts": ACTIVE_ALERTS[:50]}
@@ -305,6 +319,8 @@ def get_turnout_summary():
         "data": summary
     }
 
+@app.get("/api/reports/turnout/export")
+@app.get("/api/reports/turnout/export.csv")
 @app.get("/api/reports/export.csv")
 def export_turnout_csv():
     """Instant CSV download for operational command turnout report."""

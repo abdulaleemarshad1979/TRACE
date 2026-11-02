@@ -62,7 +62,7 @@ public final class TrackService extends Service {
   }
   private Notification trackingNotification(String text) {
     PendingIntent open = PendingIntent.getActivity(this, 1, new Intent(this, MainActivity.class), PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-    return new Notification.Builder(this, "tracking").setSmallIcon(android.R.drawable.ic_menu_mylocation).setContentTitle("TRACE Route").setContentText(text).setContentIntent(open).setOngoing(true).build();
+    return new Notification.Builder(this, "tracking").setSmallIcon(android.R.drawable.ic_menu_mylocation).setContentTitle("TRACK Route").setContentText(text).setContentIntent(open).setOngoing(true).build();
   }
   @Override public int onStartCommand(Intent intent, int flags, int startId) { return START_STICKY; }
   @Override public IBinder onBind(Intent intent) { return null; }
@@ -93,7 +93,7 @@ public final class TrackService extends Service {
     if (!gps) ((NotificationManager) getSystemService(NOTIFICATION_SERVICE)).notify(1, trackingNotification("GPS disabled • turn on location"));
     io.execute(() -> {
       try {
-        JSONObject live = new JSONObject().put("up", now).put("gps", gps).put("bat", bat).put("sig", sig).put("v", "TRACE Route 1.0").put("duty", true).put("sessionId", session.get("sessionId"));
+        JSONObject live = new JSONObject().put("up", now).put("gps", gps).put("bat", bat).put("sig", sig).put("v", "TRACK Route 2.0").put("duty", true).put("sessionId", session.get("sessionId"));
         if (l != null) {
           live.put("lat", l.getLatitude()).put("lng", l.getLongitude()).put("t", l.getTime()).put("acc", l.getAccuracy()).put("spd", Math.round(l.getSpeed() * 3.6f)).put("hdg", l.getBearing());
           if (now - lastUploaded < 5000) {
@@ -115,7 +115,7 @@ public final class TrackService extends Service {
       session.set("lastMsgId", id); session.set("lastMsg", m.optString("text")); session.set("lastVoice", m.optString("voice"));
       NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
       PendingIntent open = PendingIntent.getActivity(this, 2, new Intent(this, MainActivity.class), PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-      Notification n = new Notification.Builder(this, "messages").setSmallIcon(android.R.drawable.ic_dialog_email).setContentTitle("TRACE control room").setContentText(m.optString("text", "New message")).setContentIntent(open).setAutoCancel(true).build();
+      Notification n = new Notification.Builder(this, "messages").setSmallIcon(android.R.drawable.ic_dialog_email).setContentTitle("TRACK Control Room").setContentText(m.optString("text", "New message")).setContentIntent(open).setAutoCancel(true).build();
       nm.notify(id.hashCode(), n);
     } catch (Exception ignored) { }
   }

@@ -16,7 +16,6 @@ import android.os.Handler;
 import android.os.Looper;
 import android.util.Base64;
 import android.util.TypedValue;
-import android.view.Gravity;
 import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
@@ -32,6 +31,10 @@ import com.google.zxing.integration.android.IntentResult;
 import org.json.JSONObject;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
@@ -63,12 +66,12 @@ public final class MainActivity extends Activity {
     "Nidadavolu PS",
     "Samisragudem PS",
     "Undrajavaram PS",
-    "Peravali ps",
+    "Peravali PS",
     "Nallajarla PS",
-    "Mandapeta town",
-    "mandapeta rural",
-    "Angara",
-    "Rayavaram"
+    "Mandapeta town PS",
+    "Mandapeta rural PS",
+    "Angara PS",
+    "Rayavaram PS"
   };
 
   private static final int PERMISSION = 10, PHOTO = 11, STOP = 12;
@@ -77,7 +80,7 @@ public final class MainActivity extends Activity {
   private Session session;
   private Outbox outbox;
   private TextView status, message, telemetry;
-  private EditText sd, route, officer, mobile, station, reportNote, votes;
+  private EditText route, officer, mobile, station, reportNote, votes;
   private Spinner psSpinner;
   private Button duty, voice;
   private MediaRecorder recorder;
@@ -93,7 +96,7 @@ public final class MainActivity extends Activity {
         String bat = session.get("battery");
         int q = outbox != null ? outbox.size() : 0;
         telemetry.setText(bat.isEmpty()
-          ? "Telemetry active · " + q + " queued"
+          ? "Telemetry ready · " + q + " queued"
           : "Battery " + bat + "% · Signal " + session.get("signal") + "/4 · GPS " + session.get("gps") + " · " + q + " queued");
       }
       ui.postDelayed(this, 5000);
@@ -105,10 +108,13 @@ public final class MainActivity extends Activity {
     session = new Session(this);
     outbox = new Outbox(this);
 
-    // Auto-configure backend defaults so officers never need to type database URLs or keys
-    if (session.get("email").isEmpty()) session.set("email", "admin@gmail.com");
-    if (session.get("approved").isEmpty()) session.set("approved", "1");
+    // Auto-configure backend defaults: No manual API key/DB URL input needed
+    if (session.get("key").isEmpty()) session.set("key", BuildConfig.STAGING_API_KEY);
+    if (session.get("db").isEmpty()) session.set("db", BuildConfig.STAGING_DATABASE_URL);
     if (session.get("interval").isEmpty()) session.set("interval", "8000");
+    if (session.get("approved").isEmpty()) session.set("approved", "1");
+    if (session.uid().isEmpty()) session.uid();
+    fetchBackendConfig();
 
     getWindow().setStatusBarColor(Color.rgb(10, 10, 14));
     getWindow().setNavigationBarColor(Color.rgb(15, 15, 20));
@@ -117,23 +123,23 @@ public final class MainActivity extends Activity {
     root.setOrientation(LinearLayout.VERTICAL);
     root.setBackgroundColor(Color.rgb(10, 10, 14));
 
-    // Top Header - Fixed (never scrolled away)
+    // Top Fixed District Police Header & Live Telemetry Badge
     LinearLayout header = new LinearLayout(this);
     header.setOrientation(LinearLayout.VERTICAL);
-    header.setPadding(dp(18), dp(18), dp(18), dp(10));
+    header.setPadding(dp(18), dp(16), dp(18), dp(10));
     header.setBackgroundColor(Color.rgb(15, 17, 23));
 
     TextView title = new TextView(this);
-    title.setText("TRACK  ·  EAST GODAVARI");
-    title.setTextSize(20);
+    title.setText("TRACK  /  ROUTE");
+    title.setTextSize(22);
     title.setTextColor(Color.WHITE);
     title.setTypeface(null, 1);
     title.setLetterSpacing(0.08f);
     header.addView(title);
 
     TextView subtitle = new TextView(this);
-    subtitle.setText("East Godavari District Police Tracking System");
-    subtitle.setTextSize(12);
+    subtitle.setText("East Godavari District Police");
+    subtitle.setTextSize(13);
     subtitle.setTextColor(Color.rgb(160, 165, 180));
     header.addView(subtitle);
 
@@ -169,20 +175,20 @@ public final class MainActivity extends Activity {
       pages[i].setVisibility(i == 0 ? View.VISIBLE : View.GONE);
     }
 
-    // Bottom Navigation Bar - 4 tabs
+    // Bottom Navigation Bar with 4 sleek tabs: [Duty], [SOS], [Polling], [Comms]
     LinearLayout navBar = new LinearLayout(this);
     navBar.setOrientation(LinearLayout.HORIZONTAL);
     navBar.setBackgroundColor(Color.rgb(18, 20, 28));
     navBar.setPadding(dp(4), dp(4), dp(4), dp(4));
 
-    String[] navTitles = {"DUTY", "SOS", "POLLING", "COMMS"};
+    String[] navTitles = {"Duty", "SOS", "Polling", "Comms"};
     for (int i = 0; i < 4; i++) {
       final int pageIndex = i;
       Button b = new Button(this);
       b.setText(navTitles[i]);
       b.setTextSize(13);
       b.setTypeface(null, 1);
-      b.setAllCaps(true);
+      b.setAllCaps(false);
       LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, dp(48), 1.0f);
       p.setMargins(dp(2), 0, dp(2), 0);
       b.setLayoutParams(p);
@@ -229,7 +235,7 @@ public final class MainActivity extends Activity {
     box.setPadding(dp(18), dp(14), dp(18), dp(20));
     scroll.addView(box);
 
-    section(box, "POLICE STATION SELECTION (EAST GODAVARI)");
+    section(box, "POLICE STATION SELECTION (29 STATIONS)");
     psSpinner = new Spinner(this);
     ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, EAST_GODAVARI_PS);
     psSpinner.setAdapter(adapter);
@@ -256,24 +262,31 @@ public final class MainActivity extends Activity {
           session.set("ps", selected);
           String subDiv = getSubDivision(selected);
           session.set("sd", subDiv);
-          if (sd != null) sd.setText(subDiv);
-          note("Selected: " + selected);
+          note("Selected: " + selected + " (" + subDiv + ")");
         }
       }
       @Override public void onNothingSelected(AdapterView<?> parent) {}
     });
 
-    section(box, "OFFICER & ROUTE ASSIGNMENT");
-    sd = field(box, "Sub-division", session.get("sd").isEmpty() ? "East Godavari" : session.get("sd"));
-    route = field(box, "Route Name / Patrol Number", session.get("route"));
-    officer = field(box, "Officer Name & Rank", session.get("officer"));
-    mobile = field(box, "Officer Mobile Number", session.get("mobile"));
+    section(box, "OFFICER & ROUTE DETAILS");
+    route = field(box, "Route Name", session.get("route"));
+    officer = field(box, "Officer Name", session.get("officer"));
+    mobile = field(box, "Officer Mobile", session.get("mobile"));
 
-    button(box, "Save / Confirm Assignment", () -> saveAssignment());
-    button(box, "Scan Route QR Code", () -> new IntentIntegrator(this).setPrompt("Scan Route QR Assignment").initiateScan());
+    section(box, "DUTY STATUS & CONTROLS");
+    duty = new Button(this);
+    duty.setText("START DUTY");
+    duty.setTextSize(16);
+    duty.setTypeface(null, 1);
+    duty.setTextColor(Color.WHITE);
+    duty.setBackground(shape(Color.rgb(34, 197, 94), Color.rgb(255, 255, 255)));
+    LinearLayout.LayoutParams dpLp = new LinearLayout.LayoutParams(-1, dp(54));
+    dpLp.bottomMargin = dp(10);
+    box.addView(duty, dpLp);
+    duty.setOnClickListener(v -> toggleDuty());
 
-    section(box, "ACTIVE DUTY CONTROL");
-    duty = button(box, "START DUTY", () -> toggleDuty());
+    button(box, "Scan Route QR", () -> new IntentIntegrator(this).setPrompt("Scan Route QR Assignment").initiateScan());
+    button(box, "Sign In / Confirm Duty", () -> confirmDuty());
 
     return scroll;
   }
@@ -286,23 +299,23 @@ public final class MainActivity extends Activity {
     box.setPadding(dp(18), dp(14), dp(18), dp(20));
     scroll.addView(box);
 
-    section(box, "EMERGENCY ALERT DISPATCH");
+    section(box, "EMERGENCY / SOS DISPATCH");
     Button sosBtn = new Button(this);
-    sosBtn.setText("🚨  SOS · REQUEST HELP");
+    sosBtn.setText("🚨  SOS • REQUEST HELP");
     sosBtn.setTextSize(18);
     sosBtn.setTypeface(null, 1);
     sosBtn.setTextColor(Color.WHITE);
     sosBtn.setBackground(shape(Color.rgb(220, 38, 38), Color.rgb(239, 68, 68)));
-    LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(-1, dp(64));
+    LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(-1, dp(72));
     sp.bottomMargin = dp(16);
     box.addView(sosBtn, sp);
     sosBtn.setOnClickListener(v -> sos());
 
-    section(box, "QUICK SITUATION UPDATE");
-    button(box, "🟢 Report: Normal", () -> report("normal"));
-    button(box, "🟡 Report: Tension", () -> report("tension"));
-    button(box, "🔴 Report: Problem / Conflict", () -> report("problem"));
-    button(box, "📍 Reached Incident Spot", () -> report("reached"));
+    section(box, "QUICK SITUATION UPDATES");
+    button(box, "Report: Normal", () -> report("normal"));
+    button(box, "Report: Tension", () -> report("tension"));
+    button(box, "Report: Problem", () -> report("problem"));
+    button(box, "Reached Incident Spot", () -> report("reached"));
 
     return scroll;
   }
@@ -315,13 +328,14 @@ public final class MainActivity extends Activity {
     box.setPadding(dp(18), dp(14), dp(18), dp(20));
     scroll.addView(box);
 
-    section(box, "POLLING LOCATION REPORTING");
-    station = field(box, "Polling Station ID / Location Name", "");
-    votes = field(box, "Cumulative Votes Polled (Turnout)", "");
-    reportNote = field(box, "Incident / Observation Details", "");
+    section(box, "POLLING STATION & TURNOUT REPORTING");
+    station = field(box, "Polling Station Name / ID", "");
+    votes = field(box, "Votes Polled / Turnout Number", "");
+    votes.setInputType(2); // InputType.TYPE_CLASS_NUMBER
+    reportNote = field(box, "Incident / Situation Detail Notes", "");
 
-    button(box, "📊 Send Turnout Count", () -> report("votes"));
-    button(box, "📝 Submit Situation Report", () -> report("loc"));
+    button(box, "Send Turnout Count", () -> report("votes"));
+    button(box, "Submit Polling Report", () -> report("loc"));
 
     return scroll;
   }
@@ -334,26 +348,15 @@ public final class MainActivity extends Activity {
     box.setPadding(dp(18), dp(14), dp(18), dp(20));
     scroll.addView(box);
 
-    section(box, "FIELD MEDIA & DISPATCH");
-    button(box, "📷 Take and Send Photo", () -> startActivityForResult(new Intent("android.media.action.IMAGE_CAPTURE"), PHOTO));
-    voice = button(box, "🎤 Record Voice Message", () -> toggleRecording());
-    button(box, "▶ Play Latest Voice Message", () -> playVoice());
+    section(box, "COMMS & MEDIA DISPATCH");
+    button(box, "Take & Send Photo", () -> startActivityForResult(new Intent("android.media.action.IMAGE_CAPTURE"), PHOTO));
+    voice = button(box, "Record Voice Message", () -> toggleRecording());
+    button(box, "Play Latest Voice Reply", () -> playVoice());
 
-    section(box, "CONTROL ROOM FEED");
-    message = addText(box, "No new control room messages.", 14);
+    section(box, "CONTROL ROOM INSTRUCTIONS");
+    message = addText(box, "Messages will appear here while duty is active.", 14);
     message.setBackground(shape(Color.rgb(24, 27, 36), Color.rgb(55, 65, 81)));
-    message.setPadding(dp(12), dp(12), dp(12), dp(12));
-
-    section(box, "SESSION");
-    button(box, "Reset Session / Change Unit", () -> {
-      if (session.get("duty").equals("1")) {
-        note("Stop Duty before switching accounts");
-        return;
-      }
-      session.clear();
-      note("Session cleared");
-      refreshDuty();
-    });
+    message.setPadding(dp(14), dp(14), dp(14), dp(14));
 
     return scroll;
   }
@@ -397,7 +400,7 @@ public final class MainActivity extends Activity {
     b.setAllCaps(false);
     b.setTextSize(14);
     b.setTypeface(null, 1);
-    boolean primary = label.equals("START DUTY") || label.contains("Save / Confirm");
+    boolean primary = label.contains("Confirm") || label.contains("START");
     boolean sos = label.contains("SOS");
     b.setTextColor(primary ? Color.BLACK : Color.WHITE);
     b.setBackground(shape(primary ? Color.rgb(243, 244, 246) : (sos ? Color.rgb(220, 38, 38) : Color.rgb(30, 41, 59)),
@@ -413,18 +416,47 @@ public final class MainActivity extends Activity {
   private void work(Runnable r) { io.execute(r); }
   private void note(String s) { ui.post(() -> status.setText(s)); }
 
-  private void saveAssignment() {
+  private void fetchBackendConfig() {
+    work(() -> {
+      String[] urls = {"http://10.0.2.2:8000/api/config", "http://127.0.0.1:8000/api/config"};
+      for (String u : urls) {
+        try {
+          HttpURLConnection c = (HttpURLConnection) new URL(u).openConnection();
+          c.setConnectTimeout(2000);
+          c.setReadTimeout(2000);
+          if (c.getResponseCode() == 200) {
+            try (InputStream in = c.getInputStream()) {
+              ByteArrayOutputStream bos = new ByteArrayOutputStream();
+              byte[] buf = new byte[2048]; int n;
+              while ((n = in.read(buf)) != -1) bos.write(buf, 0, n);
+              JSONObject cfg = new JSONObject(new String(bos.toByteArray(), StandardCharsets.UTF_8));
+              if (cfg.has("apiKey") && !cfg.getString("apiKey").isEmpty()) {
+                session.set("key", cfg.getString("apiKey"));
+              }
+              if (cfg.has("databaseURL") && !cfg.getString("databaseURL").isEmpty()) {
+                session.set("db", cfg.getString("databaseURL"));
+              }
+              break;
+            }
+          }
+          c.disconnect();
+        } catch (Exception ignored) {}
+      }
+    });
+  }
+
+  private void confirmDuty() {
     int pos = psSpinner.getSelectedItemPosition();
     String psSelected = pos > 0 ? EAST_GODAVARI_PS[pos] : session.get("ps");
     if (psSelected.isEmpty() || pos == 0) {
       note("Please select a Police Station first");
+      switchPage(0);
       return;
     }
     String routeVal = value(route);
     String officerVal = value(officer);
     String mobileVal = value(mobile);
-    String sdVal = value(sd);
-    if (sdVal.isEmpty()) sdVal = getSubDivision(psSelected);
+    String sdVal = getSubDivision(psSelected);
 
     session.set("ps", psSelected);
     session.set("sd", sdVal);
@@ -435,9 +467,6 @@ public final class MainActivity extends Activity {
 
     work(() -> {
       try {
-        if (!session.configured() && !session.get("email").isEmpty()) {
-          try { session.signIn(session.get("email"), "Officer@1234"); } catch (Exception ignored) {}
-        }
         JSONObject d = new JSONObject()
           .put("sd", session.get("sd"))
           .put("ps", session.get("ps"))
@@ -446,9 +475,9 @@ public final class MainActivity extends Activity {
           .put("mobile", session.get("mobile"))
           .put("v", "TRACK Route 2.0 (East Godavari)");
         session.dbPut("devices/" + session.uid(), d);
-        note("Saved · " + session.get("ps") + " / " + session.get("route"));
+        note("Duty Confirmed · " + session.get("ps") + " / " + session.get("route"));
       } catch (Exception e) {
-        note("Saved locally · " + session.get("ps"));
+        note("Confirmed locally · " + session.get("ps"));
       }
     });
   }
@@ -510,7 +539,7 @@ public final class MainActivity extends Activity {
       return;
     }
 
-    saveAssignment();
+    confirmDuty();
     session.set("sessionId", UUID.randomUUID().toString());
     session.set("duty", "1");
     startForegroundService(new Intent(this, TrackService.class));
@@ -574,11 +603,11 @@ public final class MainActivity extends Activity {
 
   private void sos() {
     queueEvent("sos");
-    note("🚨 SOS SENT TO CONTROL ROOM");
+    note("🚨 SOS REQUEST DELIVERED");
   }
 
   private void report(String type) {
-    if (session.uid().isEmpty()) { note("Set assignment first"); return; }
+    if (session.uid().isEmpty()) { note("Confirm duty first"); return; }
     try {
       String name = value(station);
       String detail = value(reportNote);
@@ -631,7 +660,6 @@ public final class MainActivity extends Activity {
             }
           }
         }
-        if (q.has("sd") && sd != null) sd.setText(q.optString("sd"));
         if (q.has("r") && route != null) route.setText(q.optString("r"));
         note("Route QR loaded: " + q.optString("ps"));
       } catch (Exception e) { note("Invalid route QR"); }
@@ -677,7 +705,7 @@ public final class MainActivity extends Activity {
         recorder.stop();
         recorder.release();
         recording = false;
-        voice.setText("🎤 Record Voice Message");
+        voice.setText("Record Voice Message");
         byte[] bytes = Files.readAllBytes(audioFile.toPath());
         if (bytes.length > 900000) {
           note("Recording too large; keep under 1 min");
@@ -726,7 +754,7 @@ public final class MainActivity extends Activity {
       recorder.prepare();
       recorder.start();
       recording = true;
-      voice.setText("⏹ Stop and Send Recording");
+      voice.setText("Stop and Send Recording");
       note("Recording audio…");
     } catch (Exception e) { note("Microphone failed: " + e.getMessage()); }
   }
@@ -757,7 +785,7 @@ public final class MainActivity extends Activity {
   @Override protected void onResume() {
     super.onResume();
     if (message != null) {
-      message.setText(session.get("lastMsg").isEmpty() ? "No new control room messages." : session.get("lastMsg"));
+      message.setText(session.get("lastMsg").isEmpty() ? "Messages will appear here while duty is active." : session.get("lastMsg"));
     }
   }
 
