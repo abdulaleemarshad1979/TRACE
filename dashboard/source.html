@@ -5904,6 +5904,7 @@ function linkedReportForIncident(x) {
 function closeIncidentDialog(id) {
   const x = INC[id];
   if (!x || x.status === 'closed') { toast('This incident is already closed.'); return; }
+  if (USER_ROLE !== 'admin') { toast('An administrator account is required to close incidents.', 6000); return; }
   const m = document.createElement('div'); m.className = 'modal';
   m.innerHTML = `<form class="card" aria-label="Close incident ${esc(x.no)}"><h2>Close incident ${esc(x.no)}</h2><p>${esc(x.place)}</p><label class="f">Action taken (optional)<textarea name="action" rows="3" placeholder="Describe what was done"></textarea></label><p class="note">Closing removes this incident from live alerts and the map. It remains in the incident record.</p><div class="row" style="justify-content:flex-end"><button type="button" class="btn" data-cancel>Cancel</button><button type="submit" class="btn red" data-confirm>Close incident</button></div><p class="note" data-error role="alert" hidden></p></form>`;
   document.body.appendChild(m);
@@ -5946,7 +5947,7 @@ function paneInc() {
     const st = INC_ST[sel.status] || INC_ST.open;
     h += `<div class="banner bad" style="background:#fff"><div class="row" style="justify-content:space-between;margin:0"><b>Incident ${sel.no} · ${esc(sel.place)}</b><span style="color:${st[1]};font-weight:800">${st[0]}</span></div>${esc(sel.desc || '')}
       <div class="note">Reported ${fT(sel.t)}${sel.dev ? ` · sent ${esc(dname(sel.dev))} at ${fT(sel.sentAt)}` : ''}${sel.reachedAt ? ` · reached ${fT(sel.reachedAt)} (${fMin(sel.reachedAt - sel.sentAt)})` : ''}${sel.closedAt ? ` · closed ${fT(sel.closedAt)}: ${esc(sel.action || '')}` : ''}</div>
-      <div class="row">${sel.status !== 'closed' ? `<button class="btn small red" data-act="incClose" data-id="${sel.id}">Close incident</button>` : ''}<button class="btn small" data-act="goto" data-lat="${sel.lat}" data-lng="${sel.lng}">Show on map</button><button class="btn small" data-act="incDeselect">Back to list</button></div></div>`;
+      <div class="row">${sel.status !== 'closed' && USER_ROLE === 'admin' ? `<button class="btn small red" data-act="incClose" data-id="${sel.id}">Close incident</button>` : ''}<button class="btn small" data-act="goto" data-lat="${sel.lat}" data-lng="${sel.lng}">Show on map</button><button class="btn small" data-act="incDeselect">Back to list</button></div>${sel.status !== 'closed' && USER_ROLE === 'monitor' ? '<p class="note">An administrator account is required to close incidents.</p>' : ''}</div>`;
     if (sel.status !== 'closed') {
       const N = nearest(sel.lat, sel.lng).slice(0, 8), shown = Math.min(UI.incVehiclesVisible || 3, N.length);
       h += `<h3>Nearest route mobiles</h3>` + N.slice(0, shown).map(x => vehCard(x.u, `<b>${fKm(x.d)}</b> · about ${x.eta} min`) + `<div class="row" style="margin:-2px 0 6px"><button class="btn small primary" data-act="incSend" data-u="${x.u}" data-id="${sel.id}">${sel.dev === x.u ? 'Send again' : 'Send this vehicle'}</button>${DEV[x.u].mobile ? `<a class="btn small" href="tel:${esc(DEV[x.u].mobile)}">Call</a>` : ''}</div>`).join('') + (shown < N.length ? `<button class="btn" data-act="incMoreVehicles">Show ${N.length - shown} more route mobiles</button>` : '');

@@ -172,6 +172,13 @@ test('incident close stays open on a write failure and succeeds on retry', async
   expect(await page.evaluate(() => INC.inc1.status)).toBe('closed');
 });
 
+test('read-only monitor sees the incident close permission clearly', async ({ page }) => {
+  await controlRoom(page, { '/roles/admin-1.json': 'monitor' });
+  await page.evaluate(() => { INC.inc1 = { no: 1, t: Date.now(), lat: 17, lng: 81.8, place: 'Test incident', status: 'open' }; UI.tab = 'inc'; UI.incSel = 'inc1'; renderPane(); });
+  await expect(page.locator('#pane [data-act="incClose"]')).toHaveCount(0);
+  await expect(page.locator('#pane')).toContainText('An administrator account is required to close incidents.');
+});
+
 test('incident register loads more records only when requested', async ({ page }) => {
   await controlRoom(page);
   await page.evaluate(() => {
