@@ -1269,13 +1269,18 @@ body.wall .rd .work{grid-template-columns:minmax(0,1fr) 40vw;margin:0 10px 10px}
       <button class="btn primary" type="submit">Save</button>
     </form>
     <form id="loginForm" hidden>
-      <label class="f">Administrator email<input type="email" id="lEmail" autocomplete="username" required></label>
+      <div class="login-roles" aria-label="Login type"><button id="loginViewer" type="button" class="chosen" aria-pressed="true">Viewer Login</button><button id="loginAdmin" type="button" aria-pressed="false">Administrator Login</button></div>
+      <p class="login-role-note" id="loginRoleNote">Read-only access to your assigned mandal routes.</p>
+      <div id="viewerFields">
+        <label class="f">Mobile number<input type="tel" id="lMobile" inputmode="tel" autocomplete="username" placeholder="10-digit mobile number" required></label>
+        <label class="f">Rank<select id="lRank" required><option value="">Choose rank</option><option>DSP</option><option>CI</option><option>RI</option><option>SI</option><option>RSI</option><option>ASI</option><option>HC</option><option>PC</option><option>HG</option></select></label>
+      </div>
+      <div id="adminFields" hidden><label class="f">Administrator email<input type="email" id="lEmail" autocomplete="username" disabled></label></div>
       <label class="f">Password<input type="password" id="lPw" autocomplete="current-password" required></label>
       <label class="row agree"><input type="checkbox" id="lAgree" required> I am an authorised police officer. I will use this only for official election duty and will not share the login, screen, screenshots or data with anyone else.</label>
-      <label class="row"><input type="checkbox" id="lKeep" checked> Keep me signed in on this computer <span class="use">(only on the control room computer)</span></label>
+      <label class="row" id="lKeepWrap" hidden><input type="checkbox" id="lKeep" checked> Keep me signed in on this computer <span class="use">(only on the control room computer)</span></label>
       <div class="err" id="lErr"></div>
-      <button class="btn primary" type="submit">Sign in</button>
-      <p class="note" style="margin:14px 0 0">SI officer? <a href="si-monitor.html">Open the separate SI monitor login</a>.</p>
+      <button class="btn primary" id="loginSubmit" type="submit">Sign in to Viewer Portal</button>
       <button class="btn ghost small" type="button" id="changeProj">Use a different Firebase project</button>
     </form>
     <div class="restricted"><b>🔒 RESTRICTED — FOR OFFICIAL USE OF TRACE CONTROL ROOM ONLY</b>
@@ -1283,6 +1288,11 @@ body.wall .rd .work{grid-template-columns:minmax(0,1fr) 40vw;margin:0 10px 10px}
       <button class="btn ghost small" type="button" data-help>How to use</button></div>
   </div>
 </div>
+
+<section id="viewerApp" class="viewer-app" hidden>
+  <header class="viewer-head"><div><strong>TRACK · Viewer Portal</strong><small>East Godavari District Police · Assigned mandal</small></div><button id="viewerLogout" type="button">Sign out</button></header>
+  <main class="viewer-main"><div class="viewer-top"><div><h1 id="viewerMandal">Assigned mandal</h1><p id="viewerOfficer"></p></div><p id="viewerUpdated" role="status">Loading…</p></div><p id="viewerAlert" class="viewer-alert" role="alert" hidden></p><div id="viewerStats" class="viewer-stats"></div><div class="viewer-grid"><section class="viewer-panel"><h2>Assigned routes and phones</h2><div class="viewer-table-wrap"><table><thead><tr><th>Route</th><th>Officer</th><th>Phone status</th><th>Last update</th></tr></thead><tbody id="viewerRoutes"></tbody></table></div></section><section class="viewer-panel"><h2>Live location</h2><div id="viewerMap" aria-label="Map of assigned route phones"></div></section></div><p class="viewer-foot">Restricted to your assigned routes. Live data refreshes every 15 seconds. Location and SOS information is for official duty only.</p></main>
+</section>
 
 <div id="app" class="app rd" hidden>
   <header class="hdr">
@@ -4437,7 +4447,7 @@ const NATIVE = typeof window.Android !== 'undefined';
 
 const DEFAULT_CFG = null;
 let CFG = LS.get('cfg', null) || (TEST ? null : DEFAULT_CFG);      // {k: apiKey, d: databaseURL}
-let AU = LS.get('au', null);        // {rt, email, uid}
+let AU = (() => { try { return JSON.parse(sessionStorage.getItem('rm_si_au') || 'null'); } catch (_) { return null; } })() || LS.get('au', null); // {rt, email, uid}
 if (AU && (!AU.rt || !AU.uid)) { AU = null; LS.set('au', null); }
 let ID_TOKEN = null, ID_EXP = 0, KEEP = true;
 
@@ -4477,6 +4487,8 @@ async function signIn(email, pw, keep) {
   ID_TOKEN = j.idToken; ID_EXP = Date.now() + (+j.expiresIn || 3600) * 1000; KEEP = keep;
   AU = { rt: j.refreshToken, email, uid: j.localId };
   LS.set('au', keep ? AU : null);
+  if (/^si91[6-9][0-9]{9}@members\.track\.invalid$/.test(email)) sessionStorage.setItem('rm_si_au', JSON.stringify(AU));
+  else sessionStorage.removeItem('rm_si_au');
   bridgeAuth();
 }
 async function refreshToken() {
@@ -4487,10 +4499,11 @@ async function refreshToken() {
   if (!r.ok) { const e = new Error(authErr(j)); e.auth = true; throw e; }
   ID_TOKEN = j.id_token; ID_EXP = Date.now() + (+j.expires_in || 3600) * 1000; AU.rt = j.refresh_token; AU.uid = j.user_id;
   if (KEEP) LS.set('au', AU);
+  else if (/^si91[6-9][0-9]{9}@members\.track\.invalid$/.test(AU.email || '')) sessionStorage.setItem('rm_si_au', JSON.stringify(AU));
   return ID_TOKEN;
 }
 function bridgeAuth() { if (NATIVE && AU) try { Android.setAuth(CFG.k, CFG.d, AU.rt, AU.email); } catch (e) { } }
-function signOut() { if (NATIVE) try { Android.signOut(); } catch (e) { } AU = null; ID_TOKEN = null; LS.set('au', null); location.reload(); }
+function signOut() { if (NATIVE) try { Android.signOut(); } catch (e) { } AU = null; ID_TOKEN = null; LS.set('au', null); sessionStorage.removeItem('rm_si_au'); location.reload(); }
 
 async function db(method, path, body, query) {
   const t = await token();
@@ -4707,6 +4720,85 @@ function syncLiveDevices() {
 const devIds = () => { syncLiveDevices(); return Object.keys(DEV).filter(visible).filter(u => !(typeof isBlocked === 'function' && isBlocked(u) && !(LIVE[u] && LIVE[u].up && LIVE[u].duty !== false && Date.now() - LIVE[u].up < S().nosig * MIN))).sort((a, b) => ((DEV[a].sd || '') + dname(a)).localeCompare((DEV[b].sd || '') + dname(b), undefined, { numeric: true })); };
 
 /* ---------- start ---------- */
+let LOGIN_MODE = 'viewer', VIEWER_SCOPE = null, VIEWER_ROUTES = [], VIEWER_MAP = null, VIEWER_MARKERS = {}, VIEWER_TIMER = null, VIEWER_RANK = '';
+function setLoginMode(mode) {
+  LOGIN_MODE = mode;
+  const viewer = mode === 'viewer';
+  $('#viewerFields').hidden = !viewer; $('#adminFields').hidden = viewer; $('#lKeepWrap').hidden = viewer;
+  $('#lMobile').disabled = $('#lRank').disabled = !viewer; $('#lEmail').disabled = viewer;
+  $('#loginViewer').classList.toggle('chosen', viewer); $('#loginAdmin').classList.toggle('chosen', !viewer);
+  $('#loginViewer').setAttribute('aria-pressed', String(viewer)); $('#loginAdmin').setAttribute('aria-pressed', String(!viewer));
+  $('#loginRoleNote').textContent = viewer ? 'Read-only access to your assigned mandal routes.' : 'Control room administrator access.';
+  $('#loginSubmit').textContent = viewer ? 'Sign in to Viewer Portal' : 'Sign in to Control Room';
+  $('#lErr').textContent = '';
+}
+$('#loginViewer').addEventListener('click', () => setLoginMode('viewer'));
+$('#loginAdmin').addEventListener('click', () => setLoginMode('admin'));
+$('#viewerLogout').addEventListener('click', signOut);
+setLoginMode('viewer');
+function viewerTime(value) { return value ? new Date(value).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'Never'; }
+function viewerStatus(live, sos) {
+  if (sos) return { label: 'SOS', css: 'sos' };
+  if (!live?.up || live.duty === false) return { label: 'Not started', css: '' };
+  if (Date.now() - live.up > 300000) return { label: 'No signal', css: 'stale' };
+  if (live.gps === false) return { label: 'GPS off', css: 'stale' };
+  return { label: 'Live', css: 'live' };
+}
+async function loadViewerScope() {
+  const scope = await dbGet('siScopes/' + AU.uid);
+  if (!scope?.mandal || !scope.routes || !Object.values(scope.routes).some(Boolean)) throw new Error('No mandal routes have been assigned to this viewer account. Ask the control room to assign routes.');
+  const rank = scope.rank || 'SI';
+  if (VIEWER_RANK && VIEWER_RANK !== rank) throw new Error('The selected rank does not match this viewer account. Choose the rank issued by the command control room.');
+  VIEWER_SCOPE = scope;
+  const ids = Object.keys(scope.routes).filter(id => scope.routes[id] === true);
+  const results = await Promise.allSettled(ids.map(id => dbGet('config/routes/' + encodeURIComponent(id))));
+  VIEWER_ROUTES = ids.map((id, index) => ({ id, ...(results[index].status === 'fulfilled' ? results[index].value || {} : {}) }));
+  $('#viewerMandal').textContent = scope.mandal;
+  $('#viewerOfficer').textContent = `${rank} · ${scope.officer || scope.mobile || 'Viewer'}`;
+}
+async function refreshViewer() {
+  const rows = await Promise.all(VIEWER_ROUTES.map(async route => {
+    if (!route.memberUid) return { route, dev: {}, live: {}, sos: false };
+    const uid = route.memberUid;
+    const [d, l, e] = await Promise.allSettled([
+      dbGet('devices/' + encodeURIComponent(uid)), dbGet('live/' + encodeURIComponent(uid)),
+      dbGet('events', '&orderBy=%22uid%22&equalTo=' + encodeURIComponent(JSON.stringify(uid)))
+    ]);
+    const events = e.status === 'fulfilled' ? Object.values(e.value || {}) : [];
+    return { route, uid, dev: d.status === 'fulfilled' ? d.value || {} : {}, live: l.status === 'fulfilled' ? l.value || {} : {},
+      sos: events.some(x => x?.type === 'sos' && !x.ackBy && !x.cleared && Date.now() - (+x.t || 0) < 21600000),
+      error: d.status === 'rejected' || l.status === 'rejected' || e.status === 'rejected' };
+  }));
+  const active = rows.filter(x => x.uid && x.live?.up && Date.now() - x.live.up <= 300000).length;
+  const sos = rows.filter(x => x.sos).length, missing = rows.filter(x => x.error).length;
+  $('#viewerStats').innerHTML = `<div class="viewer-stat"><b>${rows.length}</b><span>Assigned routes</span></div><div class="viewer-stat"><b>${rows.filter(x => x.uid).length}</b><span>Assigned phones</span></div><div class="viewer-stat"><b>${active}</b><span>Live phones</span></div><div class="viewer-stat"><b>${sos}</b><span>Open SOS</span></div>`;
+  $('#viewerAlert').hidden = !sos && !missing;
+  $('#viewerAlert').textContent = sos ? `${sos} open SOS alert${sos === 1 ? '' : 's'} on assigned routes.` : missing ? 'Some route phone data could not be read. Check the assignment and connection.' : '';
+  $('#viewerRoutes').innerHTML = rows.map(x => {
+    const s = viewerStatus(x.live, x.sos);
+    return `<tr><td><b>${esc(x.route.ps || 'Police station')}</b><small>${esc(x.route.route || x.route.id)}</small></td><td>${esc(x.dev.officer || x.route.officer || 'Unassigned')}${x.dev.mobile ? `<small>${esc(x.dev.mobile)}</small>` : ''}</td><td><span class="viewer-badge ${s.css}">${esc(x.uid ? s.label : 'No assigned phone')}</span></td><td>${esc(viewerTime(x.live.up))}</td></tr>`;
+  }).join('');
+  const seen = new Set(), points = [];
+  for (const x of rows) {
+    if (!x.uid || x.live.lat == null || x.live.lng == null || !Number.isFinite(+x.live.lat) || !Number.isFinite(+x.live.lng)) continue;
+    seen.add(x.uid); const ll = [+x.live.lat, +x.live.lng]; points.push(ll);
+    const s = viewerStatus(x.live, x.sos);
+    if (!VIEWER_MARKERS[x.uid]) VIEWER_MARKERS[x.uid] = L.circleMarker(ll, { radius: 9, color: x.sos ? '#b02424' : '#1f5fa8', fillOpacity: .8 }).addTo(VIEWER_MAP);
+    VIEWER_MARKERS[x.uid].setLatLng(ll).setStyle({ color: x.sos ? '#b02424' : '#1f5fa8' }).bindPopup(`<b>${esc(x.route.ps || '')} · ${esc(x.route.route || '')}</b><br>${esc(s.label)}<br>Last update: ${esc(viewerTime(x.live.up))}`);
+  }
+  for (const [uid, marker] of Object.entries(VIEWER_MARKERS)) if (!seen.has(uid)) { VIEWER_MAP.removeLayer(marker); delete VIEWER_MARKERS[uid]; }
+  if (points.length && !VIEWER_MAP._trackFitted) { VIEWER_MAP.fitBounds(points, { padding: [35, 35], maxZoom: 13 }); VIEWER_MAP._trackFitted = true; }
+  $('#viewerUpdated').textContent = `Updated ${viewerTime(Date.now())}${missing ? ` · ${missing} unavailable` : ''}`;
+}
+async function startViewer() {
+  await loadViewerScope();
+  $('#login').hidden = true; $('#app').hidden = true; $('#viewerApp').hidden = false;
+  if (!VIEWER_MAP) { VIEWER_MAP = L.map('viewerMap').setView([17.0005, 81.804], 10); L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap contributors' }).addTo(VIEWER_MAP); }
+  setTimeout(() => VIEWER_MAP.invalidateSize(), 50);
+  await refreshViewer();
+  clearInterval(VIEWER_TIMER);
+  VIEWER_TIMER = setInterval(async () => { try { await loadViewerScope(); await refreshViewer(); } catch (error) { $('#viewerUpdated').textContent = 'Refresh failed: ' + error.message; } }, 15000);
+}
 function boot() {
   if (!CFG) { $('#login').hidden = false; $('#projForm').hidden = false; return; }
   if (!AU) { $('#login').hidden = false; $('#loginForm').hidden = false; return; }
@@ -4720,16 +4812,26 @@ $('#projForm').addEventListener('submit', e => {
 $('#loginForm').addEventListener('submit', async e => {
   e.preventDefault(); $('#lErr').textContent = '';
   const b = e.target.querySelector('button[type=submit]'); b.disabled = true; b.textContent = 'Signing in…';
-  try { await signIn($('#lEmail').value.trim(), $('#lPw').value, $('#lKeep').checked); await startIfAuthorized(); }
+  try {
+    VIEWER_RANK = LOGIN_MODE === 'viewer' ? $('#lRank').value : '';
+    const email = LOGIN_MODE === 'viewer' ? 'si' + memberPhone($('#lMobile').value).slice(1) + '@members.track.invalid' : $('#lEmail').value.trim();
+    await signIn(email, $('#lPw').value, LOGIN_MODE === 'admin' && $('#lKeep').checked);
+    await startIfAuthorized(LOGIN_MODE);
+  }
   catch (er) { $('#lErr').textContent = er.message; }
-  b.disabled = false; b.textContent = 'Sign in';
+  b.disabled = false; b.textContent = LOGIN_MODE === 'viewer' ? 'Sign in to Viewer Portal' : 'Sign in to Control Room';
 });
 $('#changeProj').addEventListener('click', () => { LS.set('cfg', null); LS.set('au', null); CFG = null; $('#loginForm').hidden = true; $('#projForm').hidden = false; });
 
-async function startIfAuthorized() {
+async function startIfAuthorized(requestedMode) {
   try {
     const role = await dbGet('roles/' + AU.uid);
-    if (role === 'si_monitor') { if (!KEEP) sessionStorage.setItem('rm_si_au', JSON.stringify(AU)); location.replace('si-monitor.html'); return; }
+    if (role === 'si_monitor') {
+      if (requestedMode === 'admin') throw new Error('Use Viewer Login for this account.');
+      setLoginMode('viewer'); await startViewer(); return;
+    }
+    if (requestedMode === 'viewer') throw new Error('Use Administrator Login for this account.');
+    if (!role) throw new Error('This account has no assigned dashboard role. Contact the control room.');
     USER_ROLE = role;
     start();
   } catch (e) { $('#login').hidden = false; $('#loginForm').hidden = false; $('#lErr').textContent = e.message; }
@@ -5382,7 +5484,7 @@ function paneSetup() {
   const elSel = id => `<select id="${id}"><option value="">All elections (${allRoutes().length} routes)</option>${els.map(e => `<option value="${esc(e)}" ${e === ELEC() ? 'selected' : ''}>${esc(e)} (${allRoutes().filter(r => (r.election || '').trim() === e).length} routes)</option>`).join('')}</select>`;
   let h = sec('routes', `Routes (${routes().length}${ELEC() ? ' — ' + esc(ELEC()) : ''})`, `<p class="note">Use Assign member to set the officer name, mobile number and password. The APK loads their assigned route after login. Routes marked Review coverage have proposed merges or splits; check their polling locations before assigning.</p>
     <div class="row"><label class="f" style="flex:1">Election <span class="u">(choose one: the list below and the phones show only that election's routes)</span>${elSel('setElec')}</label></div>
-    <div class="row"><button class="btn small" data-act="newElection">+ New election</button><button class="btn small" data-act="routeAdd">Add a route</button><button class="btn small" data-act="routeImport">Import from Excel</button><button class="btn small" data-act="trackTemplate">Download Excel format</button>${USER_ROLE === 'admin' ? '<button class="btn small primary" data-act="siMonitor">Create SI monitor</button>' : ''}<button class="btn small red" data-act="routeClearAll">Remove all routes</button>${ELEC() ? `<button class="btn small red" data-act="delElec">Delete election "${esc(ELEC())}"</button>` : ''}</div>
+    <div class="row"><button class="btn small" data-act="newElection">+ New election</button><button class="btn small" data-act="routeAdd">Add a route</button><button class="btn small" data-act="routeImport">Import from Excel</button><button class="btn small" data-act="trackTemplate">Download Excel format</button>${USER_ROLE === 'admin' ? '<button class="btn small primary" data-act="siMonitor">Create viewer login</button>' : ''}<button class="btn small red" data-act="routeClearAll">Remove all routes</button>${ELEC() ? `<button class="btn small red" data-act="delElec">Delete election "${esc(ELEC())}"</button>` : ''}</div>
     <div class="tw"><table class="t"><thead><tr><th>Election</th><th>Sub-division</th><th>PS</th><th>Route</th><th>Villages</th><th>Officer</th><th></th></tr></thead><tbody>${R.map(r => `<tr><td>${esc(r.election || '')}</td><td>${esc(r.sd)}</td><td>${esc(r.ps)}</td><td><b>${esc(r.route)}</b>${r.coverageStatus === 'proposed' ? '<br><span class="note" style="color:#a16207">Review coverage</span>' : ''}</td><td>${esc(r.villages || '')}</td><td>${esc(r.officer || '')} ${esc(r.mobile || '')}${r.vehicle ? '<br><span class="note">' + esc(r.vehicle) + '</span>' : ''}</td><td style="white-space:nowrap"><button class="btn small" data-act="routeQr" data-id="${r.id}">QR</button><button class="btn small" data-act="routeEdit" data-id="${r.id}">Edit</button>${USER_ROLE === 'admin' ? `<button class="btn small primary" data-act="memberAssign" data-id="${r.id}">Assign member</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="7" class="note">No routes yet.</td></tr>'}</tbody></table></div>`);
   h += sec('ps', `Polling locations (${stations().length})`, `<p class="note">Shown on the map, used for the incident search, the off-route alert and the "visited" check. Columns: Polling location, Latitude, Longitude, Sensitivity, Police station, Route No. One row per location, even if it has several booths.</p>
     <div class="row"><label class="f" style="flex:1">Election for these locations <span class="u">(the map shows the locations of the election chosen here)</span>${elSel('setElec2')}</label></div>
@@ -5526,21 +5628,22 @@ function mapCols(rows, want) {
 }
 const SI_MANDALS = ['Kadiyam','Rajamahendravaram Rural','Kapileswarapuram (Angara)','Mandapeta','Rayavaram','Anaparthy','Biccavole','Rangampeta','Korukonda','Gokavaram','Seethanagaram','Rajanagaram','Kovvuru','Tallapudi','Chagallu','Nidadavole','Undrajavaram','Peravali','Nalljerla','Gopalapuram','Devarapalli'];
 async function siMonitorModal() {
-  if (await dbGet('roles/' + AU.uid) !== 'admin') throw new Error('Only an administrator can create an SI monitor.');
+  if (await dbGet('roles/' + AU.uid) !== 'admin') throw new Error('Only an administrator can create a viewer login.');
   const list = allRoutes();
-  if (!list.length) throw new Error('Import or add routes before assigning an SI monitor.');
+  if (!list.length) throw new Error('Import or add routes before assigning a viewer login.');
   const modal = document.createElement('div'); modal.className = 'modal member-modal';
   modal.setAttribute('role', 'dialog'); modal.setAttribute('aria-modal', 'true'); modal.setAttribute('aria-labelledby', 'siMonitorTitle');
-  modal.innerHTML = `<form class="card"><h2 id="siMonitorTitle">Create SI monitor</h2><p class="note">This read-only login sees only the selected routes of one mandal and their assigned phones. Select the exact routes, especially when two mandals share a police station.</p>
-    <label class="f">SI name and rank<input name="officer" required autocomplete="off"></label>
-    <label class="f">SI mobile number<input name="mobile" type="tel" required autocomplete="off" placeholder="10-digit mobile number"></label>
+  modal.innerHTML = `<form class="card"><h2 id="siMonitorTitle">Create viewer login</h2><p class="note">This read-only login sees only the selected routes of one mandal and their assigned phones. Select the exact routes, especially when two mandals share a police station.</p>
+    <label class="f">Officer name<input name="officer" required autocomplete="off"></label>
+    <label class="f">Rank<select name="rank" required><option value="">Choose rank</option><option>DSP</option><option>CI</option><option>RI</option><option>SI</option><option>RSI</option><option>ASI</option><option>HC</option><option>PC</option><option>HG</option></select></label>
+    <label class="f">Mobile number<input name="mobile" type="tel" required autocomplete="off" placeholder="10-digit mobile number"></label>
     <label class="f">Password<input name="password" type="password" required minlength="8" autocomplete="new-password"></label>
     <label class="f">Assigned mandal<select name="mandal" required><option value="">Choose mandal</option>${SI_MANDALS.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join('')}</select></label>
     <label class="f">Find routes<input type="search" data-si-search placeholder="Filter by police station or route"></label>
     <div class="row"><button class="btn small" type="button" data-si-select>Choose visible routes</button><span class="note" data-si-count>0 selected</span></div>
     <div class="tw" style="max-height:230px;overflow:auto;border:1px solid var(--line);padding:8px">${list.map(r => `<label class="row" data-si-row style="display:flex;align-items:center;margin:3px 0"><input type="checkbox" name="routeId" value="${esc(r.id)}"> ${esc(r.ps)} · ${esc(r.route)}${r.election ? ' · ' + esc(r.election) : ''}</label>`).join('')}</div>
-    <p class="note">Existing route members gain access only after their route assignment is linked to the selected route. The SI cannot edit routes, dispatch messages or see other mandals.</p>
-    <div class="err" role="alert"></div><div class="row" style="justify-content:flex-end"><button class="btn" type="button" data-close>Cancel</button><button class="btn primary" type="submit">Save SI monitor</button></div></form>`;
+    <p class="note">Existing route members gain access only after their route assignment is linked to the selected route. The viewer cannot edit routes, dispatch messages or see other mandals.</p>
+    <div class="err" role="alert"></div><div class="row" style="justify-content:flex-end"><button class="btn" type="button" data-close>Cancel</button><button class="btn primary" type="submit">Save viewer login</button></div></form>`;
   document.body.appendChild(modal);
   const form = modal.querySelector('form');
   modal.querySelector('[data-close]').onclick = () => modal.remove();
@@ -5567,18 +5670,18 @@ async function siMonitorModal() {
       catch (error) {
         if (error.code !== 'EMAIL_EXISTS') throw error;
         try { account = await memberAuth('signInWithPassword', { email, password, returnSecureToken: true }); }
-        catch (_) { throw new Error('This SI mobile number already has an account. Enter its current password.'); }
+        catch (_) { throw new Error('This mobile number already has an account. Enter its current password.'); }
       }
       const uid = account.localId, role = await dbGet('roles/' + uid);
       if (role && role !== 'si_monitor') throw new Error('This mobile number belongs to another type of account. Use a separate number.');
-      const updates = { ['roles/' + uid]: 'si_monitor', ['siScopes/' + uid]: { mandal: data.get('mandal'), officer: String(data.get('officer')).trim(), mobile, routes: Object.fromEntries(selected.map(id => [id, true])) } };
+      const updates = { ['roles/' + uid]: 'si_monitor', ['siScopes/' + uid]: { mandal: data.get('mandal'), officer: String(data.get('officer')).trim(), rank: String(data.get('rank')), mobile, routes: Object.fromEntries(selected.map(id => [id, true])) } };
       for (const id of selected) {
         const r = CONF.routes[id]; if (!r.memberUid) continue;
         const assignment = await dbGet('assignments/' + r.memberUid);
         if (assignment && assignment.ps === r.ps && assignment.route === r.route) updates['assignments/' + r.memberUid + '/routeId'] = id;
       }
       await dbPatch('', updates);
-      modal.remove(); toast(`SI monitor saved for ${data.get('mandal')}. Sign in with the mobile number and password.`, 7000);
+      modal.remove(); toast(`Viewer login saved for ${data.get('mandal')}. Sign in with the rank, mobile number and password.`, 7000);
     } catch (error) { form.querySelector('.err').textContent = error.message; }
     finally { button.disabled = false; }
   };
