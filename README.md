@@ -87,6 +87,8 @@ node tools/build-dashboard.mjs
 ```
 Generates `dashboard/TRACK.html` and `dist/index.html`.
 
+Pushes to `main` run browser tests and deploy the rebuilt `dist` directory to Firebase Hosting at `https://officer-8eb52.web.app` through `.github/workflows/firebase-hosting.yml`. The workflow uses the repository secret `FIREBASE_HOSTING_SERVICE_ACCOUNT_OFFICER_8EB52` and deploys Hosting only; it does not change Realtime Database data or rules.
+
 ### 3. Build Android App (TRACK Route)
 ```bash
 ./gradlew :android-route:assembleDebug
