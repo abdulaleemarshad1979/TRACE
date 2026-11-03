@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { initializeTestEnvironment, assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
-import { get, ref, set, update } from 'firebase/database';
+import { get, ref, set, update, query, orderByChild, equalTo } from 'firebase/database';
 
 test('Realtime Database grants only approved roles and route ownership', async () => {
   const env = await initializeTestEnvironment({
@@ -57,4 +57,38 @@ test('Realtime Database grants only approved roles and route ownership', async (
   } finally {
     await env.cleanup();
   }
+});
+
+test('SI monitor reads only assigned route units and cannot write', async () => {
+  const env = await initializeTestEnvironment({ projectId: 'demo-trace', database: { rules: readFileSync(new URL('../firebase/database.rules.json', import.meta.url), 'utf8') } });
+  try {
+    await env.clearDatabase();
+    await env.withSecurityRulesDisabled(async ctx => set(ref(ctx.database(), '/'), {
+      roles: { admin: 'admin', si: 'si_monitor', routeA: 'route', routeB: 'route' },
+      siScopes: { si: { mandal: 'Kadiyam', routes: { r1: true } } },
+      config: { routes: { r1: { ps: 'Kadiyam PS', route: 'Route 1', memberUid: 'routeA' }, r2: { ps: 'Rajanagaram PS', route: 'Route 2', memberUid: 'routeB' } } },
+      assignments: { routeA: { routeId: 'r1', ps: 'Kadiyam PS', route: 'Route 1' }, routeB: { routeId: 'r2', ps: 'Rajanagaram PS', route: 'Route 2' } },
+      devices: { routeA: { ps: 'Kadiyam PS' }, routeB: { ps: 'Rajanagaram PS' } },
+      live: { routeA: { lat: 17, lng: 81 }, routeB: { lat: 18, lng: 82 } },
+      events: { sosA: { uid: 'routeA', type: 'sos', t: 1 }, sosB: { uid: 'routeB', type: 'sos', t: 2 } }
+    }));
+    const si = env.authenticatedContext('si').database();
+    await assertSucceeds(get(ref(si, 'siScopes/si')));
+    await assertFails(get(ref(si, 'siScopes')));
+    await assertSucceeds(get(ref(si, 'config/routes/r1')));
+    await assertFails(get(ref(si, 'config/routes/r2')));
+    await assertFails(get(ref(si, 'config')));
+    await assertSucceeds(get(ref(si, 'devices/routeA')));
+    await assertFails(get(ref(si, 'devices/routeB')));
+    await assertFails(get(ref(si, 'devices')));
+    await assertSucceeds(get(ref(si, 'live/routeA')));
+    await assertFails(get(ref(si, 'live/routeB')));
+    await assertSucceeds(get(query(ref(si, 'events'), orderByChild('uid'), equalTo('routeA'))));
+    await assertFails(get(query(ref(si, 'events'), orderByChild('uid'), equalTo('routeB'))));
+    await assertFails(get(ref(si, 'events')));
+    await assertFails(set(ref(si, 'live/routeA'), { lat: 0 }));
+    await assertFails(update(ref(si), { 'roles/routeB': 'si_monitor' }));
+    const admin = env.authenticatedContext('admin').database();
+    await assertSucceeds(update(ref(admin), { 'roles/si2': 'si_monitor', 'siScopes/si2': { mandal: 'Kadiyam', routes: { r1: true } } }));
+  } finally { await env.cleanup(); }
 });

@@ -6,6 +6,12 @@ The monitor and Android app use the same configured Firebase Realtime Database. 
 
 ## Sign-in and duty
 
+### SI mandal monitor
+
+An administrator opens **Settings → Routes → Create SI monitor**, enters the SI's name, email, password and mandal, and selects the exact routes assigned to that mandal. The route list is explicit because some mandals share a police station. The SI uses the same dashboard sign-in URL and is sent to the read-only SI monitor. It shows those routes, their assigned phones, live positions, connection status and open SOS alerts. An unassigned route appears without a phone.
+
+The `si_monitor` role and `siScopes/{uid}/routes` are enforced in Realtime Database rules. The SI can read only selected route records, their assigned phone data and per-phone SOS events; database writes and other mandals are denied. New mobile assignments save a `routeId`; creating the SI account also links matching existing mobile assignments to their route IDs. Deploy the Hosting build and database rules together before issuing SI credentials. The workbook personnel abstracts are not imported into this monitor because several source figures need correction.
+
 1. Sign into the monitor as the control-room administrator, then open **Settings → Routes → Assign member** beside the chosen route.
 2. Enter officer name/rank, a 10-digit Indian mobile number (or +91 format), and a password of at least 8 characters. For an existing mobile login, use its current password. This form does not reset passwords.
 3. For a route marked **Review coverage**, inspect the displayed polling locations and confirm the coverage before assigning it.

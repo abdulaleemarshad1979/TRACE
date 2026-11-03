@@ -3,6 +3,70 @@ import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 
 const url = pathToFileURL(path.resolve('dashboard/TRACE.html')).href;
+const siUrl = pathToFileURL(path.resolve('dashboard/si-monitor.html')).href;
+
+test('SI monitor shows only assigned mandal routes and their live phones', async ({ page }) => {
+  const now = Date.now(), reads = [];
+  await page.addInitScript(() => localStorage.setItem('rm_au', JSON.stringify({ rt: 'si-refresh', uid: 'si-1', email: 'si@example.test' })));
+  await page.route('https://securetoken.googleapis.com/**', route => route.fulfill({ json: { id_token: 'si-token', expires_in: '3600', refresh_token: 'si-refresh', user_id: 'si-1' } }));
+  const data = {
+    '/roles/si-1.json': 'si_monitor',
+    '/siScopes/si-1.json': { mandal: 'Kadiyam', officer: 'SI Example', routes: { r1: true } },
+    '/config/routes/r1.json': { ps: 'Kadiyam PS', route: 'Route 1', memberUid: 'unit-1' },
+    '/devices/unit-1.json': { ps: 'Kadiyam PS', officer: 'HC Example', mobile: '9000000000' },
+    '/live/unit-1.json': { lat: 16.91, lng: 81.84, up: now, gps: true, duty: true },
+    '/events.json': { sos1: { uid: 'unit-1', type: 'sos', t: now } }
+  };
+  await page.route('https://officer-8eb52-default-rtdb.asia-southeast1.firebasedatabase.app/**', route => {
+    reads.push(new URL(route.request().url()).pathname);
+    route.fulfill({ json: data[new URL(route.request().url()).pathname] ?? null });
+  });
+  await page.route('https://*.tile.openstreetmap.org/**', route => route.abort());
+  await page.goto(siUrl);
+  await expect(page.locator('#app')).toBeVisible();
+  await expect(page.locator('#mandal')).toHaveText('Kadiyam');
+  await expect(page.locator('#routes')).toContainText('Kadiyam PS');
+  await expect(page.locator('#routes')).toContainText('HC Example');
+  await expect(page.locator('#alert')).toContainText('1 open SOS');
+  expect(reads).not.toContain('/config/routes/r2.json');
+  expect(reads).not.toContain('/devices.json');
+  expect(reads).not.toContain('/live.json');
+});
+
+test('SI sign-in redirects to the assigned monitor without keeping a persistent login', async ({ page }) => {
+  await page.route('https://identitytoolkit.googleapis.com/**', route => route.fulfill({ json: { localId: 'si-1', idToken: 'si-token', refreshToken: 'si-refresh', expiresIn: '3600' } }));
+  await page.route('https://securetoken.googleapis.com/**', route => route.fulfill({ json: { id_token: 'si-token', expires_in: '3600', refresh_token: 'si-refresh', user_id: 'si-1' } }));
+  await page.route('https://officer-8eb52-default-rtdb.asia-southeast1.firebasedatabase.app/**', route => {
+    const data = { '/roles/si-1.json': 'si_monitor', '/siScopes/si-1.json': { mandal: 'Kadiyam', routes: { r1: true } }, '/config/routes/r1.json': { ps: 'Kadiyam PS', route: 'Route 1' } };
+    route.fulfill({ json: data[new URL(route.request().url()).pathname] ?? null });
+  });
+  await page.route('https://*.tile.openstreetmap.org/**', route => route.abort());
+  await page.goto(url);
+  await page.locator('#lEmail').fill('si@example.test');
+  await page.locator('#lPw').fill('Example-password');
+  await page.locator('#lAgree').check();
+  await page.locator('#lKeep').uncheck();
+  await page.locator('#loginForm [type=submit]').click();
+  await expect(page).toHaveURL(/si-monitor\.html$/);
+  await expect(page.locator('#mandal')).toHaveText('Kadiyam');
+  expect(await page.evaluate(() => localStorage.getItem('rm_au'))).toBeNull();
+});
+
+test('administrator creates a scoped SI monitor login', async ({ page }) => {
+  await page.route('https://identitytoolkit.googleapis.com/**', route => route.fulfill({ json: { localId: 'si-new', idToken: 'secondary-token', refreshToken: 'secondary-refresh' } }));
+  const writes = await controlRoom(page);
+  await page.locator('#tabs [data-tab="setup"]').click();
+  await page.getByRole('button', { name: 'Create SI monitor' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Create SI monitor' });
+  await dialog.locator('[name=officer]').fill('SI Example');
+  await dialog.locator('[name=email]').fill('si@example.test');
+  await dialog.locator('[name=password]').fill('Example-password-123');
+  await dialog.locator('[name=mandal]').selectOption('Kadiyam');
+  await dialog.locator('[name=routeId]').check();
+  await dialog.getByRole('button', { name: 'Save SI monitor' }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(writes).toContainEqual({ pathname: '/.json', body: { 'roles/si-new': 'si_monitor', 'siScopes/si-new': { mandal: 'Kadiyam', officer: 'SI Example', routes: { r1: true } } } });
+});
 
 test('uses the exact staging Realtime Database and waits for sign-in', async ({ page }) => {
   await page.goto(url);
@@ -322,7 +386,7 @@ test('administrator creates a mobile login and assigns its route without changin
   await expect(modal).toBeHidden();
   expect(writes).toEqual([{ pathname: '/.json', body: {
     'roles/officer-1': 'route',
-    'assignments/officer-1': { ps: 'Example Rural Police Station', route: 'Route 12', sd: 'Example Sub-division', election: 'Election 2026', officer: 'Example Officer', mobile: '+919876543210' },
+    'assignments/officer-1': { routeId: 'r1', ps: 'Example Rural Police Station', route: 'Route 12', sd: 'Example Sub-division', election: 'Election 2026', officer: 'Example Officer', mobile: '+919876543210' },
     'config/routes/r1/memberUid': 'officer-1', 'config/routes/r1/officer': 'Example Officer', 'config/routes/r1/mobile': '+919876543210'
   } }]);
   expect(authRequests).toEqual([{ email: 'phone919876543210@members.track.invalid', password: 'Example-test-password', returnSecureToken: true }]);
