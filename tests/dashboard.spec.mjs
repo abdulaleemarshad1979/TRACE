@@ -136,6 +136,7 @@ test('closed incidents leave the live incident map and ticker', async ({ page })
 });
 
 test('closing a polling incident attends its linked tension report', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
   const writes = await controlRoom(page);
   await page.evaluate(() => {
     const now = Date.now();
@@ -143,11 +144,45 @@ test('closing a polling incident attends its linked tension report', async ({ pa
     INC.inc1 = { no: 1, t: now, lat: 17, lng: 81.8, place: 'Example primary school polling location', status: 'open', sourceEventId: 'tension1' };
     UI.tab = 'inc'; UI.incSel = 'inc1'; renderTabs(); renderPane();
   });
-  page.once('dialog', dialog => dialog.accept('Resolved'));
   await page.locator('[data-act="incClose"][data-id="inc1"]').click();
+  const dialog = page.locator('.modal:has(form[aria-label="Close incident 1"])');
+  await expect(dialog).toBeVisible();
+  await dialog.locator('[name="action"]').fill('Resolved');
+  await dialog.locator('[data-confirm]').click();
   await expect.poll(() => writes.length).toBe(2);
   expect(writes.map(w => w.pathname)).toEqual(['/incidents/inc1.json', '/events/tension1.json']);
+  expect(writes[0].body).toMatchObject({ status: 'closed', action: 'Resolved', closedBy: 'admin@example.test' });
   expect(await page.evaluate(() => ({ closed: INC.inc1.status, attended: EVT.tension1.ackBy, hot: hot(EVT.tension1) }))).toEqual({ closed: 'closed', attended: 'admin@example.test', hot: false });
+  await expect(page.locator('#pane')).not.toContainText('Example primary school polling location');
+});
+
+test('incident close stays open on a write failure and succeeds on retry', async ({ page }) => {
+  await controlRoom(page);
+  await page.evaluate(() => { INC.inc1 = { no: 1, t: Date.now(), lat: 17, lng: 81.8, place: 'Test incident', status: 'open' }; UI.tab = 'inc'; UI.incSel = 'inc1'; renderPane(); });
+  const fail = route => route.fulfill({ status: 500, json: { error: 'Temporary failure' } });
+  await page.route('https://trace-demo.firebaseio.test/incidents/inc1.json**', fail);
+  await page.locator('[data-act="incClose"]').click();
+  const dialog = page.locator('.modal:has(form[aria-label="Close incident 1"])');
+  await dialog.locator('[data-confirm]').click();
+  await expect(dialog.locator('[data-error]')).toContainText('Database error 500');
+  expect(await page.evaluate(() => INC.inc1.status)).toBe('open');
+  await page.unroute('https://trace-demo.firebaseio.test/incidents/inc1.json**', fail);
+  await dialog.locator('[data-confirm]').click();
+  await expect(dialog).toHaveCount(0);
+  expect(await page.evaluate(() => INC.inc1.status)).toBe('closed');
+});
+
+test('incident register loads more records only when requested', async ({ page }) => {
+  await controlRoom(page);
+  await page.evaluate(() => {
+    for (let i = 1; i <= 45; i++) INC['inc' + i] = { no: i, t: Date.now() - i, lat: 17, lng: 81.8, place: 'Place ' + i, status: 'open' };
+    UI.tab = 'inc'; UI.incSel = null; renderPane();
+  });
+  await expect(page.locator('#pane [data-act="incPick"]')).toHaveCount(20);
+  await page.locator('[data-act="incMore"]').click();
+  await expect(page.locator('#pane [data-act="incPick"]')).toHaveCount(40);
+  await page.locator('[data-act="incMore"]').click();
+  await expect(page.locator('#pane [data-act="incPick"]')).toHaveCount(45);
 });
 
 test('every geocoded polling station keeps its own ballot marker at its exact coordinates', async ({ page }) => {
@@ -168,13 +203,14 @@ test('every geocoded polling station keeps its own ballot marker at its exact co
     renderMap();
     MAP.getBounds = originalBounds;
     MAP.getZoom = originalZoom;
-    return { low, expanded: LAYER_S.getLayers().length, suspect: stationGeoIssue(CONF.stations.far) };
+    const expanded = LAYER_S.getLayers().map(marker => ({ position: marker.getLatLng(), html: marker.options.icon.options.html }));
+    return { low, expanded, suspect: stationGeoIssue(CONF.stations.far) };
   });
-  expect(result.low).toHaveLength(121);
-  expect(result.expanded).toBe(121);
+  expect(result.low).toHaveLength(0);
+  expect(result.expanded).toHaveLength(121);
   expect(result.suspect).toContain('over 40 km');
-  expect(result.low.every(x => x.html.includes('assets/ballot.png'))).toBe(true);
-  expect(result.low.some(x => x.position.lat === 17.002 && x.position.lng === 81.8)).toBe(true);
+  expect(result.expanded.every(x => x.html.includes('assets/ballot.png'))).toBe(true);
+  expect(result.expanded.some(x => x.position.lat === 17.002 && x.position.lng === 81.8)).toBe(true);
 });
 
 test('polling import skips a coordinate isolated from its police station', async ({ page }) => {

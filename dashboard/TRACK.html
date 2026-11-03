@@ -1352,6 +1352,8 @@ body.v-no-map .rd .pane{background:#fff}
 .polling-marker{background:transparent;border:0}
 .polling-pin{display:block;box-sizing:border-box;width:28px;height:28px;object-fit:contain;filter:drop-shadow(0 1px 2px #0009);border:2px solid var(--visit-color);border-radius:50%;background:#fff}
 .polling-marker .psw{position:absolute;right:-7px;top:-8px;font-size:14px;line-height:1;text-shadow:0 1px 2px #fff}
+.polling-map-hint{position:absolute;z-index:800;left:50%;bottom:36px;transform:translateX(-50%);padding:7px 11px;border-radius:18px;background:#fff;color:#15233a;box-shadow:0 2px 8px #0004;font:600 12px/1.2 Arial,sans-serif;white-space:nowrap;pointer-events:none}
+.polling-map-hint[hidden]{display:none}
 .alerts-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:2px 0 10px;border-bottom:1px solid #e4e4e7}
 .alerts-toolbar h2{margin:0;font-size:19px}
 .alerts-toolbar p{margin:3px 0 0;color:#71717a;font-size:13px}
@@ -5014,6 +5016,7 @@ function initMap() {
   BASE = base; LAYERS_CTL = L.control.layers(base, null, { position: 'topright' }).addTo(MAP);
   MAP.on('baselayerchange', e => LS.set('base', e.name));
   LAYER_S = L.layerGroup().addTo(MAP); LAYER_T = L.layerGroup().addTo(MAP); LAYER_V = L.layerGroup().addTo(MAP); LAYER_I = L.layerGroup().addTo(MAP); LAYER_R = L.layerGroup().addTo(MAP);
+  const pollingHint = document.createElement('div'); pollingHint.id = 'pollingMapHint'; pollingHint.className = 'polling-map-hint'; pollingHint.hidden = true; pollingHint.textContent = 'Zoom in to load polling locations'; MAP.getContainer().appendChild(pollingHint);
   const lg = L.control({ position: 'bottomleft' });
   lg.onAdd = () => { const d = L.DomUtil.create('div', 'legend'); d.innerHTML = `<div class="lgh"><b>Legend</b><button type="button" class="lgx" title="Hide or show the legend">${+LS.get('legend', 1) ? '−' : '+'}</button></div><div class="lgb"><b>Units</b><br><i style="background:${FORCE.route.c}"></i>Route mobile<br><i style="background:${FORCE.sf.c}"></i>Striking force<br><i style="background:${FORCE.ssf.c}"></i>Special striking force<br><b>Status ring</b><br><i style="box-shadow:0 0 0 2px #fff,0 0 0 3px #e0a800;background:#fff"></i>Stopped<br><i style="box-shadow:0 0 0 2px #fff,0 0 0 3px #c0392b;background:#fff"></i>No signal<br><i style="box-shadow:0 0 0 2px #fff,0 0 0 3px #7f8c8d;background:#fff"></i>GPS weak<br><i style="background:${C.sos}"></i>SOS (pulsing)<br><b>Polling locations</b> (◆ hypersensitive)<br><span class="psm" style="display:inline-block;background:#1e7b45;margin-right:5px"></span>visited recently<br><span class="psm" style="display:inline-block;background:#e0a800;margin-right:5px"></span>visit due<br><span class="psm" style="display:inline-block;background:#c0392b;margin-right:5px"></span>no visit / overdue<br>⚠ tension or problem reported<br><b>Hotspots</b> 🔥<br><span style="display:inline-block;width:34px;height:8px;border-radius:4px;background:linear-gradient(90deg,#2c7fb8,#f1c40f,#e67e22,#c0392b);vertical-align:middle;margin-right:5px"></span>more SOS / incidents = hotter</div>`;
     d.classList.toggle('min', !+LS.get('legend', 1));
@@ -5963,9 +5966,12 @@ const hot = r => r && (r.status === 'tension' || r.status === 'problem') && Date
 
 let stationsSig = '';
 function drawStations() {
+  const zoom = MAP.getZoom();
+  const hint = document.getElementById('pollingMapHint');
+  if (hint) { hint.hidden = zoom >= 13 || !stations().length; if (!hint.hidden) hint.textContent = `${stations().length} polling locations · zoom in to load icons`; }
+  if (zoom < 13) { if (stationsSig !== 'zoomed-out') { LAYER_S.clearLayers(); stationsSig = 'zoomed-out'; } return; }
   updateVisits();
   const LS_ = locStatus();
-  const zoom = MAP.getZoom();
   const list = stations().filter(p => mappableStation(p) && (!UI.fSd || !p.ps || routes().some(r => r.ps === p.ps && r.sd === UI.fSd) || !routes().length) && (!UI.fPs || p.ps === UI.fPs));
   const b = (typeof MAP !== 'undefined' && MAP && MAP.getBounds) ? MAP.getBounds() : null;
   const inView = p => !b || b.contains([+p.lat, +p.lng]);
@@ -6032,10 +6038,40 @@ function paneLoc() {
 /* ---------- C: incident register ---------- */
 const INC_ST = { open: ['Open', '#c0392b'], sent: ['Vehicle sent', '#d35400'], reached: ['Reached', '#1f5fa8'], closed: ['Closed', '#1e7b45'] };
 const incList = () => Object.entries(INC).map(([id, x]) => Object.assign({ id }, x)).filter(x => x.status !== 'closed').sort((a, b) => b.t - a.t);
+const INC_PAGE = 20;
 function linkedReportForIncident(x) {
   if (x.sourceEventId) return x.sourceEventId;
   const site = stations().find(s => s.name === x.place && validLocation(s) && hav(+s.lat, +s.lng, +x.lat, +x.lng) < 100);
   return site ? (locStatus()[site.id] || {}).id : '';
+}
+function closeIncidentDialog(id) {
+  const x = INC[id];
+  if (!x || x.status === 'closed') { toast('This incident is already closed.'); return; }
+  const m = document.createElement('div'); m.className = 'modal';
+  m.innerHTML = `<form class="card" aria-label="Close incident ${esc(x.no)}"><h2>Close incident ${esc(x.no)}</h2><p>${esc(x.place)}</p><label class="f">Action taken (optional)<textarea name="action" rows="3" placeholder="Describe what was done"></textarea></label><p class="note">Closing removes this incident from live alerts and the map. It remains in the incident record.</p><div class="row" style="justify-content:flex-end"><button type="button" class="btn" data-cancel>Cancel</button><button type="submit" class="btn red" data-confirm>Close incident</button></div><p class="note" data-error role="alert" hidden></p></form>`;
+  document.body.appendChild(m);
+  m.querySelector('[name="action"]').focus();
+  m.addEventListener('click', e => { if (e.target === m || e.target.closest('[data-cancel]')) m.remove(); });
+  m.querySelector('form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const button = m.querySelector('[data-confirm]'), error = m.querySelector('[data-error]');
+    if (button.disabled) return;
+    button.disabled = true; button.textContent = 'Closing…'; error.hidden = true;
+    try {
+      const current = INC[id];
+      if (!current || current.status === 'closed') throw new Error('This incident was already closed elsewhere.');
+      const p = { status: 'closed', closedAt: Date.now(), closedBy: AU.email, action: m.querySelector('[name="action"]').value.trim() };
+      await dbPatch(`incidents/${id}`, p);
+      Object.assign(current, p);
+      const linked = linkedReportForIncident(current);
+      if (linked && EVT[linked] && hot(EVT[linked])) {
+        try { await dbPatch(`events/${linked}`, { ackBy: AU.email, ackAt: p.closedAt }); EVT[linked].ackBy = AU.email; }
+        catch (err) { toast('Incident closed, but the polling alert still needs attendance: ' + err.message, 7000); }
+      }
+      if (UI.incSel === id) UI.incSel = null;
+      m.remove(); drawIncidents(); stationsSig = ''; renderPane(); schedule('force'); toast(`Incident ${current.no} closed.`);
+    } catch (err) { error.textContent = err.message; error.hidden = false; button.disabled = false; button.textContent = 'Close incident'; }
+  });
 }
 const fMin = ms => ms == null || ms < 0 ? '–' : ms < HOUR ? `${Math.round(ms / MIN)} min` : `${Math.floor(ms / HOUR)} h ${Math.round(ms % HOUR / MIN)} min`;
 function paneInc() {
@@ -6055,19 +6091,20 @@ function paneInc() {
       <div class="note">Reported ${fT(sel.t)}${sel.dev ? ` · sent ${esc(dname(sel.dev))} at ${fT(sel.sentAt)}` : ''}${sel.reachedAt ? ` · reached ${fT(sel.reachedAt)} (${fMin(sel.reachedAt - sel.sentAt)})` : ''}${sel.closedAt ? ` · closed ${fT(sel.closedAt)}: ${esc(sel.action || '')}` : ''}</div>
       <div class="row">${sel.status !== 'closed' ? `<button class="btn small red" data-act="incClose" data-id="${sel.id}">Close incident</button>` : ''}<button class="btn small" data-act="goto" data-lat="${sel.lat}" data-lng="${sel.lng}">Show on map</button><button class="btn small" data-act="incDeselect">Back to list</button></div></div>`;
     if (sel.status !== 'closed') {
-      const N = nearest(sel.lat, sel.lng).slice(0, 8);
-      h += `<h3>Nearest route mobiles</h3>` + N.map(x => vehCard(x.u, `<b>${fKm(x.d)}</b> · about ${x.eta} min`) + `<div class="row" style="margin:-2px 0 6px"><button class="btn small primary" data-act="incSend" data-u="${x.u}" data-id="${sel.id}">${sel.dev === x.u ? 'Send again' : 'Send this vehicle'}</button>${DEV[x.u].mobile ? `<a class="btn small" href="tel:${esc(DEV[x.u].mobile)}">Call</a>` : ''}</div>`).join('');
+      const N = nearest(sel.lat, sel.lng).slice(0, 8), shown = Math.min(UI.incVehiclesVisible || 3, N.length);
+      h += `<h3>Nearest route mobiles</h3>` + N.slice(0, shown).map(x => vehCard(x.u, `<b>${fKm(x.d)}</b> · about ${x.eta} min`) + `<div class="row" style="margin:-2px 0 6px"><button class="btn small primary" data-act="incSend" data-u="${x.u}" data-id="${sel.id}">${sel.dev === x.u ? 'Send again' : 'Send this vehicle'}</button>${DEV[x.u].mobile ? `<a class="btn small" href="tel:${esc(DEV[x.u].mobile)}">Call</a>` : ''}</div>`).join('') + (shown < N.length ? `<button class="btn" data-act="incMoreVehicles">Show ${N.length - shown} more route mobiles</button>` : '');
     }
     return h;
   }
   const L_ = incList();
   const done = L_.filter(x => x.reachedAt && x.sentAt), avg = done.length ? done.reduce((a, x) => a + (x.reachedAt - x.sentAt), 0) / done.length : null;
-  h += `<h3>Incidents today (${L_.length})${avg != null ? ` · average response ${fMin(avg)}` : ''}</h3>` + (L_.map(x => {
+  const shown = Math.min(UI.incVisible || INC_PAGE, L_.length);
+  h += `<h3>Incidents today (${L_.length})${avg != null ? ` · average response ${fMin(avg)}` : ''}</h3>` + (L_.slice(0, shown).map(x => {
     const st = INC_ST[x.status] || INC_ST.open;
     return `<div class="veh" style="border-left-color:${st[1]}" data-act="incPick" data-id="${x.id}"><div class="l1"><span>${x.no}. ${esc(x.place)}</span><span class="st" style="color:${st[1]}">${st[0]}</span></div>
       <div class="l2"><span>${esc(x.desc || '')}</span><span>${fT(x.t)}</span></div>
       <div class="l2"><span>${x.dev ? esc(dname(x.dev)) : 'No vehicle sent yet'}</span><span>${x.reachedAt && x.sentAt ? 'response ' + fMin(x.reachedAt - x.sentAt) : x.sentAt ? 'sent ' + ago(x.sentAt) : ''}</span></div></div>`;
-  }).join('') || '<p class="note">No incidents yet. Mark the place above to create one, or use "Make incident" on an SOS or a polling location.</p>');
+  }).join('') || '<p class="note">No incidents yet. Mark the place above to create one, or use "Make incident" on an SOS or a polling location.</p>') + (shown < L_.length ? `<button class="btn" data-act="incMore">Show ${Math.min(INC_PAGE, L_.length - shown)} more incidents</button>` : '');
   return h;
 }
 setIncident = function (lat, lng, name) {
@@ -6245,15 +6282,17 @@ document.addEventListener('click', async e => {
     else if (act === 'locInc') { e.stopPropagation(); const p = stations().find(x => x.id === a.dataset.id); if (!mappableStation(p)) { toast('Verify coordinates before making an incident here.'); return; } const r = locStatus()[p.id]; await createIncident(+p.lat, +p.lng, p.name, r && r.status !== 'normal' ? `${r.status.toUpperCase()} reported by ${dname(r.uid)}${r.note ? ': ' + r.note : ''}` : '', r && r.status !== 'normal' ? r.id : ''); }
     else if (act === 'locAck') { e.stopPropagation(); await dbPatch(`events/${a.dataset.eid}`, { ackBy: AU.email, ackAt: Date.now() }); const ev = EVT[a.dataset.eid]; if (ev) { ev.ackBy = AU.email; } schedule('force'); }
     else if (act === 'incCreate') { const d = ($('#incDesc') || {}).value || ''; await createIncident(UI.inc.lat, UI.inc.lng, UI.inc.name, d.trim()); }
-    else if (act === 'incPick') { UI.incSel = a.dataset.id; renderPane(); const x = INC[a.dataset.id]; if (x) MAP.setView([x.lat, x.lng], Math.max(MAP.getZoom(), 14)); }
+    else if (act === 'incPick') { UI.incSel = a.dataset.id; UI.incVehiclesVisible = 3; renderPane(); const x = INC[a.dataset.id]; if (x) MAP.setView([x.lat, x.lng], Math.max(MAP.getZoom(), 14)); }
     else if (act === 'incDeselect') { UI.incSel = null; renderPane(); }
+    else if (act === 'incMore') { UI.incVisible = (UI.incVisible || INC_PAGE) + INC_PAGE; renderPane(); }
+    else if (act === 'incMoreVehicles') { UI.incVehiclesVisible = (UI.incVehiclesVisible || 3) + 5; renderPane(); }
     else if (act === 'incSend') {
       const id = a.dataset.id, x = INC[id], u = a.dataset.u;
       msgModal(u, `Incident ${x.no}: go to ${x.place} immediately${x.desc ? ' – ' + x.desc : ''}. Map: https://maps.google.com/?q=${x.lat.toFixed(5)},${x.lng.toFixed(5)}. Press REACHED SPOT on arrival.`, async () => {
         const p = { status: 'sent', dev: u, sentAt: Date.now() }; await dbPatch(`incidents/${id}`, p); Object.assign(INC[id], p); drawIncidents(); renderPane();
       });
     }
-    else if (act === 'incClose') { const t = prompt('Action taken (closes the incident):', ''); if (t === null) return; const x = INC[a.dataset.id]; const p = { status: 'closed', closedAt: Date.now(), action: t.trim() }; await dbPatch(`incidents/${a.dataset.id}`, p); Object.assign(x, p); const linked = linkedReportForIncident(x); if (linked && EVT[linked] && hot(EVT[linked])) { try { await dbPatch(`events/${linked}`, { ackBy: AU.email, ackAt: p.closedAt }); EVT[linked].ackBy = AU.email; } catch (err) { toast('Incident closed, but the polling alert still needs attendance: ' + err.message, 7000); } } drawIncidents(); stationsSig = ''; schedule('force'); }
+    else if (act === 'incClose') closeIncidentDialog(a.dataset.id);
     else if (act === 'bcast') broadcastModal();
     else if (act === 'turnoutPdf') turnoutReport();
     else if (act === 'sitrep') sitrepModal();

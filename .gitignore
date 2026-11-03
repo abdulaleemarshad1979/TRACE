@@ -32,3 +32,4 @@ google-services.json
 
 # Private election imports and verification data
 .local-data/
+.codex-attachments/
