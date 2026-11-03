@@ -62,6 +62,7 @@ test('viewer and administrator use the same sign-in page', async ({ page }) => {
   await page.goto(url);
   await expect(page.locator('#lMobile')).toBeVisible();
   await expect(page.locator('#lRank')).toBeVisible();
+  await expect(page.locator('#lRank option')).toHaveText(['Choose rank', 'Incharge', 'Striking Force', 'Sub-Striking Force', 'DSP']);
   await expect(page.locator('#lEmail')).toBeHidden();
   await page.getByRole('button', { name: 'Administrator Login' }).click();
   await expect(page.locator('#lEmail')).toBeVisible();
@@ -77,7 +78,7 @@ test('viewer signs in on the main page and sees only assigned routes', async ({ 
   await page.route('https://identitytoolkit.googleapis.com/**', route => { signIns.push(route.request().postDataJSON()); route.fulfill({ json: { localId: 'si-1', idToken: 'si-token', refreshToken: 'si-refresh', expiresIn: '3600' } }); });
   const data = {
     '/roles/si-1.json': 'si_monitor',
-    '/siScopes/si-1.json': { mandal: 'Kadiyam', officer: 'Example Officer', rank: 'SI', routes: { r1: true, r2: true } },
+    '/siScopes/si-1.json': { mandal: 'Kadiyam', officer: 'Example Officer', rank: 'Incharge', routes: { r1: true, r2: true } },
     '/config/routes/r1.json': { ps: 'Kadiyam PS', route: 'Route 1', memberUid: 'unit-1' },
     '/config/routes/r2.json': { ps: 'Kadiyam PS', route: 'Route 2' },
     '/devices/unit-1.json': { officer: 'HC Example' },
@@ -88,13 +89,13 @@ test('viewer signs in on the main page and sees only assigned routes', async ({ 
   await page.route('https://*.tile.openstreetmap.org/**', route => route.abort());
   await page.goto(url);
   await page.locator('#lMobile').fill('9876543210');
-  await page.locator('#lRank').selectOption('SI');
+  await page.locator('#lRank').selectOption('Incharge');
   await page.locator('#lPw').fill('Example-password');
   await page.locator('#lAgree').check();
   await page.locator('#loginSubmit').click();
   await expect(page.locator('#viewerApp')).toBeVisible();
   await expect(page.locator('#viewerMandal')).toHaveText('Kadiyam');
-  await expect(page.locator('#viewerOfficer')).toContainText('SI');
+  await expect(page.locator('#viewerOfficer')).toContainText('Incharge');
   await expect(page.locator('#viewerRoutes')).toContainText('No assigned phone');
   await expect(page.locator('#viewerRoutes')).toContainText('HC Example');
   await expect(page).toHaveURL(url);
@@ -102,6 +103,25 @@ test('viewer signs in on the main page and sees only assigned routes', async ({ 
   expect(reads).not.toContain('/devices.json');
   expect(reads).not.toContain('/live.json');
   expect(reads).not.toContain('/config/routes/r3.json');
+});
+
+test('an existing viewer without a saved rank can use the new choices', async ({ page }) => {
+  await page.route('https://identitytoolkit.googleapis.com/**', route => route.fulfill({ json: { localId: 'legacy-si', idToken: 'legacy-token', refreshToken: 'legacy-refresh', expiresIn: '3600' } }));
+  const data = {
+    '/roles/legacy-si.json': 'si_monitor',
+    '/siScopes/legacy-si.json': { mandal: 'Kadiyam', officer: 'Existing Officer', routes: { r1: true } },
+    '/config/routes/r1.json': { ps: 'Kadiyam PS', route: 'Route 1' }
+  };
+  await page.route('https://officer-8eb52-default-rtdb.asia-southeast1.firebasedatabase.app/**', route => route.fulfill({ json: data[new URL(route.request().url()).pathname] ?? null }));
+  await page.route('https://*.tile.openstreetmap.org/**', route => route.abort());
+  await page.goto(url);
+  await page.locator('#lMobile').fill('9876543210');
+  await page.locator('#lRank').selectOption('Incharge');
+  await page.locator('#lPw').fill('Example-password');
+  await page.locator('#lAgree').check();
+  await page.locator('#loginSubmit').click();
+  await expect(page.locator('#viewerApp')).toBeVisible();
+  await expect(page.locator('#viewerOfficer')).toContainText('Existing Officer');
 });
 
 test('administrator creates a scoped viewer login with rank', async ({ page }) => {
@@ -112,7 +132,7 @@ test('administrator creates a scoped viewer login with rank', async ({ page }) =
   await page.getByRole('button', { name: 'Create viewer login' }).click();
   const dialog = page.getByRole('dialog', { name: 'Create viewer login' });
   await dialog.locator('[name=officer]').fill('SI Example');
-  await dialog.locator('[name=rank]').selectOption('SI');
+  await dialog.locator('[name=rank]').selectOption('Striking Force');
   await dialog.locator('[name=mobile]').fill('9876543210');
   await dialog.locator('[name=password]').fill('Example-password-123');
   await dialog.locator('[name=mandal]').selectOption('Kadiyam');
@@ -120,7 +140,7 @@ test('administrator creates a scoped viewer login with rank', async ({ page }) =
   await dialog.getByRole('button', { name: 'Save viewer login' }).click();
   await expect(dialog).toHaveCount(0);
   expect(signUps[0].email).toBe('si919876543210@members.track.invalid');
-  expect(writes).toContainEqual({ pathname: '/.json', body: { 'roles/si-new': 'si_monitor', 'siScopes/si-new': { mandal: 'Kadiyam', officer: 'SI Example', rank: 'SI', mobile: '+919876543210', routes: { r1: true } } } });
+  expect(writes).toContainEqual({ pathname: '/.json', body: { 'roles/si-new': 'si_monitor', 'siScopes/si-new': { mandal: 'Kadiyam', officer: 'SI Example', rank: 'Striking Force', mobile: '+919876543210', routes: { r1: true } } } });
 });
 
 test('uses the exact staging Realtime Database and waits for sign-in', async ({ page }) => {

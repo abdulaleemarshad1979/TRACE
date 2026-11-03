@@ -1273,7 +1273,7 @@ body.wall .rd .work{grid-template-columns:minmax(0,1fr) 40vw;margin:0 10px 10px}
       <p class="login-role-note" id="loginRoleNote">Read-only access to your assigned mandal routes.</p>
       <div id="viewerFields">
         <label class="f">Mobile number<input type="tel" id="lMobile" inputmode="tel" autocomplete="username" placeholder="10-digit mobile number" required></label>
-        <label class="f">Rank<select id="lRank" required><option value="">Choose rank</option><option>DSP</option><option>CI</option><option>RI</option><option>SI</option><option>RSI</option><option>ASI</option><option>HC</option><option>PC</option><option>HG</option></select></label>
+        <label class="f">Rank<select id="lRank" required><option value="">Choose rank</option><option>Incharge</option><option>Striking Force</option><option>Sub-Striking Force</option><option>DSP</option></select></label>
       </div>
       <div id="adminFields" hidden><label class="f">Administrator email<input type="email" id="lEmail" autocomplete="username" disabled></label></div>
       <label class="f">Password<input type="password" id="lPw" autocomplete="current-password" required></label>
@@ -4721,6 +4721,7 @@ const devIds = () => { syncLiveDevices(); return Object.keys(DEV).filter(visible
 
 /* ---------- start ---------- */
 let LOGIN_MODE = 'viewer', VIEWER_SCOPE = null, VIEWER_ROUTES = [], VIEWER_MAP = null, VIEWER_MARKERS = {}, VIEWER_TIMER = null, VIEWER_RANK = '';
+const VIEWER_RANKS = ['Incharge', 'Striking Force', 'Sub-Striking Force', 'DSP'];
 function setLoginMode(mode) {
   LOGIN_MODE = mode;
   const viewer = mode === 'viewer';
@@ -4747,14 +4748,15 @@ function viewerStatus(live, sos) {
 async function loadViewerScope() {
   const scope = await dbGet('siScopes/' + AU.uid);
   if (!scope?.mandal || !scope.routes || !Object.values(scope.routes).some(Boolean)) throw new Error('No mandal routes have been assigned to this viewer account. Ask the control room to assign routes.');
-  const rank = scope.rank || 'SI';
-  if (VIEWER_RANK && VIEWER_RANK !== rank) throw new Error('The selected rank does not match this viewer account. Choose the rank issued by the command control room.');
+  const savedRank = VIEWER_RANKS.includes(scope.rank) ? scope.rank : '';
+  if (savedRank && VIEWER_RANK && VIEWER_RANK !== savedRank) throw new Error('The selected rank does not match this viewer account. Choose the rank issued by the command control room.');
+  const rank = savedRank || VIEWER_RANK;
   VIEWER_SCOPE = scope;
   const ids = Object.keys(scope.routes).filter(id => scope.routes[id] === true);
   const results = await Promise.allSettled(ids.map(id => dbGet('config/routes/' + encodeURIComponent(id))));
   VIEWER_ROUTES = ids.map((id, index) => ({ id, ...(results[index].status === 'fulfilled' ? results[index].value || {} : {}) }));
   $('#viewerMandal').textContent = scope.mandal;
-  $('#viewerOfficer').textContent = `${rank} · ${scope.officer || scope.mobile || 'Viewer'}`;
+  $('#viewerOfficer').textContent = [rank, scope.officer || scope.mobile || 'Viewer'].filter(Boolean).join(' · ');
 }
 async function refreshViewer() {
   const rows = await Promise.all(VIEWER_ROUTES.map(async route => {
@@ -5635,7 +5637,7 @@ async function siMonitorModal() {
   modal.setAttribute('role', 'dialog'); modal.setAttribute('aria-modal', 'true'); modal.setAttribute('aria-labelledby', 'siMonitorTitle');
   modal.innerHTML = `<form class="card"><h2 id="siMonitorTitle">Create viewer login</h2><p class="note">This read-only login sees only the selected routes of one mandal and their assigned phones. Select the exact routes, especially when two mandals share a police station.</p>
     <label class="f">Officer name<input name="officer" required autocomplete="off"></label>
-    <label class="f">Rank<select name="rank" required><option value="">Choose rank</option><option>DSP</option><option>CI</option><option>RI</option><option>SI</option><option>RSI</option><option>ASI</option><option>HC</option><option>PC</option><option>HG</option></select></label>
+    <label class="f">Rank<select name="rank" required><option value="">Choose rank</option>${VIEWER_RANKS.map(rank => `<option>${rank}</option>`).join('')}</select></label>
     <label class="f">Mobile number<input name="mobile" type="tel" required autocomplete="off" placeholder="10-digit mobile number"></label>
     <label class="f">Password<input name="password" type="password" required minlength="8" autocomplete="new-password"></label>
     <label class="f">Assigned mandal<select name="mandal" required><option value="">Choose mandal</option>${SI_MANDALS.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join('')}</select></label>
