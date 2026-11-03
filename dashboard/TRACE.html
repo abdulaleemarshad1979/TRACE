@@ -4908,11 +4908,14 @@ $('#loginAdmin').addEventListener('click', () => setLoginMode('admin'));
 $('#viewerLogout').addEventListener('click', signOut);
 setLoginMode('viewer');
 function viewerTime(value) { return value ? new Date(value).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'Never'; }
+function viewerHasLocation(live) { return live?.lat != null && live?.lng != null && Number.isFinite(+live.lat) && Number.isFinite(+live.lng) && Math.abs(+live.lat) <= 90 && Math.abs(+live.lng) <= 180; }
 function viewerStatus(live, sos) {
   if (sos) return { label: 'SOS', css: 'sos' };
   if (!live?.up || live.duty === false) return { label: 'Not started', css: '' };
   if (Date.now() - live.up > 300000) return { label: 'No signal', css: 'stale' };
   if (live.gps === false) return { label: 'GPS off', css: 'stale' };
+  if (!viewerHasLocation(live)) return { label: 'Waiting for GPS fix', css: 'stale' };
+  if (live.t && Date.now() - Number(live.t) > 60000) return { label: 'GPS fix stale', css: 'stale' };
   return { label: +live.spd > 3 ? 'Moving' : 'Live', css: 'live' };
 }
 async function loadViewerScope() {
@@ -4924,10 +4927,10 @@ async function loadViewerScope() {
   VIEWER_SCOPE = scope;
   const ids = Object.keys(scope.routes).filter(id => scope.routes[id] === true);
   const results = await Promise.allSettled(ids.map(id => dbGet('config/routes/' + encodeURIComponent(id))));
-  VIEWER_ROUTES = ids.map((id, index) => ({ id, ...(results[index].status === 'fulfilled' ? results[index].value || {} : {}) }));
+  VIEWER_ROUTES = ids.flatMap((id, index) => results[index].status === 'fulfilled' && results[index].value && typeof results[index].value === 'object' ? [{ id, ...results[index].value }] : []);
   const stationIds = Object.keys(scope.stations || {}).filter(id => scope.stations[id] === true);
   const stationResults = await Promise.allSettled(stationIds.map(id => dbGet('config/stations/' + encodeURIComponent(id))));
-  VIEWER_STATIONS = stationIds.map((id, index) => ({ id, ...(stationResults[index].status === 'fulfilled' ? stationResults[index].value || {} : {}) }))
+  VIEWER_STATIONS = stationIds.flatMap((id, index) => stationResults[index].status === 'fulfilled' && stationResults[index].value && typeof stationResults[index].value === 'object' ? [{ id, ...stationResults[index].value }] : [])
     .filter(p => p.lat != null && p.lng != null && Number.isFinite(+p.lat) && Number.isFinite(+p.lng));
   const scopeKey = JSON.stringify([scope.mandal, ids, stationIds]);
   if (VIEWER_SCOPE_KEY !== scopeKey) { VIEWER_SCOPE_KEY = scopeKey; if (VIEWER_MAP) VIEWER_MAP._trackFitted = false; }
@@ -4962,15 +4965,16 @@ async function refreshViewer() {
     .bindPopup(`<b>Polling booth</b><br>${esc(p.name || p.id)}<br>${esc(p.ps || '')} · ${esc(p.route || '')}`).addTo(VIEWER_BOOTH_LAYER));
   const seen = new Set(), points = [];
   for (const x of rows) {
-    if (!x.uid || x.live.lat == null || x.live.lng == null || !Number.isFinite(+x.live.lat) || !Number.isFinite(+x.live.lng)) continue;
+    if (!x.uid || !viewerHasLocation(x.live)) continue;
     seen.add(x.uid); const ll = [+x.live.lat, +x.live.lng]; points.push(ll);
     const s = viewerStatus(x.live, x.sos);
     if (!VIEWER_MARKERS[x.uid]) VIEWER_MARKERS[x.uid] = L.circleMarker(ll, { radius: 9, color: x.sos ? '#b02424' : '#1f5fa8', fillOpacity: .8 }).addTo(VIEWER_MAP);
     VIEWER_MARKERS[x.uid].setLatLng(ll).setStyle({ color: x.sos ? '#b02424' : '#1f5fa8' }).bindPopup(`<b>${esc(x.route.ps || '')} · ${esc(x.route.route || '')}</b><br>${esc(x.dev.officer || x.route.officer || 'Assigned member')} · ${esc(s.label)}<br>${Number.isFinite(+x.live.spd) ? `${Math.round(+x.live.spd)} km/h<br>` : ''}Last update: ${esc(viewerTime(x.live.up))}`);
   }
   for (const [uid, marker] of Object.entries(VIEWER_MARKERS)) if (!seen.has(uid)) { VIEWER_MAP.removeLayer(marker); delete VIEWER_MARKERS[uid]; }
-  if ((boothPoints.length || points.length) && !VIEWER_MAP._trackFitted) { VIEWER_MAP.fitBounds(boothPoints.length ? boothPoints : points, { padding: [35, 35], maxZoom: 14 }); VIEWER_MAP._trackFitted = true; }
-  $('#viewerMapNote').textContent = boothPoints.length ? `${boothPoints.length} polling booths on assigned routes · blue markers show assigned members` : 'No polling booth coordinates are linked to these routes yet.';
+  if ((boothPoints.length || points.length) && (!VIEWER_MAP._trackFitted || points.some(point => !VIEWER_MAP.getBounds().contains(point)))) { VIEWER_MAP.fitBounds([...boothPoints, ...points], { padding: [35, 35], maxZoom: 14, animate: false }); VIEWER_MAP._trackFitted = true; }
+  const waiting = rows.filter(x => x.uid && x.live?.up && Date.now() - x.live.up <= 300000 && !viewerHasLocation(x.live)).length;
+  $('#viewerMapNote').textContent = `${boothPoints.length} polling booths · ${points.length} phone location${points.length === 1 ? '' : 's'}${waiting ? ` · ${waiting} phone${waiting === 1 ? '' : 's'} waiting for GPS fix` : ''}`;
   $('#viewerUpdated').textContent = `Updated ${viewerTime(Date.now())}${missing ? ` · ${missing} unavailable` : ''}`;
 }
 async function startViewer() {
@@ -5680,21 +5684,64 @@ function afterSetup() { if ($('#rulesOut')) $('#rulesOut').value = rulesText(); 
 function rulesText() { return JSON.stringify({"rules":{".read":false,".write":false,"roles":{".read":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'","$uid":{".read":"auth != null && (auth.uid == $uid || root.child('roles').child(auth.uid).val() == 'admin')",".write":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'",".validate":"newData.val() == 'admin' || newData.val() == 'monitor' || newData.val() == 'route' || newData.val() == 'si_monitor'"}},"assignments":{".read":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'","$uid":{".read":"auth != null && (auth.uid == $uid || root.child('roles').child(auth.uid).val() == 'admin')",".write":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'"}},"officers":{".read":"auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor')","$uid":{".read":"auth != null && auth.uid == $uid",".write":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'"}},"config":{".read":"auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor' || root.child('roles').child(auth.uid).val() == 'route')",".write":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'","routes":{"$rid":{".read":"auth != null && (root.child('roles').child(auth.uid).val() == 'si_monitor' && root.child('siScopes').child(auth.uid).child('routes').child($rid).val() == true)"}},"stations":{"$sid":{".read":"auth != null && (root.child('roles').child(auth.uid).val() == 'si_monitor' && root.child('siScopes').child(auth.uid).child('stations').child($sid).val() == true)"}}},"devices":{".read":"auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor')","$uid":{".read":"(auth != null && auth.uid == $uid) || (auth != null && (root.child('roles').child(auth.uid).val() == 'si_monitor' && root.child('siScopes').child(auth.uid).child('routes').child(root.child('assignments').child($uid).child('routeId').val()).val() == true))",".write":"auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || (auth.uid == $uid && root.child('roles').child(auth.uid).val() == 'route' && root.child('assignments').child(auth.uid).exists() && newData.child('ps').val() == root.child('assignments').child(auth.uid).child('ps').val() && newData.child('route').val() == root.child('assignments').child(auth.uid).child('route').val()))"}},"live":{".read":"auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor')","$uid":{".read":"(auth != null && auth.uid == $uid) || (auth != null && (root.child('roles').child(auth.uid).val() == 'si_monitor' && root.child('siScopes').child(auth.uid).child('routes').child(root.child('assignments').child($uid).child('routeId').val()).val() == true))",".write":"(auth != null && root.child('roles').child(auth.uid).val() == 'admin' || (auth != null && auth.uid == $uid && root.child('roles').child(auth.uid).val() == 'route' && root.child('assignments').child(auth.uid).exists()))"}},"track":{".read":"auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor')","$uid":{".read":"(auth != null && auth.uid == $uid) || (auth != null && (root.child('roles').child(auth.uid).val() == 'si_monitor' && root.child('siScopes').child(auth.uid).child('routes').child(root.child('assignments').child($uid).child('routeId').val()).val() == true))",".write":"(auth != null && root.child('roles').child(auth.uid).val() == 'admin' || (auth != null && auth.uid == $uid && root.child('roles').child(auth.uid).val() == 'route' && root.child('assignments').child(auth.uid).exists()))"}},"events":{".read":"auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor') || (auth != null && root.child('roles').child(auth.uid).val() == 'si_monitor' && query.orderByChild == 'uid' && query.equalTo != null && root.child('siScopes').child(auth.uid).child('routes').child(root.child('assignments').child(query.equalTo).child('routeId').val()).val() == true)",".indexOn":["t","uid"],"$id":{".read":"auth != null && root.child('roles').child(auth.uid).val() == 'route' && data.child('uid').val() == auth.uid",".write":"(auth != null && root.child('roles').child(auth.uid).val() == 'admin' || (auth != null && root.child('roles').child(auth.uid).val() == 'route' && root.child('assignments').child(auth.uid).exists() && !data.exists() && newData.child('uid').val() == auth.uid))"}},"msg":{".read":"auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor')",".write":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'","$uid":{".read":"auth != null && auth.uid == $uid"}},"photos":{".read":"auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor')","$id":{".read":"auth != null && root.child('roles').child(auth.uid).val() == 'route' && data.child('uid').val() == auth.uid",".write":"(auth != null && root.child('roles').child(auth.uid).val() == 'admin' || (auth != null && root.child('roles').child(auth.uid).val() == 'route' && root.child('assignments').child(auth.uid).exists() && !data.exists() && newData.child('uid').val() == auth.uid))"}},"voice":{".read":"auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor')",".write":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'","$id":{".read":"auth != null && root.child('roles').child(auth.uid).val() == 'route' && data.child('uid').val() == auth.uid",".write":"auth != null && root.child('roles').child(auth.uid).val() == 'route' && root.child('assignments').child(auth.uid).exists() && !data.exists() && newData.child('uid').val() == auth.uid"}},"incidents":{".read":"auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor')",".write":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'",".indexOn":["t"]},"lock":{".read":"auth != null && root.child('roles').child(auth.uid).exists()",".write":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'"},"districtAbstract":{".read":"auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor')",".write":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'"},"mandals":{".read":"(auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor') || (auth != null && root.child('roles').child(auth.uid).val() == 'route' && root.child('assignments').child(auth.uid).exists()))",".write":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'"},"policeStations":{".read":"(auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor') || (auth != null && root.child('roles').child(auth.uid).val() == 'route' && root.child('assignments').child(auth.uid).exists()))",".write":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'"},"routeGroups":{".read":"(auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor') || (auth != null && root.child('roles').child(auth.uid).val() == 'route' && root.child('assignments').child(auth.uid).exists()))",".write":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'"},"routePoints":{".read":"(auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor') || (auth != null && root.child('roles').child(auth.uid).val() == 'route' && root.child('assignments').child(auth.uid).exists()))",".write":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'"},"routes":{".read":"(auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor') || (auth != null && root.child('roles').child(auth.uid).val() == 'route' && root.child('assignments').child(auth.uid).exists()))",".write":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'"},"stationAbstract":{".read":"auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor')",".write":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'"},"subdivisions":{".read":"(auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor') || (auth != null && root.child('roles').child(auth.uid).val() == 'route' && root.child('assignments').child(auth.uid).exists()))",".write":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'"},"siScopes":{".read":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'","$uid":{".read":"auth != null && auth.uid == $uid",".write":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'"}}}}, null, 2); }
 
 /* route add / edit and device edit */
-function formModal(title, fields, vals, onSave, onDelete) {
+function formModal(title, fields, vals, onSave, onDelete, removeLabel = 'Remove') {
   const m = document.createElement('div'); m.className = 'modal';
   m.innerHTML = `<div class="card"><h2>${esc(title)}</h2><div style="display:flex;flex-direction:column;gap:8px">${fields.map(([k, l, u, opts]) => opts ? `<label class="f">${esc(l)}<select data-k="${k}">${opts.map(o => `<option ${o === (vals[k] || '') ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select></label>` : `<label class="f">${esc(l)}${u ? ` <span class="u">${esc(u)}</span>` : ''}<input type="text" data-k="${k}" value="${esc(vals[k] || '')}"></label>`).join('')}</div>
-    <div class="row" style="justify-content:space-between;margin-top:12px">${onDelete ? '<button class="btn red" data-del>Remove</button>' : '<span></span>'}<span><button class="btn" data-x>Cancel</button> <button class="btn primary" data-save>Save</button></span></div></div>`;
+    <div class="row" style="justify-content:space-between;margin-top:12px">${onDelete ? `<button class="btn red" data-del>${esc(removeLabel)}</button>` : '<span></span>'}<span><button class="btn" data-x>Cancel</button> <button class="btn primary" data-save>Save</button></span></div></div>`;
   document.body.appendChild(m);
   m.addEventListener('click', async e => {
     if (e.target === m || e.target.hasAttribute('data-x')) m.remove();
     if (e.target.hasAttribute('data-save')) { const o = {}; m.querySelectorAll('[data-k]').forEach(i => { o[i.dataset.k] = i.value.trim(); }); try { await onSave(o); m.remove(); } catch (er) { toast(er.message, 6000); } }
-    if (e.target.hasAttribute('data-del') && confirm('Remove?')) { try { await onDelete(); m.remove(); } catch (er) { toast(er.message, 6000); } }
+    if (e.target.hasAttribute('data-del') && confirm(`Remove ${title} from the database?`)) { try { await onDelete(); m.remove(); } catch (er) { toast(er.message, 6000); } }
   });
 }
 const ROUTE_F = [['election', 'Election', 'e.g. Municipal 2026'], ['forceL', 'Type', null, ['Route mobile', 'Striking force', 'Special striking force']], ['sd', 'Sub-division'], ['ps', 'Police station'], ['route', 'Route', 'e.g. Route 3'], ['villages', 'Villages / wards covered', 'optional'], ['officer', 'Officer (rank and name)', 'optional; can also be entered on the phone'], ['mobile', 'Officer mobile']];
 function routeModal(id) {
   const base = id ? CONF.routes[id] : { election: ELEC(), sd: UI.fSd, ps: UI.fPs }; const r = Object.assign({}, base, { forceL: forceLabel(base.force || 'route') });
-  formModal(id ? 'Edit route' : 'Add a route', ROUTE_F, r, async o => { if (!o.ps || !o.route) throw new Error('Police station and route are needed.'); o.force = forceCode(o.forceL); delete o.forceL; await dbPut(`config/routes/${id || 'r' + uid8()}`, o); toast('Saved'); }, id ? async () => dbDel(`config/routes/${id}`) : null);
+  formModal(id ? 'Edit route' : 'Add a route', ROUTE_F, r, async o => {
+    if (!o.ps || !o.route) throw new Error('Police station and route are needed.');
+    o.force = forceCode(o.forceL); delete o.forceL;
+    const routeId = id || 'r' + uid8();
+    if (id && base.memberUid && (o.ps !== base.ps || o.route !== base.route)) throw new Error('Remove the member assignment before changing the police station or route number.');
+    if (id) await dbPatch(`config/routes/${routeId}`, o); else await dbPut(`config/routes/${routeId}`, o);
+    CONF.routes = { ...CONF.routes, [routeId]: { ...(CONF.routes?.[routeId] || {}), ...o } };
+    schedule('force'); renderPane(); toast('Saved');
+  }, id ? async () => {
+    const route = CONF.routes[id], uid = route?.memberUid;
+    const updates = { ['config/routes/' + id]: null };
+    if (uid && await assignmentBelongsToRoute(uid, id, route)) {
+      if (await dbGet('roles/' + uid) !== 'route') throw new Error('The assigned account role changed. Reload and review it before deleting this route.');
+      Object.assign(updates, memberRemovalUpdates(uid, id, route, false));
+    }
+    await dbPatch('', updates);
+    CONF.routes = { ...CONF.routes }; delete CONF.routes[id];
+    if (uid && updates['assignments/' + uid] === null) { delete DEV[uid]; delete LIVE[uid]; }
+    schedule('force'); renderPane(); toast('Route removed from the database.');
+  } : null);
+}
+async function assignmentBelongsToRoute(uid, routeId, route) {
+  const assignment = await dbGet('assignments/' + uid);
+  return !!(assignment && (assignment.routeId === routeId || (assignment.ps === route?.ps && assignment.route === route?.route)));
+}
+function memberRemovalUpdates(uid, routeId, route, keepRoute = true) {
+  const updates = { ['roles/' + uid]: null, ['assignments/' + uid]: null, ['devices/' + uid]: null, ['live/' + uid]: null };
+  if (keepRoute) Object.assign(updates, { ['config/routes/' + routeId + '/memberUid']: null, ['config/routes/' + routeId + '/officer']: null, ['config/routes/' + routeId + '/mobile']: null });
+  const key = lockKey(route);
+  if (LOCK[key]?.uid === uid) updates['lock/' + key] = null;
+  return updates;
+}
+async function unassignMember(routeId) {
+  if (await dbGet('roles/' + AU.uid) !== 'admin') throw new Error('Only a control-room administrator can remove an assignment.');
+  const route = CONF.routes?.[routeId], uid = route?.memberUid;
+  if (!uid) throw new Error('This route has no assigned member.');
+  if (await dbGet('roles/' + uid) !== 'route') throw new Error('The assigned account role changed. Reload and review it.');
+  if (!await assignmentBelongsToRoute(uid, routeId, route)) throw new Error('The saved assignment has changed. Reload and try again.');
+  await dbPatch('', memberRemovalUpdates(uid, routeId, route));
+  CONF.routes = { ...CONF.routes, [routeId]: { ...route } };
+  delete CONF.routes[routeId].memberUid; delete CONF.routes[routeId].officer; delete CONF.routes[routeId].mobile;
+  delete DEV[uid]; delete LIVE[uid];
+  const key = lockKey(route); if (LOCK[key]?.uid === uid) delete LOCK[key];
+  schedule('force'); renderPane();
 }
 async function saveMemberAssignment(routeId, member) {
   const route = CONF.routes && CONF.routes[routeId];
@@ -5707,8 +5754,11 @@ async function saveMemberAssignment(routeId, member) {
   const role = await dbGet('roles/' + uid);
   if (role && role !== 'route') throw new Error('This account is an administrator or monitor. Use a separate officer account.');
   const existing = await dbGet('assignments/' + uid);
-  if (existing && (existing.ps !== route.ps || existing.route !== route.route))
-    throw new Error('This member is assigned to another route. Keep one officer account per route; use an unassigned account.');
+  if (existing && (existing.ps !== route.ps || existing.route !== route.route)) {
+    const savedRoutes = await dbGet('config/routes') || {};
+    const linked = Object.entries(savedRoutes).find(([, saved]) => saved?.memberUid === uid);
+    if (linked && linked[0] !== routeId) throw new Error(`This member is still assigned to ${linked[1].ps || 'another police station'} · ${linked[1].route || 'another route'}. Remove that assignment first.`);
+  }
   if (route.memberUid && route.memberUid !== uid) throw new Error('This route already has an assigned member. Use that account or ask the administrator to review the existing assignment.');
   const live = await dbGet('live/' + uid);
   if (live && live.duty === true) throw new Error('Stop duty on this member’s phone before changing the assignment.');
@@ -5770,9 +5820,15 @@ async function memberModal(routeId) {
     <label class="f">Mobile number<input name="mobile" type="tel" required autocomplete="off" placeholder="10-digit mobile number" value="${esc(r.mobile || '')}"></label>
     <label class="f">Password<input name="password" type="password" required minlength="8" autocomplete="new-password" placeholder="At least 8 characters"></label>
     <p class="note">For an existing mobile login, enter its current password. Passwords are never displayed in the route list. Saving again does not change an existing password.</p>
-    <div class="err" role="alert"></div><div class="row" style="justify-content:flex-end"><button class="btn" type="button" data-close>Cancel</button><button class="btn primary" type="submit">Save assignment</button></div></form>`;
+    <div class="err" role="alert"></div><div class="row" style="justify-content:space-between">${r.memberUid ? '<button class="btn red" type="button" data-unassign>Remove assignment</button>' : '<span></span>'}<span><button class="btn" type="button" data-close>Cancel</button><button class="btn primary" type="submit">Save assignment</button></span></div></form>`;
   document.body.appendChild(modal);
   modal.querySelector('[data-close]').onclick = () => modal.remove();
+  if (r.memberUid) modal.querySelector('[data-unassign]').onclick = async () => {
+    if (!confirm(`Remove ${r.officer || 'this member'} from ${r.ps} · ${r.route}? The phone will lose route access.`)) return;
+    const button = modal.querySelector('[data-unassign]'); button.disabled = true; modal.querySelector('.err').textContent = '';
+    try { await unassignMember(routeId); modal.remove(); toast('Assignment removed. The phone can no longer send live data.', 7000); }
+    catch (error) { modal.querySelector('.err').textContent = error.message; button.disabled = false; }
+  };
   modal.addEventListener('keydown', e => { if (e.key === 'Escape' && !modal.querySelector('[type=submit]').disabled) modal.remove(); });
   modal.querySelector('form').onsubmit = async e => {
     e.preventDefault(); const button = modal.querySelector('[type=submit]'); if (button.disabled) return;
@@ -5788,7 +5844,18 @@ async function memberModal(routeId) {
 function devModal(u) {
   formModal('Edit vehicle ' + dname(u), [['sd', 'Sub-division'], ['ps', 'Police station'], ['route', 'Route'], ['officer', 'Officer (rank and name)'], ['mobile', 'Officer mobile']], DEV[u],
     async o => { await dbPatch(`devices/${u}`, o); toast('Saved. The phone shows the new name within 5 minutes.'); },
-    async () => { await dbDel(`devices/${u}`); await dbDel(`live/${u}`); toast('Removed from the dashboard.'); });
+    async () => {
+      if (await dbGet('roles/' + AU.uid) !== 'admin') throw new Error('Only a control-room administrator can remove a phone.');
+      const linked = Object.entries(CONF.routes || {}).find(([, route]) => route.memberUid === u);
+      if (linked) { await unassignMember(linked[0]); toast('Phone and route assignment removed. Access revoked.', 7000); return; }
+      const assignment = await dbGet('assignments/' + u);
+      const role = await dbGet('roles/' + u);
+      const updates = { ['devices/' + u]: null, ['live/' + u]: null };
+      if (assignment && role === 'route') { updates['assignments/' + u] = null; updates['roles/' + u] = null; }
+      await dbPatch('', updates);
+      delete DEV[u]; delete LIVE[u]; schedule('force'); renderPane();
+      toast('Phone removed from the database.', 7000);
+    }, 'Remove phone and assignment');
 }
 
 /* QR codes */
@@ -5828,14 +5895,35 @@ async function siManageModal() {
   async function render() {
     const scopes = await dbGet('siScopes') || {};
     const entries = Object.entries(scopes).sort((a, b) => String(a[1].mandal || '').localeCompare(String(b[1].mandal || '')));
-    modal.querySelector('[data-si-list]').innerHTML = entries.length ? entries.map(([uid, s]) => `<div class="row" style="justify-content:space-between;border-bottom:1px solid var(--line);padding:10px 0"><div><b>${esc(s.officer || 'Viewer')}</b> · ${esc(s.rank || 'Rank not saved')}<br><span class="note">${esc(s.mandal || 'No mandal')} · ${esc(s.mobile || 'No mobile')} · ${Object.values(s.routes || {}).filter(Boolean).length} routes</span></div><div class="row"><button class="btn small" type="button" data-si-edit="${esc(uid)}">Edit</button><button class="btn small red" type="button" data-si-remove="${esc(uid)}">Remove</button></div></div>`).join('') : '<p class="note">No viewer logins created yet.</p>';
+    modal.querySelector('[data-si-list]').innerHTML = entries.length ? entries.map(([uid, s]) => `<div class="row" style="justify-content:space-between;border-bottom:1px solid var(--line);padding:10px 0"><div><b>${esc(s.officer || 'Viewer')}</b> · ${esc(s.rank || 'Rank not saved')}<br><span class="note">${esc(s.mandal || 'No mandal')} · ${esc(s.mobile || 'No mobile')} · ${Object.values(s.routes || {}).filter(Boolean).length} routes</span></div><div class="row"><button class="btn small" type="button" data-si-edit="${esc(uid)}">Edit</button><button class="btn small red" type="button" data-si-delete="${esc(uid)}">Delete login</button></div></div>`).join('') : '<p class="note">No viewer logins created yet.</p>';
     modal.querySelectorAll('[data-si-edit]').forEach(button => button.onclick = () => { const uid = button.dataset.siEdit; modal.remove(); siMonitorModal(uid, scopes[uid]).catch(showError); });
-    modal.querySelectorAll('[data-si-remove]').forEach(button => button.onclick = async () => {
-      const uid = button.dataset.siRemove, s = scopes[uid];
-      if (!confirm(`Remove viewer access for ${s.officer || s.mobile || 'this account'}?`)) return;
-      button.disabled = true;
-      try { await dbPatch('', { ['roles/' + uid]: null, ['siScopes/' + uid]: null }); await render(); toast('Viewer login removed. Access is revoked.'); }
-      catch (error) { button.disabled = false; showError(error.message); }
+    modal.querySelectorAll('[data-si-delete]').forEach(button => button.onclick = () => {
+      const uid = button.dataset.siDelete, s = scopes[uid];
+      const dialog = document.createElement('div'); dialog.className = 'modal member-modal';
+      dialog.setAttribute('role', 'dialog'); dialog.setAttribute('aria-modal', 'true'); dialog.setAttribute('aria-label', 'Delete viewer login');
+      dialog.innerHTML = `<form class="card"><h2>Delete viewer login</h2><p>Delete ${esc(s.officer || s.mobile || 'this viewer')}’s sign-in and revoke access. The mobile number can then be used for a new viewer login. This does not affect a Route app account using the same number.</p><label class="f">Current viewer password<input name="password" type="password" required autocomplete="current-password"></label><p class="note">Firebase requires the current password to delete this sign-in from the dashboard.</p><div class="err" role="alert"></div><div class="row" style="justify-content:flex-end"><button class="btn" type="button" data-cancel>Cancel</button><button class="btn red" type="submit">Delete login</button></div></form>`;
+      document.body.appendChild(dialog);
+      dialog.querySelector('[data-cancel]').onclick = () => dialog.remove();
+      let identityDeleted = false;
+      dialog.querySelector('form').onsubmit = async e => {
+        e.preventDefault(); const submit = dialog.querySelector('[type=submit]'); submit.disabled = true;
+        try {
+          if (await dbGet('roles/' + AU.uid) !== 'admin') throw new Error('Administrator access is required.');
+          if (!identityDeleted) {
+            const email = 'si' + memberPhone(s.mobile).slice(1) + '@members.track.invalid';
+            const session = await memberAuth('signInWithPassword', { email, password: dialog.querySelector('[name=password]').value, returnSecureToken: true });
+            if (session.localId !== uid) throw new Error('The password belongs to a different account.');
+            await memberAuth('delete', { idToken: session.idToken }); identityDeleted = true;
+          }
+          await dbPatch('', { ['roles/' + uid]: null, ['siScopes/' + uid]: null });
+          dialog.remove(); await render(); toast('Viewer sign-in and access deleted. The mobile number can be used again.', 7000);
+        } catch (error) {
+          dialog.querySelector('.err').textContent = identityDeleted ? 'Sign-in deleted, but the access record remains. Select Retry cleanup. ' + error.message : error.message;
+          if (identityDeleted) { dialog.querySelector('[name=password]').required = false; submit.textContent = 'Retry cleanup'; }
+          submit.disabled = false;
+        }
+      };
+      dialog.querySelector('[name=password]').focus();
     });
   }
   try { await render(); } catch (error) { modal.remove(); throw error; }
@@ -5967,9 +6055,17 @@ document.addEventListener('click', async e => {
       if (!confirm(`Delete the election "${name}"?\n\nThis removes its ${R.length} route(s) and ${P.length} polling location(s) and the name from the list.\n\nNot on poll day or the day before.`)) return;
       if (!confirm(`Are you sure? "${name}" and its data cannot be recovered.`)) return;
       toast('Deleting…', 4000);
-      for (const [id] of P) await dbDel('config/stations/' + id);
-      for (const r of R) await dbDel('config/routes/' + r.id);
-      await dbPatch('config/settings', { election: '' });
+      const electionIds = Object.entries(CONF.elections || {}).filter(([, record]) => (typeof record === 'string' ? record : record?.name || '').trim() === name).map(([id]) => id);
+      const updates = { 'config/settings/election': null };
+      for (const [id] of P) updates['config/stations/' + id] = null;
+      for (const r of R) updates['config/routes/' + r.id] = null;
+      for (const id of electionIds) updates['config/elections/' + id] = null;
+      await dbPatch('', updates);
+      CONF.routes = { ...CONF.routes }; CONF.stations = { ...CONF.stations }; CONF.elections = { ...CONF.elections }; CONF.settings = { ...CONF.settings, election: '' };
+      for (const [id] of P) delete CONF.stations[id];
+      for (const r of R) delete CONF.routes[r.id];
+      for (const id of electionIds) delete CONF.elections[id];
+      stationsSig = ''; fitted = false; schedule('force'); paneDirty = 'force';
       toast(`Election "${name}" deleted: ${R.length} routes and ${P.length} polling locations removed.`, 7000);
       renderPane();
     }
@@ -6039,7 +6135,7 @@ document.addEventListener('click', async e => {
       UI.fSd = ''; UI.fPs = ''; LS.set('fSd', ''); LS.set('fPs', ''); fitted = false; schedule('force'); paneDirty = 'force';
       toast(`${n} polling locations added${upd ? `, ${upd} updated` : ''}.${bad ? ` ${bad} rows skipped: check latitude/longitude or isolated map position.` : ''}`, 7000);
     });
-    else if (act === 'psClear') { if (confirm('Remove all polling locations?')) { await dbDel('config/stations'); CONF.stations = {}; PS_N = 0; stationsSig = ''; schedule('force'); paneDirty = 'force'; toast('All polling locations removed. Import the Excel file again.'); } }
+    else if (act === 'psClear') { if (confirm('Remove all polling locations?')) { await dbDel('config/stations'); CONF.stations = {}; PS_N = 0; stationsSig = ''; schedule('force'); paneDirty = 'force'; renderPane(); toast('All polling locations removed. Import the Excel file again.'); } }
     else if (act === 'printQr') {
       const pin = ($('#setPin').value || '').trim(); if (!/^\d{4,8}$/.test(pin)) { toast('PIN should be 4 to 8 digits'); return; }
       if (pin !== S().pin) await dbPatch('config/settings', { pin });
@@ -7236,7 +7332,7 @@ function psEditModal(id, vals) {
     <label class="f">Police station<input type="text" data-k="ps" value="${esc(p.ps || '')}"></label>
     <label class="f">Route No.<input type="text" data-k="route" value="${esc(p.route || '')}"></label></div>
     <p class="note">Saved at once for the dashboard, Monitor and the route mobile phones (their list refreshes when they next open it).</p>
-    <div class="row" style="justify-content:flex-end"><button class="btn" type="button" data-x>Cancel</button><button class="btn primary" type="button" data-save>Save</button></div></div>`;
+    <div class="row" style="justify-content:space-between"><button class="btn red" type="button" data-remove>Remove location</button><span><button class="btn" type="button" data-x>Cancel</button><button class="btn primary" type="button" data-save>Save</button></span></div></div>`;
   document.body.appendChild(m);
   const get = () => { const o = {}; m.querySelectorAll('[data-k]').forEach(i => { o[i.dataset.k] = i.value.trim(); }); return o; };
   const llIn = m.querySelector('[data-k="ll"]'), llOk = m.querySelector('[data-llok]');
@@ -7244,6 +7340,16 @@ function psEditModal(id, vals) {
   llIn.addEventListener('input', chk); chk();
   m.addEventListener('click', async e => {
     if (e.target === m || e.target.hasAttribute('data-x')) { m.remove(); return; }
+    if (e.target.hasAttribute('data-remove')) {
+      if (!confirm(`Remove "${p.name}" from the database?`)) return;
+      try {
+        await dbDel('config/stations/' + id);
+        CONF.stations = { ...CONF.stations }; delete CONF.stations[id];
+        PS_N = Object.keys(CONF.stations).length; stationsSig = ''; fitted = false;
+        m.remove(); schedule('force'); paneDirty = 'force'; renderPane(); toast('Polling location removed from the database.');
+      } catch (er) { toast(er.message, 7000); }
+      return;
+    }
     if (e.target.hasAttribute('data-pick')) {
       PS_PICK = { id, vals: get() }; m.remove();
       if (UI.tab === 'sum' && !document.body.classList.contains('wall')) { UI.tab = 'loc'; renderTabs(); renderPane(); }

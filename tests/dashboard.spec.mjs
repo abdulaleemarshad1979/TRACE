@@ -16,7 +16,7 @@ test('SI monitor shows only assigned mandal routes and their live phones', async
     '/config/routes/r2.json': { ps: 'Kadiyam PS', route: 'Route 2' },
     '/config/stations/s1.json': { name: 'Kadiyam polling booth', ps: 'Kadiyam PS', route: 'Route 1', lat: 16.91, lng: 81.84 },
     '/devices/unit-1.json': { ps: 'Kadiyam PS', officer: 'HC Example', mobile: '9000000000' },
-    '/live/unit-1.json': { lat: 16.91, lng: 81.84, up: now, gps: true, duty: true },
+    '/live/unit-1.json': { lat: 17.15, lng: 82.1, up: now, gps: true, duty: true },
     '/events.json': { sos1: { uid: 'unit-1', type: 'sos', t: now } }
   };
   await page.route('https://officer-8eb52-default-rtdb.asia-southeast1.firebasedatabase.app/**', route => {
@@ -32,6 +32,7 @@ test('SI monitor shows only assigned mandal routes and their live phones', async
   await expect(page.locator('#routes')).toContainText('No assigned phone');
   await expect(page.locator('#alert')).toContainText('1 open SOS');
   await expect(page.locator('#mapNote')).toContainText('1 polling booths');
+  await expect.poll(() => page.evaluate(() => map.getBounds().contains([17.15, 82.1]))).toBe(true);
   expect(await page.locator('#map .leaflet-interactive').count()).toBeGreaterThanOrEqual(2);
   expect(await page.evaluate(() => localStorage.getItem('rm_au'))).toBeNull();
   expect(JSON.parse(await page.evaluate(() => sessionStorage.getItem('rm_si_au'))).uid).toBe('si-1');
@@ -39,6 +40,32 @@ test('SI monitor shows only assigned mandal routes and their live phones', async
   expect(reads).not.toContain('/devices.json');
   expect(reads).not.toContain('/live.json');
   expect(reads).not.toContain('/config/stations.json');
+});
+
+test('viewer distinguishes a connected phone from a phone with a GPS position', async ({ page }) => {
+  const now = Date.now();
+  await page.addInitScript(() => sessionStorage.setItem('rm_si_au', JSON.stringify({ rt: 'si-refresh', uid: 'si-1', email: 'si919876543210@members.track.invalid' })));
+  await page.route('https://securetoken.googleapis.com/**', route => route.fulfill({ json: { id_token: 'si-token', expires_in: '3600', refresh_token: 'si-refresh', user_id: 'si-1' } }));
+  const data = {
+    '/roles/si-1.json': 'si_monitor',
+    '/siScopes/si-1.json': { mandal: 'Bommuru', routes: { r1: true, deleted: true }, stations: { s1: true } },
+    '/config/routes/r1.json': { ps: 'Bommuru PS', route: 'Route 1', memberUid: 'unit-1' },
+    '/config/stations/s1.json': { name: 'Booth', lat: 17, lng: 81.8 },
+    '/live/unit-1.json': { up: now, gps: true, duty: true }
+  };
+  await page.route('https://officer-8eb52-default-rtdb.asia-southeast1.firebasedatabase.app/**', route => route.fulfill({ json: data[new URL(route.request().url()).pathname] ?? null }));
+  await page.route('https://*.tile.openstreetmap.org/**', route => route.abort());
+  await page.goto(siUrl);
+  await expect(page.locator('#routes')).toContainText('Waiting for GPS fix');
+  await expect(page.locator('#routes tr')).toHaveCount(1);
+  await expect(page.locator('#mapNote')).toContainText('0 phone locations · 1 phone waiting for GPS fix');
+  data['/live/unit-1.json'] = { lat: 17.15, lng: 82.1, up: now, gps: true, duty: true };
+  await page.evaluate(() => refresh());
+  await expect(page.locator('#routes')).toContainText('Live');
+  await expect.poll(() => page.evaluate(() => map.getBounds().contains([17.15, 82.1]))).toBe(true);
+  data['/live/unit-1.json'] = { lat: 17.3, lng: 82.3, up: now, gps: true, duty: true };
+  await page.evaluate(() => refresh());
+  expect(await page.evaluate(() => map.getBounds().contains([17.3, 82.3]))).toBe(true);
 });
 
 test('SI monitor accepts the command control room mobile login', async ({ page }) => {
@@ -87,7 +114,7 @@ test('viewer signs in on the main page and sees only assigned routes', async ({ 
     '/config/routes/r2.json': { ps: 'Kadiyam PS', route: 'Route 2' },
     '/config/stations/s1.json': { name: 'Kadiyam polling booth', ps: 'Kadiyam PS', route: 'Route 1', lat: 16.91, lng: 81.84 },
     '/devices/unit-1.json': { officer: 'HC Example' },
-    '/live/unit-1.json': { lat: 16.91, lng: 81.84, up: now, gps: true, duty: true },
+    '/live/unit-1.json': { lat: 17.15, lng: 82.1, up: now, gps: true, duty: true },
     '/events.json': null
   };
   await page.route('https://officer-8eb52-default-rtdb.asia-southeast1.firebasedatabase.app/**', route => { const pathname = new URL(route.request().url()).pathname; reads.push(pathname); route.fulfill({ json: data[pathname] ?? null }); });
@@ -104,6 +131,7 @@ test('viewer signs in on the main page and sees only assigned routes', async ({ 
   await expect(page.locator('#viewerRoutes')).toContainText('No assigned phone');
   await expect(page.locator('#viewerRoutes')).toContainText('HC Example');
   await expect(page.locator('#viewerMapNote')).toContainText('1 polling booths');
+  expect(await page.evaluate(() => VIEWER_MAP.getBounds().contains([17.15, 82.1]))).toBe(true);
   await expect(page).toHaveURL(url);
   expect(signIns[0].email).toBe('si919876543210@members.track.invalid');
   expect(reads).not.toContain('/devices.json');
@@ -149,7 +177,7 @@ test('administrator creates a scoped viewer login with rank', async ({ page }) =
   expect(writes).toContainEqual({ pathname: '/.json', body: { 'roles/si-new': 'si_monitor', 'siScopes/si-new': { mandal: 'Kadiyam', officer: 'SI Example', rank: 'Striking Force', mobile: '+919876543210', routes: { r1: true }, stations: { s1: true } } } });
 });
 
-test('administrator can list, edit and remove viewer access', async ({ page }) => {
+test('administrator can list and edit viewer access without an orphaning revoke action', async ({ page }) => {
   const writes = await controlRoom(page);
   const scope = { mandal: 'Kadiyam', officer: 'Existing Officer', rank: 'Incharge', mobile: '+919876543210', routes: { r1: true }, stations: { s1: true } };
   await page.route('https://trace-demo.firebaseio.test/siScopes.json**', route => route.fulfill({ json: { 'si-existing': scope } }));
@@ -164,8 +192,27 @@ test('administrator can list, edit and remove viewer access', async ({ page }) =
   await expect(edit).toHaveCount(0);
   expect(writes).toContainEqual({ pathname: '/.json', body: { 'roles/si-existing': 'si_monitor', 'siScopes/si-existing': { ...scope, officer: 'Updated Officer' } } });
   await page.getByRole('button', { name: 'Manage viewer logins' }).click();
-  page.once('dialog', dialog => dialog.accept());
-  await page.getByRole('dialog', { name: 'Viewer logins' }).getByRole('button', { name: 'Remove' }).click();
+  const reopened = page.getByRole('dialog', { name: 'Viewer logins' });
+  await expect(reopened.getByRole('button', { name: 'Delete login' })).toBeVisible();
+  await expect(reopened.getByRole('button', { name: 'Revoke access' })).toHaveCount(0);
+});
+
+test('administrator can delete a viewer sign-in with its current password', async ({ page }) => {
+  const writes = await controlRoom(page);
+  const scope = { mandal: 'Kadiyam', officer: 'Viewer', rank: 'Incharge', mobile: '+919876543210', routes: { r1: true } };
+  await page.route('https://trace-demo.firebaseio.test/siScopes.json**', route => route.fulfill({ json: { 'si-existing': scope } }));
+  const actions = [];
+  await page.route('https://identitytoolkit.googleapis.com/**', route => {
+    const action = new URL(route.request().url()).pathname.split(':').pop(); actions.push(action);
+    route.fulfill({ json: action === 'signInWithPassword' ? { localId: 'si-existing', idToken: 'viewer-token' } : {} });
+  });
+  await page.locator('#tabs [data-tab="setup"]').click();
+  await page.getByRole('button', { name: 'Manage viewer logins' }).click();
+  await page.getByRole('dialog', { name: 'Viewer logins' }).getByRole('button', { name: 'Delete login' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Delete viewer login' });
+  await dialog.getByLabel('Current viewer password').fill('Original-password');
+  await dialog.getByRole('button', { name: 'Delete login' }).click();
+  await expect.poll(() => actions).toEqual(['signInWithPassword', 'delete']);
   await expect.poll(() => writes.some(w => w.body['roles/si-existing'] === null && w.body['siScopes/si-existing'] === null)).toBe(true);
 });
 
@@ -189,6 +236,49 @@ test('selecting a mandal shows only its matching routes and booth assignments', 
   await expect(dialog.locator('[data-si-row]').filter({ hasText: 'Kadiyam PS' })).toBeVisible();
   await expect(dialog.locator('[data-si-row]').filter({ hasText: 'Nidadavole PS' })).toBeHidden();
   expect(await page.evaluate(() => siStationIds(['k1']))).toEqual(['boothK']);
+});
+
+test('removing a polling location deletes its database record and clears the dashboard copy', async ({ page }) => {
+  await controlRoom(page);
+  const deletes = [];
+  await page.route('https://trace-demo.firebaseio.test/config/stations/s1.json**', route => {
+    if (route.request().method() === 'DELETE') deletes.push(new URL(route.request().url()).pathname);
+    route.fulfill({ json: null });
+  });
+  await page.evaluate(() => psEditModal('s1'));
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: 'Remove location' }).click();
+  await expect.poll(() => deletes).toEqual(['/config/stations/s1.json']);
+  await expect.poll(() => page.evaluate(() => CONF.stations.s1)).toBeUndefined();
+});
+
+test('removing a route deletes its database record and clears the dashboard copy', async ({ page }) => {
+  const writes = await controlRoom(page);
+  await page.evaluate(() => routeModal('r1'));
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: 'Remove', exact: true }).click();
+  await expect.poll(() => writes.find(write => write.pathname === '/.json')?.body).toMatchObject({ 'config/routes/r1': null });
+  await expect.poll(() => page.evaluate(() => CONF.routes.r1)).toBeUndefined();
+});
+
+test('deleting an election removes its saved name, routes, and polling locations together', async ({ page }) => {
+  const writes = await controlRoom(page, { '/config.json': {
+    routes: { r1: { ps: 'Example Rural Police Station', route: 'Route 12', sd: 'North', election: 'Election 2026' } },
+    stations: { s1: { name: 'Booth', el: 'Election 2026', lat: 17, lng: 81.8 } },
+    elections: { e1: { name: 'Election 2026' } },
+    settings: { election: 'Election 2026' }
+  } });
+  await page.locator('#tabs [data-tab="setup"]').click();
+  await page.locator('details[data-sec="routes"] summary').click();
+  page.on('dialog', dialog => dialog.accept());
+  await page.locator('[data-act="delElec"]').first().click();
+  await expect.poll(() => writes.find(write => write.pathname === '/.json')?.body).toMatchObject({
+    'config/settings/election': null,
+    'config/stations/s1': null,
+    'config/routes/r1': null,
+    'config/elections/e1': null
+  });
+  await expect.poll(() => page.evaluate(() => trackElectionNames())).toEqual([]);
 });
 
 test('uses the exact staging Realtime Database and waits for sign-in', async ({ page }) => {
@@ -520,6 +610,52 @@ test('administrator creates a mobile login and assigns its route without changin
   expect(JSON.stringify(writes)).not.toContain('password');
 });
 
+test('editing a route preserves its assigned member', async ({ page }) => {
+  const writes = await controlRoom(page, { '/config.json': {
+    routes: { r1: { ps: 'Bommuru PS', route: 'Route 1', sd: 'North', officer: 'Officer A', mobile: '+919876543210', memberUid: 'officer-1' } },
+    stations: {}, settings: { election: '' }
+  } });
+  await page.evaluate(() => routeModal('r1'));
+  await page.locator('.modal [data-k="villages"]').fill('New area');
+  await page.locator('.modal [data-save]').click();
+  await expect.poll(() => writes.find(write => write.pathname === '/config/routes/r1.json')?.body?.villages).toBe('New area');
+  expect(await page.evaluate(() => CONF.routes.r1.memberUid)).toBe('officer-1');
+});
+
+test('removing an assigned phone revokes its route access and clears current data', async ({ page }) => {
+  const writes = await controlRoom(page, {
+    '/config.json': { routes: { r1: { ps: 'Bommuru PS', route: 'Route 1', sd: 'North', officer: 'Officer A', mobile: '+919876543210', memberUid: 'officer-1' } }, stations: {}, settings: { election: '' } },
+    '/devices.json': { 'officer-1': { ps: 'Bommuru PS', route: 'Route 1', officer: 'Officer A' } },
+    '/roles/officer-1.json': 'route',
+    '/assignments/officer-1.json': { routeId: 'r1', ps: 'Bommuru PS', route: 'Route 1' }
+  });
+  await page.evaluate(() => devModal('officer-1'));
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: 'Remove phone and assignment' }).click();
+  await expect.poll(() => writes.find(write => write.pathname === '/.json')?.body).toMatchObject({
+    'roles/officer-1': null,
+    'assignments/officer-1': null,
+    'config/routes/r1/memberUid': null,
+    'devices/officer-1': null,
+    'live/officer-1': null
+  });
+  await expect.poll(() => page.evaluate(() => ({ member: CONF.routes.r1.memberUid, device: DEV['officer-1'], live: LIVE['officer-1'] }))).toEqual({});
+});
+
+test('a route member can be removed from the assignment dialog', async ({ page }) => {
+  const writes = await controlRoom(page, {
+    '/config.json': { routes: { r1: { ps: 'Bommuru PS', route: 'Route 1', sd: 'North', officer: 'Officer A', mobile: '+919876543210', memberUid: 'officer-1' } }, stations: {}, settings: { election: '' } },
+    '/roles/officer-1.json': 'route',
+    '/assignments/officer-1.json': { routeId: 'r1', ps: 'Bommuru PS', route: 'Route 1' }
+  });
+  await page.evaluate(() => memberModal('r1'));
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: 'Remove assignment' }).click();
+  await expect.poll(() => writes.find(write => write.pathname === '/.json')?.body?.['assignments/officer-1']).toBeNull();
+  await expect(page.getByRole('dialog', { name: 'Assign a member' })).toHaveCount(0);
+  expect(await page.evaluate(() => CONF.routes.r1.memberUid)).toBeUndefined();
+});
+
 test('existing mobile login requires its password and preserves the current admin login', async ({ page }) => {
   const writes = await controlRoom(page);
   let validPassword = false;
@@ -543,9 +679,10 @@ test('assignment rejects privileged accounts, other routes and active duty witho
   const writes = await controlRoom(page, {
     '/roles/privileged.json': 'admin',
     '/assignments/assigned.json': { ps: 'Other PS', route: 'Route 1' },
+    '/config/routes.json': { r2: { ps: 'Other PS', route: 'Route 1', memberUid: 'assigned' } },
     '/live/active.json': { duty: true }
   });
-  for (const [uid, message] of [['privileged', 'administrator or monitor'], ['assigned', 'another route'], ['active', 'Stop duty']]) {
+  for (const [uid, message] of [['privileged', 'administrator or monitor'], ['assigned', 'Remove that assignment first'], ['active', 'Stop duty']]) {
     const error = await page.evaluate(async uid => {
       try { await saveMemberAssignment('r1', { uid, officer: 'Example Officer', mobile: '' }); }
       catch (e) { return e.message; }
@@ -553,6 +690,16 @@ test('assignment rejects privileged accounts, other routes and active duty witho
     expect(error).toContain(message);
   }
   expect(writes).toEqual([]);
+});
+
+test('a removed route link does not block reassigning the same authenticated member', async ({ page }) => {
+  const writes = await controlRoom(page, {
+    '/roles/orphan.json': 'route',
+    '/assignments/orphan.json': { ps: 'Chagallu PS', route: 'Route 1', officer: 'Former officer', mobile: '+917013297559' },
+    '/config/routes.json': { r1: { ps: 'Example Rural Police Station', route: 'Route 12' } }
+  });
+  await page.evaluate(() => saveMemberAssignment('r1', { uid: 'orphan', officer: 'New officer', mobile: '+917013297559' }));
+  expect(writes.find(write => write.pathname === '/.json')?.body?.['assignments/orphan']).toMatchObject({ routeId: 'r1', ps: 'Example Rural Police Station', route: 'Route 12' });
 });
 
 test('monitor cannot assign members', async ({ page }) => {
