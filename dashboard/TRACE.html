@@ -4852,7 +4852,7 @@ const devIds = () => { syncLiveDevices(); return Object.keys(DEV).filter(visible
 function boot() {
   if (!CFG) { $('#login').hidden = false; $('#projForm').hidden = false; return; }
   if (!AU) { $('#login').hidden = false; $('#loginForm').hidden = false; return; }
-  start();
+  startIfAuthorized();
 }
 $('#projForm').addEventListener('submit', e => {
   e.preventDefault();
@@ -4862,18 +4862,25 @@ $('#projForm').addEventListener('submit', e => {
 $('#loginForm').addEventListener('submit', async e => {
   e.preventDefault(); $('#lErr').textContent = '';
   const b = e.target.querySelector('button[type=submit]'); b.disabled = true; b.textContent = 'Signing in…';
-  try { await signIn($('#lEmail').value.trim(), $('#lPw').value, $('#lKeep').checked); $('#login').hidden = true; start(); }
+  try { await signIn($('#lEmail').value.trim(), $('#lPw').value, $('#lKeep').checked); await startIfAuthorized(); }
   catch (er) { $('#lErr').textContent = er.message; }
   b.disabled = false; b.textContent = 'Sign in';
 });
 $('#changeProj').addEventListener('click', () => { LS.set('cfg', null); LS.set('au', null); CFG = null; $('#loginForm').hidden = true; $('#projForm').hidden = false; });
 
+async function startIfAuthorized() {
+  try {
+    const role = await dbGet('roles/' + AU.uid);
+    if (role === 'si_monitor') { if (!KEEP) sessionStorage.setItem('rm_si_au', JSON.stringify(AU)); location.replace('si-monitor.html'); return; }
+    USER_ROLE = role;
+    start();
+  } catch (e) { $('#login').hidden = false; $('#loginForm').hidden = false; $('#lErr').textContent = e.message; }
+}
 function start() {
   if (booted) return; booted = true;
   $('#app').hidden = false; $('#login').hidden = true;
   $('#who').textContent = AU.email || '';
   bridgeAuth();
-  dbGet('roles/' + AU.uid).then(role => { USER_ROLE = role; schedule(true); }).catch(() => { USER_ROLE = ''; });
   initMap();
   stream('devices', '', DEV, () => { loadTrails(); schedule(); }, { every: 15000 });
   stream('live', '', LIVE, path => { onLive(path); schedule(); }, { every: 15000 });
@@ -5517,7 +5524,7 @@ function paneSetup() {
   const elSel = id => `<select id="${id}"><option value="">All elections (${allRoutes().length} routes)</option>${els.map(e => `<option value="${esc(e)}" ${e === ELEC() ? 'selected' : ''}>${esc(e)} (${allRoutes().filter(r => (r.election || '').trim() === e).length} routes)</option>`).join('')}</select>`;
   let h = sec('routes', `Routes (${routes().length}${ELEC() ? ' — ' + esc(ELEC()) : ''})`, `<p class="note">Use Assign member to set the officer name, mobile number and password. The APK loads their assigned route after login. Routes marked Review coverage have proposed merges or splits; check their polling locations before assigning.</p>
     <div class="row"><label class="f" style="flex:1">Election <span class="u">(choose one: the list below and the phones show only that election's routes)</span>${elSel('setElec')}</label></div>
-    <div class="row"><button class="btn small" data-act="newElection">+ New election</button><button class="btn small" data-act="routeAdd">Add a route</button><button class="btn small" data-act="routeImport">Import from Excel</button><button class="btn small" data-act="trackTemplate">Download Excel format</button><button class="btn small red" data-act="routeClearAll">Remove all routes</button>${ELEC() ? `<button class="btn small red" data-act="delElec">Delete election "${esc(ELEC())}"</button>` : ''}</div>
+    <div class="row"><button class="btn small" data-act="newElection">+ New election</button><button class="btn small" data-act="routeAdd">Add a route</button><button class="btn small" data-act="routeImport">Import from Excel</button><button class="btn small" data-act="trackTemplate">Download Excel format</button>${USER_ROLE === 'admin' ? '<button class="btn small primary" data-act="siMonitor">Create SI monitor</button>' : ''}<button class="btn small red" data-act="routeClearAll">Remove all routes</button>${ELEC() ? `<button class="btn small red" data-act="delElec">Delete election "${esc(ELEC())}"</button>` : ''}</div>
     <div class="tw"><table class="t"><thead><tr><th>Election</th><th>Sub-division</th><th>PS</th><th>Route</th><th>Villages</th><th>Officer</th><th></th></tr></thead><tbody>${R.map(r => `<tr><td>${esc(r.election || '')}</td><td>${esc(r.sd)}</td><td>${esc(r.ps)}</td><td><b>${esc(r.route)}</b>${r.coverageStatus === 'proposed' ? '<br><span class="note" style="color:#a16207">Review coverage</span>' : ''}</td><td>${esc(r.villages || '')}</td><td>${esc(r.officer || '')} ${esc(r.mobile || '')}${r.vehicle ? '<br><span class="note">' + esc(r.vehicle) + '</span>' : ''}</td><td style="white-space:nowrap"><button class="btn small" data-act="routeQr" data-id="${r.id}">QR</button><button class="btn small" data-act="routeEdit" data-id="${r.id}">Edit</button>${USER_ROLE === 'admin' ? `<button class="btn small primary" data-act="memberAssign" data-id="${r.id}">Assign member</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="7" class="note">No routes yet.</td></tr>'}</tbody></table></div>`);
   h += sec('ps', `Polling locations (${stations().length})`, `<p class="note">Shown on the map, used for the incident search, the off-route alert and the "visited" check. Columns: Polling location, Latitude, Longitude, Sensitivity, Police station, Route No. One row per location, even if it has several booths.</p>
     <div class="row"><label class="f" style="flex:1">Election for these locations <span class="u">(the map shows the locations of the election chosen here)</span>${elSel('setElec2')}</label></div>
@@ -5562,7 +5569,7 @@ async function saveMemberAssignment(routeId, member) {
   if (route.memberUid && route.memberUid !== uid) throw new Error('This route already has an assigned member. Use that account or ask the administrator to review the existing assignment.');
   const live = await dbGet('live/' + uid);
   if (live && live.duty === true) throw new Error('Stop duty on this member’s phone before changing the assignment.');
-  const assignment = { ps: route.ps, route: route.route, sd: route.sd || '', election: route.election || '', officer, mobile };
+  const assignment = { routeId, ps: route.ps, route: route.route, sd: route.sd || '', election: route.election || '', officer, mobile };
   const review = route.coverageStatus === 'proposed' ? { ['config/routes/' + routeId + '/coverageStatus']: 'reviewed', ['config/routes/' + routeId + '/coverageReviewedBy']: AU.uid, ['config/routes/' + routeId + '/coverageReviewedAt']: Date.now() } : {};
   if (route.coverageStatus === 'proposed' && member.coverageReviewed !== 'on') throw new Error('Review the changed polling coverage before assigning this route.');
   await dbPatch('', { ['roles/' + uid]: 'route', ['assignments/' + uid]: assignment,
@@ -5659,6 +5666,65 @@ function mapCols(rows, want) {
   }
   return null;
 }
+const SI_MANDALS = ['Kadiyam','Rajamahendravaram Rural','Kapileswarapuram (Angara)','Mandapeta','Rayavaram','Anaparthy','Biccavole','Rangampeta','Korukonda','Gokavaram','Seethanagaram','Rajanagaram','Kovvuru','Tallapudi','Chagallu','Nidadavole','Undrajavaram','Peravali','Nalljerla','Gopalapuram','Devarapalli'];
+async function siMonitorModal() {
+  if (await dbGet('roles/' + AU.uid) !== 'admin') throw new Error('Only an administrator can create an SI monitor.');
+  const list = allRoutes();
+  if (!list.length) throw new Error('Import or add routes before assigning an SI monitor.');
+  const modal = document.createElement('div'); modal.className = 'modal member-modal';
+  modal.setAttribute('role', 'dialog'); modal.setAttribute('aria-modal', 'true'); modal.setAttribute('aria-labelledby', 'siMonitorTitle');
+  modal.innerHTML = `<form class="card"><h2 id="siMonitorTitle">Create SI monitor</h2><p class="note">This read-only login sees only the selected routes of one mandal and their assigned phones. Select the exact routes, especially when two mandals share a police station.</p>
+    <label class="f">SI name and rank<input name="officer" required autocomplete="off"></label>
+    <label class="f">Sign-in email<input name="email" type="email" required autocomplete="off"></label>
+    <label class="f">Password<input name="password" type="password" required minlength="8" autocomplete="new-password"></label>
+    <label class="f">Assigned mandal<select name="mandal" required><option value="">Choose mandal</option>${SI_MANDALS.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join('')}</select></label>
+    <label class="f">Find routes<input type="search" data-si-search placeholder="Filter by police station or route"></label>
+    <div class="row"><button class="btn small" type="button" data-si-select>Choose visible routes</button><span class="note" data-si-count>0 selected</span></div>
+    <div class="tw" style="max-height:230px;overflow:auto;border:1px solid var(--line);padding:8px">${list.map(r => `<label class="row" data-si-row style="display:flex;align-items:center;margin:3px 0"><input type="checkbox" name="routeId" value="${esc(r.id)}"> ${esc(r.ps)} · ${esc(r.route)}${r.election ? ' · ' + esc(r.election) : ''}</label>`).join('')}</div>
+    <p class="note">Existing route members gain access only after their route assignment is linked to the selected route. The SI cannot edit routes, dispatch messages or see other mandals.</p>
+    <div class="err" role="alert"></div><div class="row" style="justify-content:flex-end"><button class="btn" type="button" data-close>Cancel</button><button class="btn primary" type="submit">Save SI monitor</button></div></form>`;
+  document.body.appendChild(modal);
+  const form = modal.querySelector('form');
+  modal.querySelector('[data-close]').onclick = () => modal.remove();
+  const count = () => { modal.querySelector('[data-si-count]').textContent = `${form.querySelectorAll('[name=routeId]:checked').length} selected`; };
+  form.addEventListener('change', count);
+  modal.querySelector('[data-si-search]').oninput = e => {
+    const q = e.target.value.trim().toLowerCase();
+    modal.querySelectorAll('[data-si-row]').forEach(row => { row.hidden = !row.textContent.toLowerCase().includes(q); });
+  };
+  modal.querySelector('[data-si-select]').onclick = () => { modal.querySelectorAll('[data-si-row]:not([hidden]) input').forEach(c => { c.checked = true; }); count(); };
+  form.onsubmit = async e => {
+    e.preventDefault(); const button = form.querySelector('[type=submit]'); button.disabled = true;
+    form.querySelector('.err').textContent = '';
+    try {
+      if (await dbGet('roles/' + AU.uid) !== 'admin') throw new Error('Administrator access is required.');
+      const data = new FormData(form), selected = [...new Set(data.getAll('routeId'))];
+      if (!selected.length) throw new Error('Choose at least one route for this mandal.');
+      if (selected.some(id => !CONF.routes?.[id])) throw new Error('A selected route no longer exists. Reload and try again.');
+      const email = String(data.get('email') || '').trim().toLowerCase(), password = String(data.get('password') || '');
+      if (password.length < 8) throw new Error('Use a password with at least 8 characters.');
+      let account;
+      try { account = await memberAuth('signUp', { email, password, returnSecureToken: true }); }
+      catch (error) {
+        if (error.code !== 'EMAIL_EXISTS') throw error;
+        try { account = await memberAuth('signInWithPassword', { email, password, returnSecureToken: true }); }
+        catch (_) { throw new Error('This email already has an account. Enter its current password.'); }
+      }
+      const uid = account.localId, role = await dbGet('roles/' + uid);
+      if (role && role !== 'si_monitor') throw new Error('This email belongs to another type of account. Use a separate email.');
+      const updates = { ['roles/' + uid]: 'si_monitor', ['siScopes/' + uid]: { mandal: data.get('mandal'), officer: String(data.get('officer')).trim(), routes: Object.fromEntries(selected.map(id => [id, true])) } };
+      for (const id of selected) {
+        const r = CONF.routes[id]; if (!r.memberUid) continue;
+        const assignment = await dbGet('assignments/' + r.memberUid);
+        if (assignment && assignment.ps === r.ps && assignment.route === r.route) updates['assignments/' + r.memberUid + '/routeId'] = id;
+      }
+      await dbPatch('', updates);
+      modal.remove(); toast(`SI monitor saved for ${data.get('mandal')}. Sign in at this dashboard with the email and password.`, 7000);
+    } catch (error) { form.querySelector('.err').textContent = error.message; }
+    finally { button.disabled = false; }
+  };
+  form.querySelector('[name=officer]').focus();
+}
 function xlsTemplate(name, H, ex) { const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([H, ...ex]), 'Sheet1'); XLSX.writeFile(wb, name); }
 
 /* ---------- events ---------- */
@@ -5697,6 +5763,7 @@ document.addEventListener('click', async e => {
     else if (act === 'routeAdd') routeModal();
     else if (act === 'newElection') await trackNewElection();
     else if (act === 'memberAssign') await memberModal(a.dataset.id);
+    else if (act === 'siMonitor') await siMonitorModal();
     else if (act === 'delElec') {
       const name = ELEC(); if (!name) return;
       const R = allRoutes().filter(r => (r.election || '').trim() === name), P = Object.entries(CONF.stations || {}).filter(([, x]) => (x.el || '').trim() === name);
