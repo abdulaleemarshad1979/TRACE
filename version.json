@@ -1,10 +1,10 @@
 {
-  "versionCode": 4,
-  "versionName": "2.2.0",
+  "versionCode": 5,
+  "versionName": "2.2.1",
   "appName": "TRACK Route",
   "district": "East Godavari District Police",
   "apkUrl": "https://raw.githubusercontent.com/abdulaleemarshad1979/TRACE/main/release/TRACK-Route-EastGodavari.apk",
-  "releaseNotes": "Mobile-number/password login with automatic assigned route; control-room member assignment and responsive layout fixes.",
-  "sha256": "06911213463eab6c2f498f090d28ca5f69ae1174fe93982fca752aa75c0f3ffd",
+  "releaseNotes": "GPS and live status refresh about every 10 seconds; improved speed display and offline location delivery.",
+  "sha256": "a4b2f04951a7ae213b6547ee0fe7e2666a4700df514aea80944d90e7e429fbf5",
   "signingCertificateSha256": "e7310c8221c8ef469ce647aba0469b1f362ed97795ae625dd6750a34368864d7"
 }

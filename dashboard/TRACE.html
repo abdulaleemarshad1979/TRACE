@@ -4794,9 +4794,10 @@ function status(u) {
   const age = now - L.up;
   if (age > s.nosig * MIN) return { k: 'nosig', txt: `No signal ${Math.floor(age / MIN)} min`, c: C.nosig };
   if (L.gps === false) return { k: 'gpsoff', txt: 'GPS switched off', c: C.gpsoff };
-  if (!L.t || now - L.t > 3 * MIN) return { k: 'weak', txt: 'GPS weak', c: C.weak };
+  if (!L.t || now - L.t > 45000) return { k: 'weak', txt: 'GPS weak', c: C.weak };
   const sm = stoppedMins(u);
   if (sm >= s.stop) return { k: 'stop', txt: `Stopped ${sm} min`, c: C.stop };
+  if ((+L.spd || 0) < 2) return { k: 'stop', txt: 'Stopped', c: C.stop };
   return { k: 'move', txt: `Moving ${L.spd || 0} km/h`, c: C.move };
 }
 function sosOpen(u) { return Object.values(EVT).some(e => e.type === 'sos' && e.uid === u && !e.ackBy && Date.now() - e.t < 6 * HOUR); }
@@ -7426,7 +7427,8 @@ start = function () {
         metres += hav(points[i - 1][1], points[i - 1][2], points[i][1], points[i][2]);
       }
     }
-    const age = Date.now() - (live.t || 0), stale = age > 2 * 60000;
+    const age = Date.now() - (live.t || 0), stale = age > 45000;
+    const speedText = age <= 25000 && live.gps !== false ? `${Math.round(+live.spd || 0)} km/h` : '—';
     const sites = stations().filter(p => p.lat && p.lng && p.ps === (DEV[uid] || {}).ps && (!p.route || norm(p.route) === norm((DEV[uid] || {}).route)));
     const nearest = sites.map(p => ({ name: p.name, m: hav(+live.lat, +live.lng, +p.lat, +p.lng) })).sort((a, b) => a.m - b.m)[0];
     const incomingVoice = Object.values(EVT).filter(e => e.voice && e.uid && DEV[e.uid] && e.uid !== AU.uid).sort((a, b) => b.t - a.t)[0];
@@ -7439,7 +7441,7 @@ start = function () {
       </div>
       <small>Last GPS fix ${esc(ago(live.t))} · ${(+live.lat).toFixed(5)}, ${(+live.lng).toFixed(5)}</small>
       <div class="trip-grid">
-        <div><b>${Math.round(+live.spd || 0)} km/h</b><span>Speed</span></div>
+        <div><b>${speedText}</b><span>Speed</span></div>
         <div><b>${+live.bat >= 0 ? Math.round(+live.bat) + '%' : '—'}</b><span>Battery</span></div>
         <div><b>${fKm(metres)}</b><span>Today travelled</span></div>
       </div>

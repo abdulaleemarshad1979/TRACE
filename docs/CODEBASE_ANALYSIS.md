@@ -137,7 +137,7 @@ DEV[uid] = {
   officer: "SI K. Ramesh",   // Officer rank and name
   mobile: "+919876543210",   // Contact mobile number
   model: "Samsung Galaxy",   // Hardware model reported by device
-  v: "2.2.0",                // Installed client app version
+  v: "2.2.1",                // Installed client app version
   setup: 1730560000000,      // Epoch registration timestamp
   el: "Election 2026"        // Associated election designation
 };
@@ -492,5 +492,5 @@ npm run test:rules
 - [x] Verify API key safety: No embedded private production keys in public HTML.
 - [x] Verify human-in-the-loop dispatch: Auto-dispatch loop disabled; operator must confirm unit assignment.
 - [x] Verify security rules: Staging and production RTDB instances enforce `database.rules.json`.
-- [x] Verify mobile app version alignment: Patrol phones run version matching `version.json` (v2.2.0, versionCode 4).
+- [x] Verify release APK version alignment: the APK matches `version.json` (v2.2.1, versionCode 5).
 - [x] Verify route reconciliation: All 152 routes have explicit coverage status; proposed consolidations require administrative sign-off before field assignment.

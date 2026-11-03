@@ -111,9 +111,13 @@ public final class MainActivity extends Activity {
       if (telemetry != null && session != null) {
         String bat = session.get("battery");
         int q = outbox != null ? outbox.size() : 0;
+        long fixTime = 0;
+        try { fixTime = Long.parseLong(session.get("lastFix")); } catch (NumberFormatException ignored) { }
+        boolean freshFix = session.get("duty").equals("1") && fixTime > 0 && System.currentTimeMillis() - fixTime < 25000;
+        String speed = freshFix ? " · Speed " + session.get("lastSpeedKmh") + " km/h" : "";
         telemetry.setText(bat.isEmpty()
           ? "Telemetry ready · " + q + " queued"
-          : "Battery " + bat + "% · Signal " + session.get("signal") + "/4 · GPS " + session.get("gps") + " · " + q + " queued" + (session.get("syncError").isEmpty() ? "" : " · Upload retry needed"));
+          : "Battery " + bat + "% · Signal " + session.get("signal") + "/4 · GPS " + session.get("gps") + speed + " · " + q + " queued" + (session.get("syncError").isEmpty() ? "" : " · Upload retry needed"));
       }
       ui.postDelayed(this, 5000);
     }
@@ -126,8 +130,6 @@ public final class MainActivity extends Activity {
     try { stationCatalog = new JSONObject(session.get("stationCatalog")); } catch (Exception ignored) { }
 
     // Auto-configure backend defaults so officers never need to type database URLs or keys
-    if (session.get("interval").isEmpty()) session.set("interval", "8000");
-
     getWindow().setStatusBarColor(Color.rgb(10, 10, 14));
     getWindow().setNavigationBarColor(Color.rgb(15, 15, 20));
 

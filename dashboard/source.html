@@ -4656,9 +4656,10 @@ function status(u) {
   const age = now - L.up;
   if (age > s.nosig * MIN) return { k: 'nosig', txt: `No signal ${Math.floor(age / MIN)} min`, c: C.nosig };
   if (L.gps === false) return { k: 'gpsoff', txt: 'GPS switched off', c: C.gpsoff };
-  if (!L.t || now - L.t > 3 * MIN) return { k: 'weak', txt: 'GPS weak', c: C.weak };
+  if (!L.t || now - L.t > 45000) return { k: 'weak', txt: 'GPS weak', c: C.weak };
   const sm = stoppedMins(u);
   if (sm >= s.stop) return { k: 'stop', txt: `Stopped ${sm} min`, c: C.stop };
+  if ((+L.spd || 0) < 2) return { k: 'stop', txt: 'Stopped', c: C.stop };
   return { k: 'move', txt: `Moving ${L.spd || 0} km/h`, c: C.move };
 }
 function sosOpen(u) { return Object.values(EVT).some(e => e.type === 'sos' && e.uid === u && !e.ackBy && Date.now() - e.t < 6 * HOUR); }

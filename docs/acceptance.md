@@ -70,3 +70,9 @@ The milestone requested by the user is **not complete** until a real Route phone
 - Verified the monitor Auth UID `ULes0f1Oxea5SuX6zFp6UxsffUm2` and assigned its `admin` role. Verified the new route Auth UID `0bvdsuoCL2Wk2myL7zI6BTqhge13`, assigned its `route` role, and saved the `Staging` / `Test police station` / `Test route 1` assignment. Readback confirmed both role and assignment.
 - Deployed the single-file dashboard to `https://officer-8eb52.web.app`. HTTPS returned 200; the served file's SHA-256 matched `dist/index.html`. Headless Chromium showed the login form with staging config already selected.
 - `npm test` passed both Playwright cases after the hosting build. A physical Android phone was still not connected; only `emulator-5554` appeared in `adb devices`. No authenticated Route-to-Monitor GPS transmission has yet been observed.
+
+## GPS cadence update, 2026-11-03
+
+- Built and signed Android 2.2.1 with a 10-second requested location and live-status cadence. Android unit tests and lint passed; `tools/verify-release.py` confirmed APK version, checksum and unchanged signing certificate.
+- `npm test` passed 21 dashboard cases, including fresh zero-speed and stale-GPS status checks.
+- `adb devices` showed no connected phone. A real trip with the screen locked, network interruption, speed comparison and recovery after reconnection still needs field verification. The updated dashboard is built locally and has not been deployed.

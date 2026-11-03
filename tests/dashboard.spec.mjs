@@ -484,6 +484,13 @@ test('active tab displays 5 status cards, active units and active routes with cl
   // Verify card has metrics: Status, Speed, Battery, Last seen
   const firstCard = activeCards.first();
   await expect(firstCard.locator('.active-metrics')).toBeVisible();
+  const gpsStates = await page.evaluate(() => {
+    LIVE.unit1.spd = 0;
+    const stopped = status('unit1').k;
+    LIVE.unit1.t = Date.now() - 50000;
+    return { stopped, stale: status('unit1').k };
+  });
+  expect(gpsStates).toEqual({ stopped: 'stop', stale: 'weak' });
 
   // Click center on map button
   const centerBtn = firstCard.locator('button[data-act="centerDev"]').first();

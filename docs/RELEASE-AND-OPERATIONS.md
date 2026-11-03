@@ -1,4 +1,4 @@
-# TRACK 2.2.0 deployment
+# TRACK 2.2.1 deployment
 
 Monitor: https://officer-8eb52.web.app
 
@@ -9,7 +9,7 @@ The monitor and Android app use the same configured Firebase Realtime Database. 
 1. Sign into the monitor as the control-room administrator, then open **Settings → Routes → Assign member** beside the chosen route.
 2. Enter officer name/rank, a 10-digit Indian mobile number (or +91 format), and a password of at least 8 characters. For an existing mobile login, use its current password. This form does not reset passwords.
 3. For a route marked **Review coverage**, inspect the displayed polling locations and confirm the coverage before assigning it.
-4. Give that member the mobile number/password and the 2.2.0 APK. The member taps **Sign in and load my route**; only the assigned route is shown, with officer details filled automatically. Tap **Continue to duty**, grant precise location, turn GPS on and tap **START DUTY**.
+4. Give that member the mobile number/password and the 2.2.1 APK. The member taps **Sign in and load my route**; only the assigned route is shown, with officer details filled automatically. Tap **Continue to duty**, grant precise location, turn GPS on and tap **START DUTY**.
 5. One account identifies one phone. An account cannot be moved from another route or modified while on duty through this form. Administrator/monitor accounts are never demoted to route accounts.
 
 Mobile logins use a normalized internal Firebase email identifier (`phone91…@members.track.invalid`), with Firebase Authentication handling passwords. The dashboard creates the member through the [Firebase Auth REST API](https://firebase.google.com/docs/reference/rest/auth), without replacing the administrator session. Roles, assignment, route member details and coverage review are saved together in one database update. Passwords are never stored in the Realtime Database. Existing administrator email logins remain supported. An account created before an interrupted database save can safely be retried using the same credentials.
