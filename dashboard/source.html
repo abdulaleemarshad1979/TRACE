@@ -5594,9 +5594,17 @@ document.addEventListener('click', async e => {
         });
       }
       if (!used) { toast('No sheet with Latitude and Longitude columns. Use the template.'); return; }
+      const candidates = Object.entries(Object.assign({}, CONF.stations || {}, add));
+      for (const [id, p] of Object.entries(add)) {
+        if (!p.ps || !validLocation(p)) continue;
+        const peers = candidates.filter(([otherId, other]) => otherId !== id && other.ps === p.ps && (other.el || '') === (p.el || '') && validLocation(other));
+        if (peers.length >= 3 && peers.every(([, other]) => hav(+p.lat, +p.lng, +other.lat, +other.lng) > 30000)) {
+          delete add[id]; bad++; if (CONF.stations && CONF.stations[id]) upd--; else n--;
+        }
+      }
       if (n || upd) { await dbPatch('config/stations', add); CONF.stations = Object.assign({}, CONF.stations || {}, add); PS_N = Object.keys(CONF.stations).length; stationsSig = ''; }
       UI.fSd = ''; UI.fPs = ''; LS.set('fSd', ''); LS.set('fPs', ''); fitted = false; schedule('force'); paneDirty = 'force';
-      toast(`${n} polling locations added${upd ? `, ${upd} updated` : ''}.${bad ? ` ${bad} rows skipped: latitude/longitude missing or wrong.` : ''}`, 7000);
+      toast(`${n} polling locations added${upd ? `, ${upd} updated` : ''}.${bad ? ` ${bad} rows skipped: check latitude/longitude or isolated map position.` : ''}`, 7000);
     });
     else if (act === 'psClear') { if (confirm('Remove all polling locations?')) { await dbDel('config/stations'); CONF.stations = {}; PS_N = 0; stationsSig = ''; schedule('force'); paneDirty = 'force'; toast('All polling locations removed. Import the Excel file again.'); } }
     else if (act === 'printQr') {
@@ -5824,7 +5832,7 @@ function drawStations() {
     const size = rk === 2 ? 16 : 13;
     const html = `<div class="psm" style="width:${size}px;height:${size}px;background:${cv.c};border:${border};${rk === 2 ? 'transform:rotate(45deg);' : ''}"></div>${hot(r) ? `<div class="psw">⚠</div>` : ''}`;
     L.marker([+p.lat, +p.lng], { icon: L.divIcon({ html, className: '', iconSize: [size, size], iconAnchor: [size / 2, size / 2] }), zIndexOffset: hot(r) ? 500 : 0 })
-      .bindTooltip(`<b>${esc(p.name)}</b><br>${esc(p.cat || 'Normal')}${p.ps ? ' · ' + esc(p.ps) : ''}${p.route ? ' · ' + esc(p.route) : ''}<br><span style="color:${cv.c}">●</span> ${esc(cv.txt)}${v && v.by ? ' by ' + esc(dshort(v.by)) : ''}${v ? ` · ${v.n} visit${v.n === 1 ? '' : 's'} today` : ''}${r ? `<br><b style="color:${STAT_C[r.status] || '#333'}">${esc(String(r.status).toUpperCase())}</b> at ${fT(r.t)}${r.note ? ' – ' + esc(r.note) : ''}` : ''}${typeof voteTip === 'function' ? voteTip(p) : ''}`)
+      .bindTooltip(`<b>${esc(p.name)}</b><br>${esc(p.cat || 'Normal')}${p.ps ? ' · ' + esc(p.ps) : ''}${p.route ? ' · ' + esc(p.route) : ''}${p.coordinateNote ? `<br><b>${esc(p.coordinateNote)}</b>` : ''}<br><span style="color:${cv.c}">●</span> ${esc(cv.txt)}${v && v.by ? ' by ' + esc(dshort(v.by)) : ''}${v ? ` · ${v.n} visit${v.n === 1 ? '' : 's'} today` : ''}${r ? `<br><b style="color:${STAT_C[r.status] || '#333'}">${esc(String(r.status).toUpperCase())}</b> at ${fT(r.t)}${r.note ? ' – ' + esc(r.note) : ''}` : ''}${typeof voteTip === 'function' ? voteTip(p) : ''}`)
       .on('click', () => { UI.tab = 'loc'; UI.locSel = p.id; renderTabs(); renderPane(); })
       .addTo(LAYER_S);
   });

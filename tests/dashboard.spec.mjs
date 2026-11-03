@@ -127,6 +127,29 @@ test('polling stations group on overview maps and separate when zoomed in', asyn
   expect(result.expanded).toBeGreaterThan(result.grouped);
 });
 
+test('polling import skips a coordinate isolated from its police station', async ({ page }) => {
+  const stations = Object.fromEntries(Array.from({ length: 4 }, (_, i) => ['near' + i, {
+    name: 'Nearby ' + i, ps: 'Example Rural Police Station', route: 'Route 12', el: 'Election 2026',
+    lat: 17 + i * .002, lng: 81.8 + i * .002
+  }]));
+  const writes = await controlRoom(page, { '/config.json': {
+    routes: { r1: { ps: 'Example Rural Police Station', route: 'Route 12', sd: 'North', election: 'Election 2026', force: 'route' } },
+    stations, settings: { election: 'Election 2026', autoSos: false }
+  } });
+  await page.locator('#tabs [data-tab="setup"]').click();
+  await page.locator('details[data-sec="ps"] summary').click();
+  const chooser = page.waitForEvent('filechooser');
+  await page.locator('[data-act="psImport"]').click();
+  await (await chooser).setFiles({ name: 'locations.csv', mimeType: 'text/csv', buffer: Buffer.from(
+    'Election,Police Station,Route,Polling Location,Latitude,Longitude\n' +
+    'Election 2026,Example Rural Police Station,Route 12,Nearby new,17.003,81.803\n' +
+    'Election 2026,Example Rural Police Station,Route 12,Ocean outlier,16,81.734731\n'
+  ) });
+  await expect.poll(() => writes.length).toBe(1);
+  expect(Object.values(writes[0].body).map(p => p.name)).toEqual(['Nearby new']);
+  await expect(page.locator('.toast').last()).toContainText('1 rows skipped');
+});
+
 test('clear all archives past activity and attended SOS while keeping active SOS', async ({ page }) => {
   const now = Date.now();
   const writes = await controlRoom(page, {
@@ -159,10 +182,6 @@ for (const width of [1920, 1536, 1280, 768, 390]) {
         await expect(page.locator('.c-alerts')).toHaveCount(0);
         await expect(page.locator('#dSum .psbars')).toHaveCount(0);
       }
-      if (tab === 'setup') {
-        const routes = page.locator('details[data-sec="routes"]');
-        if (!(await routes.evaluate(el => el.open))) await routes.locator('summary').click();
-      }
       const issues = await page.evaluate(() => {
         const failures = [];
         if (document.documentElement.scrollWidth > innerWidth + 1) failures.push('page horizontal overflow');
@@ -177,6 +196,11 @@ for (const width of [1920, 1536, 1280, 768, 390]) {
       expect(issues, `${tab} at ${width}px`).toEqual([]);
       if (tab === 'setup') {
         await expect(page.locator('#map')).toBeHidden();
+        const routes = page.locator('details[data-sec="routes"]');
+        await expect.poll(async () => {
+          if (!(await routes.evaluate(el => el.open))) await routes.locator('summary').click();
+          return routes.locator('table.t').isVisible();
+        }).toBe(true);
         const work = await page.locator('.work').boundingBox(), pane = await page.locator('#pane').boundingBox();
         expect(pane.width).toBeGreaterThan(work.width - 5);
         expect(await page.locator('details[data-sec="routes"] table.t').evaluate(el => el.getBoundingClientRect().width)).toBeGreaterThanOrEqual(1000);

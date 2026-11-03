@@ -107,6 +107,12 @@ body.v-dash #panelBtn{display:none}
   .rd .bar .counts{grid-template-columns:repeat(3,minmax(0,1fr))}
   .rd .work{grid-template-columns:minmax(0,1fr) minmax(300px,42%)}
 }
+@media(min-width:761px) and (max-width:900px){
+  .rd .hdr{flex-wrap:wrap;gap:8px}
+  .rd .hdr .ttl{flex:1 1 180px;min-width:0}
+  .rd .hright{flex:1 1 100%;min-width:0;margin:0;flex-wrap:wrap;justify-content:flex-end;gap:6px}
+  .rd .hright .clock{margin-right:auto}
+}
 @media(max-width:760px){
   .rd .hdr{flex-wrap:wrap}
   .rd .hdr .ttl{flex:1 1 160px}
