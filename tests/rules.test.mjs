@@ -74,8 +74,8 @@ test('SI monitor reads only assigned route units and cannot write', async () => 
     await env.clearDatabase();
     await env.withSecurityRulesDisabled(async ctx => set(ref(ctx.database(), '/'), {
       roles: { admin: 'admin', si: 'si_monitor', routeA: 'route', routeB: 'route' },
-      siScopes: { si: { mandal: 'Kadiyam', routes: { r1: true } } },
-      config: { routes: { r1: { ps: 'Kadiyam PS', route: 'Route 1', memberUid: 'routeA' }, r2: { ps: 'Rajanagaram PS', route: 'Route 2', memberUid: 'routeB' } } },
+      siScopes: { si: { mandal: 'Kadiyam', routes: { r1: true }, stations: { s1: true } } },
+      config: { routes: { r1: { ps: 'Kadiyam PS', route: 'Route 1', memberUid: 'routeA' }, r2: { ps: 'Rajanagaram PS', route: 'Route 2', memberUid: 'routeB' } }, stations: { s1: { name: 'Kadiyam booth' }, s2: { name: 'Rajanagaram booth' } } },
       assignments: { routeA: { routeId: 'r1', ps: 'Kadiyam PS', route: 'Route 1' }, routeB: { routeId: 'r2', ps: 'Rajanagaram PS', route: 'Route 2' } },
       devices: { routeA: { ps: 'Kadiyam PS' }, routeB: { ps: 'Rajanagaram PS' } },
       live: { routeA: { lat: 17, lng: 81 }, routeB: { lat: 18, lng: 82 } },
@@ -86,6 +86,9 @@ test('SI monitor reads only assigned route units and cannot write', async () => 
     await assertFails(get(ref(si, 'siScopes')));
     await assertSucceeds(get(ref(si, 'config/routes/r1')));
     await assertFails(get(ref(si, 'config/routes/r2')));
+    await assertSucceeds(get(ref(si, 'config/stations/s1')));
+    await assertFails(get(ref(si, 'config/stations/s2')));
+    await assertFails(get(ref(si, 'config/stations')));
     await assertFails(get(ref(si, 'config')));
     await assertFails(get(ref(si, 'mandals')));
     await assertFails(get(ref(si, 'routes')));

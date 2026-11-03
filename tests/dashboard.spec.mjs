@@ -11,9 +11,10 @@ test('SI monitor shows only assigned mandal routes and their live phones', async
   await page.route('https://securetoken.googleapis.com/**', route => route.fulfill({ json: { id_token: 'si-token', expires_in: '3600', refresh_token: 'si-refresh', user_id: 'si-1' } }));
   const data = {
     '/roles/si-1.json': 'si_monitor',
-    '/siScopes/si-1.json': { mandal: 'Kadiyam', officer: 'SI Example', routes: { r1: true, r2: true } },
+    '/siScopes/si-1.json': { mandal: 'Kadiyam', officer: 'SI Example', routes: { r1: true, r2: true }, stations: { s1: true } },
     '/config/routes/r1.json': { ps: 'Kadiyam PS', route: 'Route 1', memberUid: 'unit-1' },
     '/config/routes/r2.json': { ps: 'Kadiyam PS', route: 'Route 2' },
+    '/config/stations/s1.json': { name: 'Kadiyam polling booth', ps: 'Kadiyam PS', route: 'Route 1', lat: 16.91, lng: 81.84 },
     '/devices/unit-1.json': { ps: 'Kadiyam PS', officer: 'HC Example', mobile: '9000000000' },
     '/live/unit-1.json': { lat: 16.91, lng: 81.84, up: now, gps: true, duty: true },
     '/events.json': { sos1: { uid: 'unit-1', type: 'sos', t: now } }
@@ -30,11 +31,14 @@ test('SI monitor shows only assigned mandal routes and their live phones', async
   await expect(page.locator('#routes')).toContainText('HC Example');
   await expect(page.locator('#routes')).toContainText('No assigned phone');
   await expect(page.locator('#alert')).toContainText('1 open SOS');
+  await expect(page.locator('#mapNote')).toContainText('1 polling booths');
+  expect(await page.locator('#map .leaflet-interactive').count()).toBeGreaterThanOrEqual(2);
   expect(await page.evaluate(() => localStorage.getItem('rm_au'))).toBeNull();
   expect(JSON.parse(await page.evaluate(() => sessionStorage.getItem('rm_si_au'))).uid).toBe('si-1');
   expect(reads).not.toContain('/config/routes/r3.json');
   expect(reads).not.toContain('/devices.json');
   expect(reads).not.toContain('/live.json');
+  expect(reads).not.toContain('/config/stations.json');
 });
 
 test('SI monitor accepts the command control room mobile login', async ({ page }) => {
@@ -78,9 +82,10 @@ test('viewer signs in on the main page and sees only assigned routes', async ({ 
   await page.route('https://identitytoolkit.googleapis.com/**', route => { signIns.push(route.request().postDataJSON()); route.fulfill({ json: { localId: 'si-1', idToken: 'si-token', refreshToken: 'si-refresh', expiresIn: '3600' } }); });
   const data = {
     '/roles/si-1.json': 'si_monitor',
-    '/siScopes/si-1.json': { mandal: 'Kadiyam', officer: 'Example Officer', rank: 'Incharge', routes: { r1: true, r2: true } },
+    '/siScopes/si-1.json': { mandal: 'Kadiyam', officer: 'Example Officer', rank: 'Incharge', routes: { r1: true, r2: true }, stations: { s1: true } },
     '/config/routes/r1.json': { ps: 'Kadiyam PS', route: 'Route 1', memberUid: 'unit-1' },
     '/config/routes/r2.json': { ps: 'Kadiyam PS', route: 'Route 2' },
+    '/config/stations/s1.json': { name: 'Kadiyam polling booth', ps: 'Kadiyam PS', route: 'Route 1', lat: 16.91, lng: 81.84 },
     '/devices/unit-1.json': { officer: 'HC Example' },
     '/live/unit-1.json': { lat: 16.91, lng: 81.84, up: now, gps: true, duty: true },
     '/events.json': null
@@ -98,6 +103,7 @@ test('viewer signs in on the main page and sees only assigned routes', async ({ 
   await expect(page.locator('#viewerOfficer')).toContainText('Incharge');
   await expect(page.locator('#viewerRoutes')).toContainText('No assigned phone');
   await expect(page.locator('#viewerRoutes')).toContainText('HC Example');
+  await expect(page.locator('#viewerMapNote')).toContainText('1 polling booths');
   await expect(page).toHaveURL(url);
   expect(signIns[0].email).toBe('si919876543210@members.track.invalid');
   expect(reads).not.toContain('/devices.json');
@@ -140,7 +146,49 @@ test('administrator creates a scoped viewer login with rank', async ({ page }) =
   await dialog.getByRole('button', { name: 'Save viewer login' }).click();
   await expect(dialog).toHaveCount(0);
   expect(signUps[0].email).toBe('si919876543210@members.track.invalid');
-  expect(writes).toContainEqual({ pathname: '/.json', body: { 'roles/si-new': 'si_monitor', 'siScopes/si-new': { mandal: 'Kadiyam', officer: 'SI Example', rank: 'Striking Force', mobile: '+919876543210', routes: { r1: true } } } });
+  expect(writes).toContainEqual({ pathname: '/.json', body: { 'roles/si-new': 'si_monitor', 'siScopes/si-new': { mandal: 'Kadiyam', officer: 'SI Example', rank: 'Striking Force', mobile: '+919876543210', routes: { r1: true }, stations: { s1: true } } } });
+});
+
+test('administrator can list, edit and remove viewer access', async ({ page }) => {
+  const writes = await controlRoom(page);
+  const scope = { mandal: 'Kadiyam', officer: 'Existing Officer', rank: 'Incharge', mobile: '+919876543210', routes: { r1: true }, stations: { s1: true } };
+  await page.route('https://trace-demo.firebaseio.test/siScopes.json**', route => route.fulfill({ json: { 'si-existing': scope } }));
+  await page.locator('#tabs [data-tab="setup"]').click();
+  await page.getByRole('button', { name: 'Manage viewer logins' }).click();
+  const list = page.getByRole('dialog', { name: 'Viewer logins' });
+  await expect(list).toContainText('Existing Officer');
+  await list.getByRole('button', { name: 'Edit' }).click();
+  const edit = page.getByRole('dialog', { name: 'Edit viewer login' });
+  await edit.locator('[name=officer]').fill('Updated Officer');
+  await edit.getByRole('button', { name: 'Save viewer login' }).click();
+  await expect(edit).toHaveCount(0);
+  expect(writes).toContainEqual({ pathname: '/.json', body: { 'roles/si-existing': 'si_monitor', 'siScopes/si-existing': { ...scope, officer: 'Updated Officer' } } });
+  await page.getByRole('button', { name: 'Manage viewer logins' }).click();
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('dialog', { name: 'Viewer logins' }).getByRole('button', { name: 'Remove' }).click();
+  await expect.poll(() => writes.some(w => w.body['roles/si-existing'] === null && w.body['siScopes/si-existing'] === null)).toBe(true);
+});
+
+test('selecting a mandal shows only its matching routes and booth assignments', async ({ page }) => {
+  await controlRoom(page);
+  await page.evaluate(() => {
+    CONF.routes = {
+      k1: { ps: 'Kadiyam PS', route: 'Route 1' },
+      n1: { ps: 'Nidadavole PS', route: 'Route 1' }
+    };
+    CONF.stations = {
+      boothK: { name: 'Kadiyam booth', ps: 'Kadiyam PS', route: 'Route 1', lat: 17, lng: 81.8 },
+      boothN: { name: 'Nidadavole booth', ps: 'Nidadavole PS', route: 'Route 1', lat: 17.1, lng: 81.9 }
+    };
+  });
+  await page.locator('#tabs [data-tab="setup"]').click();
+  await page.getByRole('button', { name: 'Create viewer login' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Create viewer login' });
+  await dialog.locator('[name=mandal]').selectOption('Kadiyam');
+  await expect(dialog.locator('[data-si-row]')).toHaveCount(2);
+  await expect(dialog.locator('[data-si-row]').filter({ hasText: 'Kadiyam PS' })).toBeVisible();
+  await expect(dialog.locator('[data-si-row]').filter({ hasText: 'Nidadavole PS' })).toBeHidden();
+  expect(await page.evaluate(() => siStationIds(['k1']))).toEqual(['boothK']);
 });
 
 test('uses the exact staging Realtime Database and waits for sign-in', async ({ page }) => {

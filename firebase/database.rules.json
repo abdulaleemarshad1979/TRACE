@@ -31,6 +31,11 @@
         "$rid": {
           ".read": "auth != null && (root.child('roles').child(auth.uid).val() == 'si_monitor' && root.child('siScopes').child(auth.uid).child('routes').child($rid).val() == true)"
         }
+      },
+      "stations": {
+        "$sid": {
+          ".read": "auth != null && (root.child('roles').child(auth.uid).val() == 'si_monitor' && root.child('siScopes').child(auth.uid).child('stations').child($sid).val() == true)"
+        }
       }
     },
     "devices": {

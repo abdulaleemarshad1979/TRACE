@@ -76,3 +76,10 @@ The milestone requested by the user is **not complete** until a real Route phone
 - Built and signed Android 2.2.1 with a 10-second requested location and live-status cadence. Android unit tests and lint passed; `tools/verify-release.py` confirmed APK version, checksum and unchanged signing certificate.
 - `npm test` passed 21 dashboard cases, including fresh zero-speed and stale-GPS status checks.
 - `adb devices` showed no connected phone. A real trip with the screen locked, network interruption, speed comparison and recovery after reconnection still needs field verification. The updated dashboard is built locally and has not been deployed.
+
+## Mandal viewer deployment, 2026-11-03
+
+- Deployed the dashboard, standalone viewer page, and Realtime Database rules to `officer-8eb52` together. Readback of the rules matched `firebase/database.rules.json`; both served HTML files matched the local build by SHA-256 and returned HTTP 200.
+- The existing Chagallu viewer scope was backed up and linked to 18 polling booths from its 8 assigned routes. Readback confirmed its original account fields and routes remained intact.
+- The first CLI booth update unexpectedly replaced the viewer scope and left its role absent. Both were restored from the saved scope and the known `si_monitor` role. Final readback matched the complete intended scope and role; route and station catalogs matched their pre-backfill copies. Do not use a root `database:update` with slash-separated keys for future scope backfills.
+- Browser tests passed (35 full-suite cases); Realtime Database emulator rule tests passed. A headless browser loaded the live sign-in page. No physical route phone was available to verify movement on the deployed viewer map.

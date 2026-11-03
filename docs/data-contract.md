@@ -7,7 +7,8 @@ The supplied HTML and two APK archives were used as reverse-engineering referenc
 | `roles/{uid}` | `admin`, `monitor`, or `route` | Admin | Owner, admin |
 | `assignments/{uid}` | `sd`, `ps`, `route`, `officer`, `mobile` | Admin | Owner, admin |
 | `config/routes/{id}` | Route definition | Admin | Signed-in users |
-| `config/stations/{id}` | Polling site and coordinates | Admin | Signed-in users |
+| `config/stations/{id}` | Polling site and coordinates | Admin | Control room; viewers only for IDs in their scope |
+| `siScopes/{uid}` | Viewer mandal, officer, rank, mobile, allowed route IDs and polling booth IDs | Admin | Owner, admin |
 | `config/settings` | Thresholds and election name | Admin | Signed-in users |
 | `devices/{uid}` | Assigned unit metadata, app version | Owner after approved assignment; admin | Control room, owner |
 | `live/{uid}` | `lat`, `lng`, GPS timestamp `t`, server contact time `up`, `gps`, `spd`, `hdg`, `acc`, `bat`, `sig`, `duty`, `sessionId` | Owner; admin | Control room, owner |
