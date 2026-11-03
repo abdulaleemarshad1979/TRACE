@@ -802,10 +802,6 @@ header.top .logo{width:46px;height:46px;flex:none;filter:drop-shadow(0 1px 3px r
 .pin.car{display:flex;align-items:center;justify-content:center}.pin.car svg{width:16px;height:16px}.pin.car i{width:6px;height:6px;border-radius:50%;background:#fff}
 .vcl{background:#fff;border:4px solid #1e7b45;border-radius:18px;padding:2px 8px;font:700 12px var(--sans);color:#15233a;white-space:nowrap;box-shadow:0 1px 5px rgba(0,0,0,.4);display:inline-flex;gap:5px;align-items:center;cursor:pointer}
 .vcl b{background:#15233a;color:#fff;border-radius:10px;padding:0 6px}
-.psbars{display:flex;flex-direction:column;gap:5px;margin:6px 0}
-.psb{display:grid;grid-template-columns:92px 1fr 64px;gap:8px;align-items:center;font-size:12.5px}
-.psb .bar{display:flex;height:14px;border-radius:7px;overflow:hidden;background:#eef1f5}.psb .bar i{display:block;height:100%}
-.psb .nm{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.psb .vc{text-align:right;color:var(--ink2)}
 .tline{width:100%;height:auto;margin:4px 0}
 /* big screen mode */
 body.wall{--bg:#0b1322;--paper:#121d31;--ink:#e8edf5;--ink2:#9fb0c8;--line:#26354f}
@@ -1258,16 +1254,8 @@ body.wall .rd .work{grid-template-columns:minmax(0,1fr) 40vw;margin:0 10px 10px}
 .pxrow{gap:14px;align-items:center;font-size:13px;margin:6px 0}.pxrow select{margin-left:6px}.pxauto{display:flex;align-items:center;gap:6px}
 .vtag{display:inline-block;border:1px solid;border-radius:9px;padding:0 6px;font-size:11px;font-weight:700;line-height:16px;margin-right:2px}
 .nsl>div{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 2px;border-bottom:1px solid var(--line);font-size:13px}
-.psrs{display:flex;flex-direction:column;gap:10px;margin:6px 0}
-.psr{border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:#fff}
-.psrh{display:flex;justify-content:space-between;gap:8px;font-size:13.5px;margin-bottom:4px}.psrh span{color:var(--ink2);font-size:12.5px}
-.psl{display:grid;grid-template-columns:96px 1fr minmax(120px,auto);gap:8px;align-items:center;font-size:12.5px;margin:3px 0}
-.psl .bar{display:flex;height:12px;border-radius:6px;overflow:hidden;background:#eef1f5}.psl .bar i{display:block;height:100%}
-.psl .vc{text-align:right;color:var(--ink2);white-space:nowrap}
-@media (max-width:760px){.psl{grid-template-columns:84px 1fr;}.psl .vc{grid-column:1/-1;text-align:left}}
-body.wall .psr{background:#17243b;border-color:#26354f}body.wall .psl .bar{background:#1d2c46}
 /* the top filter bar is also called .bar: keep it from reshaping the small progress bars */
-.rd .psl .bar,.rd .psb .bar,.rd .pane .bar,.rd .dsum .bar{padding:0;gap:0;align-items:stretch;flex-wrap:nowrap}
+.rd .pane .bar,.rd .dsum .bar{padding:0;gap:0;align-items:stretch;flex-wrap:nowrap}
 </style></head><body>
 <div id="login" class="login" hidden>
   <div class="card">
@@ -1332,7 +1320,6 @@ body.wall .psr{background:#17243b;border-color:#26354f}body.wall .psl .bar{backg
         <div class="mleg" id="dLeg"></div>
       </div>
       <div class="card c-donut"><div class="ch"><h4><i>📊</i>Unit Status Overview</h4><button type="button" class="lnk" data-tab="veh">View all</button></div><div id="dDonut"></div></div>
-      <div class="card c-alerts"><div class="ch"><h4><i>🔔</i>Recent Alerts &amp; Activities</h4><button type="button" class="lnk" data-tab="alerts">View all</button></div><div id="dAlerts"></div></div>
       <div class="card c-ps"><div class="ch"><h4><i>🏫</i>Polling Stations Status</h4><button type="button" class="lnk" data-tab="loc">View all</button></div><div id="dPs"></div></div>
       <div class="card c-rt"><div class="ch"><h4><i>🛣</i>Route Monitoring</h4><button type="button" class="lnk" data-tab="veh">View all</button></div><div id="dRt"></div></div>
       <div class="card c-uw"><div class="ch"><h4><i>👮</i>Unit Wise Status</h4><button type="button" class="lnk" data-tab="veh">View all</button></div><div id="dUw"></div></div>
@@ -4945,7 +4932,7 @@ function renderMap() {
   }
 }
 function selectDev(u, pan) {
-  UI.sel = u; if (UI.tab !== 'veh' && UI.tab !== 'inc' && UI.tab !== 'active') UI.tab = 'veh';
+  UI.sel = u; UI.tab = 'veh';
   const Lv = LIVE[u]; if (pan !== false && Lv && Lv.lat != null) MAP.setView([Lv.lat, Lv.lng], Math.max(MAP.getZoom(), 14));
   schedule('force'); paneDirty = 'force';
   setTimeout(() => { const el = document.querySelector(`.active-card[data-u="${u}"], .veh[data-u="${u}"]`); if (el) el.scrollIntoView({ block: 'nearest' }); }, 500);
@@ -4954,7 +4941,7 @@ function selectDev(u, pan) {
 function centerUnit(u) {
   if (!u) return;
   UI.sel = u;
-  if (UI.tab !== 'veh' && UI.tab !== 'inc' && UI.tab !== 'active') UI.tab = 'active';
+  UI.tab = 'veh';
   const Lv = LIVE[u];
   if (Lv && Lv.lat != null && MAP) {
     MAP.setView([Lv.lat, Lv.lng], Math.max(MAP.getZoom(), 15));
@@ -5193,11 +5180,13 @@ function paneAlerts() {
   prob.sort((a, b) => (order[a.st.k] ?? 4) - (order[b.st.k] ?? 4));
   h += `<h3>Needs attention now (${prob.length})</h3>` + (prob.length ? prob.map(x => `<div class="alert"><div class="ic" style="color:${x.st.c}">●</div><div class="tx"><b>${esc(dname(x.u))}</b> — ${esc(['move'].includes(x.st.k) ? '' : x.st.txt)}${x.off ? ` ${fKm(x.off)} away from its route's polling locations` : ''}${x.L.bat >= 0 && x.L.bat < 20 && !x.L.chg ? ` · battery ${x.L.bat}%, not charging` : ''}<br><span class="note">${esc(DEV[x.u].officer || '')} ${esc(DEV[x.u].mobile || '')} · last update ${ago(x.L.up)}</span>
     <div class="row">${DEV[x.u].mobile ? `<a class="btn small" href="tel:${esc(DEV[x.u].mobile)}">Call</a>` : ''}<button class="btn small" data-act="sel" data-u="${x.u}">Show</button></div></div></div>`).join('') : '<p class="note">All phones are reporting normally.</p>');
-  const feed = Object.entries(EVT).filter(([, e]) => e.type !== 'sos' && (e.type === 'msg' ? (e.dev === '*' || visible(e.dev)) : visible(e.uid))).sort((a, b) => b[1].t - a[1].t).slice(0, 60);
+  const feed = Object.entries(EVT).filter(([, e]) => e.type !== 'sos' && e.t > alertClearTime() && (e.type === 'msg' ? (e.dev === '*' || visible(e.dev)) : visible(e.uid))).sort((a, b) => b[1].t - a[1].t).slice(0, 60);
   const lbl = e => ({ votes: `votes polled at ${e.sname || ''}: ${e.n}`, start: 'started duty', blocked: `second phone BLOCKED (${e.mobile || ''} ${e.model || ''}) – route already active on ${e.holderMobile || 'another phone'}`, stop: 'stopped duty (PIN)', reached: 'reached the spot', ack: 'received the message', msg: (e.dev === '*' ? `broadcast to ${e.n || ''} vehicles: “` : 'message sent: “') + (e.text || '') + '”', loc: `reported ${e.sname || 'a polling location'}: ${String(e.status || '').toUpperCase()}${e.note ? ' – ' + e.note : ''}`, photo: 'sent a photo' + (e.note ? ': ' + e.note : '') }[e.type] || e.type);
   h += '<h3>Activity today</h3>' + (feed.length ? `<div class="tw"><table class="t"><tbody>${feed.map(([, e]) => `<tr><td>${fT(e.t)}</td><td>${esc(e.dev === '*' ? (e.scope || 'All vehicles') : dname(e.type === 'msg' ? e.dev : e.uid))}</td><td>${esc(lbl(e))}${e.type === 'photo' && e.pid ? ` <button class="btn small" data-act="photo" data-pid="${esc(e.pid)}">View</button>` : ''}${e.type === 'msg' && e.voice ? ` <button class="btn small" data-act="voicePlay" data-id="${esc(e.voice)}">▶ Play</button>` : ''}</td></tr>`).join('')}</tbody></table></div>` : '<p class="note">Nothing yet.</p>');
   return h;
 }
+
+function alertClearTime() { return +LS.get('alertsCleared_' + (AU && AU.uid || 'guest'), 0) || 0; }
 
 /* ---------- incident ---------- */
 function setIncident(lat, lng, name) {
@@ -5523,11 +5512,11 @@ document.addEventListener('click', async e => {
     else if (act === 'sumToggle') { const o = !+LS.get('sumOpen', 1); try { LS.set('sumOpen', o ? 1 : 0); } catch (x) {} renderPane(); }
     else if (act === 'msg') msgModal(a.dataset.u);
     else if (act === 'editDev') devModal(a.dataset.u);
-    else if (act === 'goto') MAP.setView([+a.dataset.lat, +a.dataset.lng], 16);
+    else if (act === 'goto') { UI.tab = 'veh'; MAP.setView([+a.dataset.lat, +a.dataset.lng], 16); renderTabs(); renderPane(); }
     else if (act === 'ack') { const id = a.dataset.id; await dbPatch(`events/${id}`, { ackBy: AU.email, ackAt: Date.now() }); const ev = EVT[id]; if (ev) { ev.ackBy = AU.email; ev.ackAt = Date.now(); } toast('SOS marked attended. The alert is cleared.'); schedule('force'); }
     else if (act === 'sosClear') { const id = a.dataset.id; const ev = EVT[id]; if (!ev) return; if (!ev.ackBy) { if (!confirm('This SOS has not been marked attended. Remove it anyway?')) return; await dbPatch(`events/${id}`, { ackBy: AU.email, ackAt: Date.now() }); ev.ackBy = AU.email; ev.ackAt = Date.now(); } await dbPatch(`events/${id}`, { cleared: true, clearedBy: AU.email, clearedAt: Date.now() }); ev.cleared = true; toast('SOS removed from the list.'); schedule('force'); }
     else if (act === 'incHere') setIncident(+a.dataset.lat, +a.dataset.lng, a.dataset.name);
-    else if (act === 'incMode') { UI.incMode = !UI.incMode; MAP.getContainer().style.cursor = UI.incMode ? 'crosshair' : ''; renderPane(); if (UI.incMode) toast('Click the incident place on the map'); }
+    else if (act === 'incMode') { UI.incMode = !UI.incMode; MAP.getContainer().style.cursor = UI.incMode ? 'crosshair' : ''; if (UI.incMode) { UI.tab = 'loc'; renderTabs(); toast('Click the incident place on the map'); } renderPane(); }
     else if (act === 'incClear') { UI.inc = null; LAYER_I.clearLayers(); renderPane(); }
     else if (act === 'incLL') { const m = /(-?\d+\.\d+)[,\s]+(-?\d+\.\d+)/.exec($('#incLL').value); if (m) setIncident(+m[1], +m[2], m[1] + ', ' + m[2]); else toast('Type the location as: 16.9604, 82.2381'); }
     else if (act === 'sendTo') { const I = UI.inc; msgModal(a.dataset.u, `Go to ${I.name} immediately (https://maps.google.com/?q=${I.lat.toFixed(5)},${I.lng.toFixed(5)}). Press REACHED SPOT on arrival.`); }
@@ -5800,16 +5789,36 @@ let stationsSig = '';
 function drawStations() {
   updateVisits();
   const LS_ = locStatus();
-  const far = MAP.getZoom() < 12;
+  const zoom = MAP.getZoom();
+  const clustered = zoom < 15;
   const list = stations().filter(p => validLocation(p) && (!UI.fSd || !p.ps || routes().some(r => r.ps === p.ps && r.sd === UI.fSd) || !routes().length) && (!UI.fPs || p.ps === UI.fPs));
-  const b = (typeof MAP !== 'undefined' && MAP && MAP.getBounds) ? MAP.getBounds().pad(0.3) : null;
-  const inView = p => !b || b.contains([+p.lat, +p.lng]) || hot(LS_[p.id]) || UI.locSel === p.id;
+  const b = (typeof MAP !== 'undefined' && MAP && MAP.getBounds) ? MAP.getBounds() : null;
+  const inView = p => !b || b.contains([+p.lat, +p.lng]);
   const visibleStations = list.filter(inView);
   const bKey = b ? [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].map(n => n.toFixed(2)).join(',') : '';
-  const sig = (far ? 'F' : 'N') + ':' + bKey + ':' + visibleStations.length + ':' + visibleStations.map(p => p.id + ':' + cover(p.id).k + ((LS_[p.id] || {}).status || '') + (hot(LS_[p.id]) ? 'h' : '')).join(',') + (typeof votesSig === 'function' ? votesSig() : '');
+  const sig = zoom + ':' + bKey + ':' + visibleStations.length + ':' + visibleStations.map(p => p.id + ':' + cover(p.id).k + ((LS_[p.id] || {}).status || '') + (hot(LS_[p.id]) ? 'h' : '')).join(',') + (typeof votesSig === 'function' ? votesSig() : '');
   if (sig === stationsSig) return;
   stationsSig = sig; LAYER_S.clearLayers();
+  const groups = new Map();
   visibleStations.forEach(p => {
+    const point = MAP.project([+p.lat, +p.lng], zoom);
+    const key = clustered && UI.locSel !== p.id ? `${Math.floor(point.x / 48)}:${Math.floor(point.y / 48)}` : p.id;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(p);
+  });
+  groups.forEach(group => {
+    if (group.length > 1) {
+      const lat = group.reduce((n, p) => n + +p.lat, 0) / group.length;
+      const lng = group.reduce((n, p) => n + +p.lng, 0) / group.length;
+      const urgent = group.some(p => hot(LS_[p.id]));
+      const size = group.length > 99 ? 38 : 32;
+      L.marker([lat, lng], { icon: L.divIcon({ html: `<div class="pscluster${urgent ? ' urgent' : ''}">${group.length}</div>`, className: '', iconSize: [size, size], iconAnchor: [size / 2, size / 2] }), zIndexOffset: urgent ? 500 : 0 })
+        .bindTooltip(`${group.length} polling stations · click to zoom in`)
+        .on('click', () => MAP.setView([lat, lng], Math.min(zoom + 2, 17)))
+        .addTo(LAYER_S);
+      return;
+    }
+    const p = group[0];
     const cv = cover(p.id), r = LS_[p.id], rk = sensRank(p.cat), v = VISIT[p.id];
     const border = rk === 2 ? '3px solid #111' : rk === 1 ? '2px solid #444' : '2px solid #fff';
     const size = rk === 2 ? 16 : 13;
@@ -6133,17 +6142,6 @@ function drawGroups(ids) {
       .on('click', () => MAP.fitBounds(L.latLngBounds(us.map(u => [LIVE[u].lat, LIVE[u].lng])).pad(0.3), { maxZoom: 14 })).addTo(LAYER_G);
   });
 }
-function psBars(N) {
-  const pss = [...new Set(routes().map(r => r.ps).concat(Object.values(DEV).filter(d => inElection(d.el)).map(d => d.ps)).concat(stations().map(p => p.ps)).filter(Boolean))]
-    .filter(ps => (!UI.fPs || ps === UI.fPs) && (!UI.fSd || routes().some(r => r.ps === ps && r.sd === UI.fSd) || Object.values(DEV).some(d => d.ps === ps && d.sd === UI.fSd))).sort();
-  if (!pss.length) return '';
-  return `<h3>Police station-wise</h3><div class="psbars">${pss.map(ps => {
-    const st = stations().filter(p => p.ps === ps), c = { g: 0, y: 0, r: 0 }; st.forEach(p => c[cover(p.id).k]++);
-    const us = Object.keys(DEV).filter(u => DEV[u].ps === ps && inElection(DEV[u].el)), act = us.filter(u => ['move', 'stop', 'weak'].includes(status(u).k)).length;
-    const tot = st.length || 1, hotN = st.filter(p => hot(N.LS_[p.id])).length;
-    return `<div class="psb" title="${c.g} visited · ${c.y} due · ${c.r} overdue"><span class="nm">${esc(ps)}${hotN ? ' ⚠' : ''}</span><span class="bar">${st.length ? `<i style="width:${c.g * 100 / tot}%;background:#1e7b45"></i><i style="width:${c.y * 100 / tot}%;background:#e0a800"></i><i style="width:${c.r * 100 / tot}%;background:#c0392b"></i>` : ''}</span><span class="vc">${act}/${us.length} 🚓${typeof psTurn === 'function' ? psTurn(st) : ''}</span></div>`;
-  }).join('')}</div><p class="note" style="margin-top:0">Bar: polling locations green / yellow / red · 🚓 route mobiles active / registered</p>`;
-}
 function timeline() {
   const ev = [];
   Object.values(EVT).forEach(e => { if (dayKey(e.t) !== TODAY || !visible(e.uid)) return; if (e.type === 'sos') ev.push([e.t, 0, '#c0392b', 'SOS ' + dname(e.uid)]); else if (e.type === 'loc' && e.status !== 'normal') ev.push([e.t, 1, STAT_C[e.status] || '#d35400', `${e.status} – ${e.sname}`]); });
@@ -6159,7 +6157,7 @@ function timeline() {
   return `<h3>Today</h3>${svg}</svg>`;
 }
 const _paneSum = paneSum;
-paneSum = function () { const N = numbers(); return _paneSum() + psBars(N) + timeline(); };
+paneSum = function () { return _paneSum() + timeline(); };
 
 /* scrolling news strip */
 function ticker() {
@@ -6434,8 +6432,8 @@ function drawPhotos(force) {
 
 /* Photos strip at the top of the Alerts tab */
 function photoStrip() {
-  const all = photoEvents(), list = all.slice(0, 12);
-  if (!all.length) return `<h3>📷 Photos today</h3><p class="note">No photo received today. Photos sent from the route app (SEND PHOTO) appear here and as 📷 pins on the map.</p>`;
+  const all = photoEvents().filter(([, e]) => e.t > alertClearTime()), list = all.slice(0, 12);
+  if (!all.length) return `<h3>📷 Photos today</h3><p class="note">No recent photos. Photos sent from the route app (SEND PHOTO) appear here and as 📷 pins on the map.</p>`;
   list.forEach(([, e]) => { if (!PHC[e.pid]) loadPhoto(e.pid); });
   return `<h3>📷 Photos today (${all.length})</h3><div class="phgrid">${list.map(([, e]) => {
     const p = PHC[e.pid];
@@ -6444,7 +6442,20 @@ function photoStrip() {
   }).join('')}</div>${all.length > list.length ? `<p class="note">Showing the latest 12. Older photos are in "Activity today" below.</p>` : ''}`;
 }
 const _paneAlertsPh = paneAlerts;
-paneAlerts = function () { return photoStrip() + _paneAlertsPh(); };
+paneAlerts = function () { return `<div class="alerts-toolbar"><div><h2>Alerts</h2><p>Current issues and activity</p></div><button type="button" class="btn small" data-act="alertsClearAll">Clear all</button></div>` + photoStrip() + _paneAlertsPh(); };
+document.addEventListener('click', async e => {
+  const button = e.target.closest && e.target.closest('[data-act="alertsClearAll"]');
+  if (!button) return;
+  button.disabled = true;
+  try {
+    const acknowledged = Object.entries(EVT).filter(([, event]) => event.type === 'sos' && event.ackBy && !event.cleared && visible(event.uid) && Date.now() - event.t < 12 * HOUR);
+    await Promise.all(acknowledged.map(([id]) => dbPatch(`events/${id}`, { cleared: true, clearedBy: AU.email, clearedAt: Date.now() })));
+    acknowledged.forEach(([id]) => { EVT[id].cleared = true; });
+    LS.set('alertsCleared_' + (AU && AU.uid || 'guest'), Date.now());
+    renderTabs(); renderPane();
+    toast('Activity cleared. Active SOS and current issues remain visible.');
+  } catch (error) { button.disabled = false; toast(error.message, 7000); }
+});
 
 /* pop-up on arrival that stays for 20 s with a View photo button */
 function photoToast(e) {
@@ -6829,27 +6840,6 @@ document.addEventListener('click', e => {
   e.stopPropagation(); psEditModal(a.dataset.id);
 }, true);
 
-/* ===== Police station-wise: route mobiles bar (active / no signal / not started) + polling locations bar, matched loosely by name ===== */
-const psKey = x => String(x || '').toLowerCase().replace(/\bp\.?s\.?$/, '').replace(/[^a-z0-9]+/g, ' ').trim();
-psBars = function (N) {
-  const names = {};
-  routes().forEach(r => { if (r.ps) names[psKey(r.ps)] = names[psKey(r.ps)] || r.ps; });
-  stations().forEach(p => { if (p.ps) names[psKey(p.ps)] = names[psKey(p.ps)] || p.ps; });
-  devIds().forEach(u => { const d = DEV[u]; if (d.ps) names[psKey(d.ps)] = names[psKey(d.ps)] || d.ps; });
-  let keys = Object.keys(names).filter(k => k && (!UI.fPs || psKey(UI.fPs) === k) && (!UI.fSd || routes().some(r => psKey(r.ps) === k && r.sd === UI.fSd))).sort();
-  if (!keys.length) return '';
-  const row = k => {
-    const R = routes().filter(r => psKey(r.ps) === k), ids = Object.keys(DEV).filter(u => psKey(DEV[u].ps) === k && visible(u) && !isBlocked(u));
-    let act = 0, bad = 0; ids.forEach(u => { const s = status(u).k; if (['move', 'stop', 'weak'].includes(s)) act++; else bad++; });
-    const total = Math.max(R.length, ids.length), none = Math.max(0, total - act - bad), T = total || 1;
-    const st = stations().filter(p => psKey(p.ps) === k), c = { g: 0, y: 0, r: 0 }; st.forEach(p => c[cover(p.id).k]++); const S2 = st.length || 1;
-    const hotN = st.filter(p => hot(N.LS_[p.id])).length;
-    return `<div class="psr"><div class="psrh"><b>${esc(names[k])}${hotN ? ' ⚠' : ''}</b><span>${typeof psTurn === 'function' ? psTurn(st).replace(/^ · /, '🗳 ') : ''}</span></div>
-      <div class="psl"><span>🚓 Mobiles</span><span class="bar" title="${act} active · ${bad} no signal / GPS off · ${none} not started"><i style="width:${act * 100 / T}%;background:#1e9e57"></i><i style="width:${bad * 100 / T}%;background:#e0413a"></i><i style="width:${none * 100 / T}%;background:#b8c2cf"></i></span><span class="vc"><b style="color:#1e9e57">${act}</b>/${total}${bad ? ` · <b style="color:#e0413a">${bad} off</b>` : ''}${none ? ` · ${none} not started` : ''}</span></div>
-      <div class="psl"><span>🏫 Locations</span><span class="bar" title="${c.g} visited · ${c.y} due · ${c.r} overdue / not visited"><i style="width:${c.g * 100 / S2}%;background:#1e7b45"></i><i style="width:${c.y * 100 / S2}%;background:#e0a800"></i><i style="width:${c.r * 100 / S2}%;background:#c0392b"></i></span><span class="vc"><b style="color:#1e7b45">${c.g}</b>/${st.length} visited</span></div></div>`;
-  };
-  return `<h3>Police station-wise</h3><div class="psrs">${keys.map(row).join('')}</div><p class="note" style="margin-top:2px">🚓 green = active · red = no signal / GPS off · grey = not started. 🏫 green = visited in ${S().green} min · yellow = due · red = overdue / not visited.</p>`;
-};
 
 'use strict';
 /* ===== Visual extras: pulsing alert rings, animated numbers, coverage gauge, auto tour, alert pop-ups, poll countdown ===== */
@@ -7127,14 +7117,17 @@ const isDash = () => UI.tab === 'sum' && !document.body.classList.contains('wall
 function applyView() {
   const d = isDash(); document.body.classList.toggle('v-dash', d);
   const setup = UI.tab === 'setup';
+  const noMap = UI.tab !== 'sum' && UI.tab !== 'veh' && UI.tab !== 'loc';
+  const mapVisibilityChanged = document.body.classList.contains('v-no-map') !== noMap;
   const setupChanged = document.body.classList.contains('v-setup') !== setup;
   document.body.classList.toggle('v-setup', setup);
-  if (setupChanged && typeof MAP !== 'undefined' && MAP) setTimeout(() => MAP.invalidateSize(), 30);
+  document.body.classList.toggle('v-no-map', noMap);
+  if ((setupChanged || mapVisibilityChanged) && typeof MAP !== 'undefined' && MAP && !noMap) setTimeout(() => MAP.invalidateSize(), 30);
   $('#dash').hidden = !d;
   const mapEl = $('#map'), want = d ? $('#dMap') : $('.work');
   if (mapEl && want && mapEl.parentNode !== want) {
     if (d) want.appendChild(mapEl); else want.insertBefore(mapEl, want.querySelector('aside'));
-    if (typeof MAP !== 'undefined' && MAP) { setTimeout(() => MAP.invalidateSize(), 30); setTimeout(() => MAP.invalidateSize(), 300); }
+    if (typeof MAP !== 'undefined' && MAP) { setTimeout(() => { MAP.invalidateSize(); fitted = false; renderMap(); }, 30); setTimeout(() => MAP.invalidateSize(), 300); }
   }
 }
 
@@ -7196,15 +7189,16 @@ const LYR = () => [['units', 'Units (vehicles)', [LAYER_V, typeof LAYER_G !== 'u
 function setLayer(k, on) { const x = LYR().find(l => l[0] === k); if (!x || !MAP) return; x[2].forEach(g => { if (!g) return; if (on && !MAP.hasLayer(g)) g.addTo(MAP); if (!on && MAP.hasLayer(g)) MAP.removeLayer(g); }); }
 function dashLayers() {
   const box = $('#dLyr'); if (!box || !MAP) return;
-  const h = LYR().map(([k, l, gs]) => { const g = gs.find(Boolean); return `<label><input type="checkbox" data-lyr="${k}" ${g && MAP.hasLayer(g) ? 'checked' : ''}>${l}</label>`; }).join('');
-  if (box.dataset.h !== h) { box.innerHTML = h; box.dataset.h = h; }
+  const expanded = box.querySelector('.lyr-toggle')?.getAttribute('aria-expanded') === 'true';
+  const h = `<button type="button" class="lyr-toggle" aria-expanded="false" aria-controls="dLyrOptions">Layers</button><div id="dLyrOptions" class="lyr-options" hidden>${LYR().map(([k, l, gs]) => { const g = gs.find(Boolean); return `<label><input type="checkbox" data-lyr="${k}" ${g && MAP.hasLayer(g) ? 'checked' : ''}>${l}</label>`; }).join('')}</div>`;
+  if (box.dataset.h !== h) { box.innerHTML = h; box.dataset.h = h; if (expanded) { box.querySelector('.lyr-toggle').setAttribute('aria-expanded', 'true'); box.querySelector('.lyr-options').hidden = false; } }
 }
 document.addEventListener('change', e => { const k = e.target.dataset && e.target.dataset.lyr; if (k) setLayer(k, e.target.checked); });
+document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('#dLyr .lyr-toggle'); if (!b) return; const options = $('#dLyrOptions'); options.hidden = !options.hidden; b.setAttribute('aria-expanded', String(!options.hidden)); });
 
 function renderDash() {
   const put = (id, h) => { const el = $(id); if (el && el.innerHTML !== h) el.innerHTML = h; };
   try { put('#dDonut', dashDonut()); } catch (e) { console.error(e); }
-  try { put('#dAlerts', dashAlerts()); } catch (e) { console.error(e); }
   try { put('#dPs', dashPs()); } catch (e) { console.error(e); }
   try { put('#dRt', dashRoutes()); } catch (e) { console.error(e); }
   try { put('#dUw', dashUnits()); } catch (e) { console.error(e); }

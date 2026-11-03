@@ -802,10 +802,6 @@ header.top .logo{width:46px;height:46px;flex:none;filter:drop-shadow(0 1px 3px r
 .pin.car{display:flex;align-items:center;justify-content:center}.pin.car svg{width:16px;height:16px}.pin.car i{width:6px;height:6px;border-radius:50%;background:#fff}
 .vcl{background:#fff;border:4px solid #1e7b45;border-radius:18px;padding:2px 8px;font:700 12px var(--sans);color:#15233a;white-space:nowrap;box-shadow:0 1px 5px rgba(0,0,0,.4);display:inline-flex;gap:5px;align-items:center;cursor:pointer}
 .vcl b{background:#15233a;color:#fff;border-radius:10px;padding:0 6px}
-.psbars{display:flex;flex-direction:column;gap:5px;margin:6px 0}
-.psb{display:grid;grid-template-columns:92px 1fr 64px;gap:8px;align-items:center;font-size:12.5px}
-.psb .bar{display:flex;height:14px;border-radius:7px;overflow:hidden;background:#eef1f5}.psb .bar i{display:block;height:100%}
-.psb .nm{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.psb .vc{text-align:right;color:var(--ink2)}
 .tline{width:100%;height:auto;margin:4px 0}
 /* big screen mode */
 body.wall{--bg:#0b1322;--paper:#121d31;--ink:#e8edf5;--ink2:#9fb0c8;--line:#26354f}
@@ -1258,16 +1254,8 @@ body.wall .rd .work{grid-template-columns:minmax(0,1fr) 40vw;margin:0 10px 10px}
 .pxrow{gap:14px;align-items:center;font-size:13px;margin:6px 0}.pxrow select{margin-left:6px}.pxauto{display:flex;align-items:center;gap:6px}
 .vtag{display:inline-block;border:1px solid;border-radius:9px;padding:0 6px;font-size:11px;font-weight:700;line-height:16px;margin-right:2px}
 .nsl>div{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 2px;border-bottom:1px solid var(--line);font-size:13px}
-.psrs{display:flex;flex-direction:column;gap:10px;margin:6px 0}
-.psr{border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:#fff}
-.psrh{display:flex;justify-content:space-between;gap:8px;font-size:13.5px;margin-bottom:4px}.psrh span{color:var(--ink2);font-size:12.5px}
-.psl{display:grid;grid-template-columns:96px 1fr minmax(120px,auto);gap:8px;align-items:center;font-size:12.5px;margin:3px 0}
-.psl .bar{display:flex;height:12px;border-radius:6px;overflow:hidden;background:#eef1f5}.psl .bar i{display:block;height:100%}
-.psl .vc{text-align:right;color:var(--ink2);white-space:nowrap}
-@media (max-width:760px){.psl{grid-template-columns:84px 1fr;}.psl .vc{grid-column:1/-1;text-align:left}}
-body.wall .psr{background:#17243b;border-color:#26354f}body.wall .psl .bar{background:#1d2c46}
 /* the top filter bar is also called .bar: keep it from reshaping the small progress bars */
-.rd .psl .bar,.rd .psb .bar,.rd .pane .bar,.rd .dsum .bar{padding:0;gap:0;align-items:stretch;flex-wrap:nowrap}
+.rd .pane .bar,.rd .dsum .bar{padding:0;gap:0;align-items:stretch;flex-wrap:nowrap}
 </style><style>
 :root{--navy:#09090b;--gold:#fff;--ink:#18181b;--ink2:#71717a;--line:#e4e4e7;--bg:#fafafa;--paper:#fff;--card-sh:0 1px 2px rgba(0,0,0,.04);--card-sh-h:0 3px 12px rgba(0,0,0,.08);--sans:Inter,Geist,"Segoe UI",system-ui,sans-serif}
 body{letter-spacing:-.01em}
@@ -1346,6 +1334,25 @@ body.v-setup .rd .pane table.t th:first-child,body.v-setup .rd .pane table.t td:
 body.v-setup .rd .pane table.t th:nth-child(5),body.v-setup .rd .pane table.t td:nth-child(5){min-width:160px}
 body.v-setup .rd .pane table.t th:nth-child(6),body.v-setup .rd .pane table.t td:nth-child(6){min-width:160px}
 body.v-setup .rd .pane table.t th:last-child,body.v-setup .rd .pane table.t td:last-child{min-width:140px;white-space:nowrap}
+/* Only Dashboard, Live Tracking and Polling Stations display the map. */
+body.v-no-map .trace-trip{display:none!important}
+body.v-no-map .rd .work{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr)}
+body.v-no-map .rd .work #map,body.v-no-map #panelBtn,body.v-no-map #panelShow{display:none}
+body.v-no-map .rd .work aside.panel{display:flex;min-width:0;border:0;background:#fff}
+body.v-no-map .rd .pane{background:#fff}
+.rd .dash{grid-template-columns:minmax(0,1.7fr) minmax(0,1fr)}
+.rd .c-map{grid-column:1}
+.rd .c-uw{grid-column:1/-1}
+.rd .lyr{left:56px;padding:0;gap:0;max-width:min(240px,calc(100% - 112px))}
+.rd .lyr-toggle{border:0;border-radius:9px;background:#fff;color:#15233a;font:600 13px system-ui,sans-serif;padding:9px 12px;cursor:pointer}
+.rd .lyr-options{display:flex;flex-direction:column;gap:7px;padding:4px 12px 11px;max-height:220px;overflow:auto}
+.rd .lyr-options[hidden]{display:none}
+.pscluster{display:grid;place-items:center;width:100%;height:100%;border:2px solid #fff;border-radius:50%;background:#1f6fd1;color:#fff;font:700 12px system-ui,sans-serif;box-shadow:0 2px 7px #0005}
+.pscluster.urgent{background:#c0392b}
+.alerts-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:2px 0 10px;border-bottom:1px solid #e4e4e7}
+.alerts-toolbar h2{margin:0;font-size:19px}
+.alerts-toolbar p{margin:3px 0 0;color:#71717a;font-size:13px}
+.alerts-toolbar button{flex:none}
 .rd .mapbox .stamp{max-width:calc(100% - 24px);white-space:normal;text-align:center;line-height:1.25}
 .member-modal .card{width:min(560px,100%);max-height:calc(100dvh - 32px);overflow:auto}
 .member-modal h2{overflow-wrap:anywhere;margin-top:0}
@@ -1354,6 +1361,8 @@ body.v-setup .rd .pane table.t th:last-child,body.v-setup .rd .pane table.t td:l
 .member-modal .err{min-height:20px;margin-top:10px}
 body.v-dash #panelBtn{display:none}
 @media(max-width:1100px){
+  .rd .dash{grid-template-columns:minmax(0,1fr)}
+  .rd .c-map,.rd .c-uw{grid-column:1}
   .rd .bar .counts{grid-template-columns:repeat(3,minmax(0,1fr))}
   .rd .work{grid-template-columns:minmax(0,1fr) minmax(300px,42%)}
 }
@@ -1443,7 +1452,6 @@ body.v-dash #panelBtn{display:none}
         <div class="mleg" id="dLeg"></div>
       </div>
       <div class="card c-donut"><div class="ch"><h4><i>📊</i>Unit Status Overview</h4><button type="button" class="lnk" data-tab="veh">View all</button></div><div id="dDonut"></div></div>
-      <div class="card c-alerts"><div class="ch"><h4><i>🔔</i>Recent Alerts &amp; Activities</h4><button type="button" class="lnk" data-tab="alerts">View all</button></div><div id="dAlerts"></div></div>
       <div class="card c-ps"><div class="ch"><h4><i>🏫</i>Polling Stations Status</h4><button type="button" class="lnk" data-tab="loc">View all</button></div><div id="dPs"></div></div>
       <div class="card c-rt"><div class="ch"><h4><i>🛣</i>Route Monitoring</h4><button type="button" class="lnk" data-tab="veh">View all</button></div><div id="dRt"></div></div>
       <div class="card c-uw"><div class="ch"><h4><i>👮</i>Unit Wise Status</h4><button type="button" class="lnk" data-tab="veh">View all</button></div><div id="dUw"></div></div>
@@ -5056,7 +5064,7 @@ function renderMap() {
   }
 }
 function selectDev(u, pan) {
-  UI.sel = u; if (UI.tab !== 'veh' && UI.tab !== 'inc' && UI.tab !== 'active') UI.tab = 'veh';
+  UI.sel = u; UI.tab = 'veh';
   const Lv = LIVE[u]; if (pan !== false && Lv && Lv.lat != null) MAP.setView([Lv.lat, Lv.lng], Math.max(MAP.getZoom(), 14));
   schedule('force'); paneDirty = 'force';
   setTimeout(() => { const el = document.querySelector(`.active-card[data-u="${u}"], .veh[data-u="${u}"]`); if (el) el.scrollIntoView({ block: 'nearest' }); }, 500);
@@ -5065,7 +5073,7 @@ function selectDev(u, pan) {
 function centerUnit(u) {
   if (!u) return;
   UI.sel = u;
-  if (UI.tab !== 'veh' && UI.tab !== 'inc' && UI.tab !== 'active') UI.tab = 'active';
+  UI.tab = 'veh';
   const Lv = LIVE[u];
   if (Lv && Lv.lat != null && MAP) {
     MAP.setView([Lv.lat, Lv.lng], Math.max(MAP.getZoom(), 15));
@@ -5304,11 +5312,13 @@ function paneAlerts() {
   prob.sort((a, b) => (order[a.st.k] ?? 4) - (order[b.st.k] ?? 4));
   h += `<h3>Needs attention now (${prob.length})</h3>` + (prob.length ? prob.map(x => `<div class="alert"><div class="ic" style="color:${x.st.c}">●</div><div class="tx"><b>${esc(dname(x.u))}</b> — ${esc(['move'].includes(x.st.k) ? '' : x.st.txt)}${x.off ? ` ${fKm(x.off)} away from its route's polling locations` : ''}${x.L.bat >= 0 && x.L.bat < 20 && !x.L.chg ? ` · battery ${x.L.bat}%, not charging` : ''}<br><span class="note">${esc(DEV[x.u].officer || '')} ${esc(DEV[x.u].mobile || '')} · last update ${ago(x.L.up)}</span>
     <div class="row">${DEV[x.u].mobile ? `<a class="btn small" href="tel:${esc(DEV[x.u].mobile)}">Call</a>` : ''}<button class="btn small" data-act="sel" data-u="${x.u}">Show</button></div></div></div>`).join('') : '<p class="note">All phones are reporting normally.</p>');
-  const feed = Object.entries(EVT).filter(([, e]) => e.type !== 'sos' && (e.type === 'msg' ? (e.dev === '*' || visible(e.dev)) : visible(e.uid))).sort((a, b) => b[1].t - a[1].t).slice(0, 60);
+  const feed = Object.entries(EVT).filter(([, e]) => e.type !== 'sos' && e.t > alertClearTime() && (e.type === 'msg' ? (e.dev === '*' || visible(e.dev)) : visible(e.uid))).sort((a, b) => b[1].t - a[1].t).slice(0, 60);
   const lbl = e => ({ votes: `votes polled at ${e.sname || ''}: ${e.n}`, start: 'started duty', blocked: `second phone BLOCKED (${e.mobile || ''} ${e.model || ''}) – route already active on ${e.holderMobile || 'another phone'}`, stop: 'stopped duty (PIN)', reached: 'reached the spot', ack: 'received the message', msg: (e.dev === '*' ? `broadcast to ${e.n || ''} vehicles: “` : 'message sent: “') + (e.text || '') + '”', loc: `reported ${e.sname || 'a polling location'}: ${String(e.status || '').toUpperCase()}${e.note ? ' – ' + e.note : ''}`, photo: 'sent a photo' + (e.note ? ': ' + e.note : '') }[e.type] || e.type);
   h += '<h3>Activity today</h3>' + (feed.length ? `<div class="tw"><table class="t"><tbody>${feed.map(([, e]) => `<tr><td>${fT(e.t)}</td><td>${esc(e.dev === '*' ? (e.scope || 'All vehicles') : dname(e.type === 'msg' ? e.dev : e.uid))}</td><td>${esc(lbl(e))}${e.type === 'photo' && e.pid ? ` <button class="btn small" data-act="photo" data-pid="${esc(e.pid)}">View</button>` : ''}${e.type === 'msg' && e.voice ? ` <button class="btn small" data-act="voicePlay" data-id="${esc(e.voice)}">▶ Play</button>` : ''}</td></tr>`).join('')}</tbody></table></div>` : '<p class="note">Nothing yet.</p>');
   return h;
 }
+
+function alertClearTime() { return +LS.get('alertsCleared_' + (AU && AU.uid || 'guest'), 0) || 0; }
 
 /* ---------- incident ---------- */
 function setIncident(lat, lng, name) {
@@ -5435,19 +5445,46 @@ async function makeReport(day) {
   XLSX.writeFile(wb, `Route mobile report ${day}.xlsx`);
 }
 
+/* TRACK_EXCEL_HOTFIX_V1: independent election records stored in Firebase. */
+function trackElectionNames() {
+  const names = [
+    ...Object.values(CONF.elections || {}).map(v => typeof v === 'string' ? v : v?.name),
+    ...allRoutes().map(r => r.election),
+    ...Object.values(CONF.stations || {}).map(p => p.el), ELEC()
+  ];
+  const unique = new Map();
+  names.forEach(v => { const n = String(v || '').replace(/\s+/g, ' ').trim(); if (n && !unique.has(n.toLowerCase())) unique.set(n.toLowerCase(), n); });
+  return [...unique.values()].sort((a,b) => a.localeCompare(b));
+}
+async function trackNewElection() {
+  const value = prompt('Name for the new election:');
+  if (value === null) return;
+  const name = value.replace(/\s+/g, ' ').trim();
+  if (!name || name.length > 120) { toast('Election name must be 1–120 characters.'); return; }
+  const existing = trackElectionNames().find(e => e.toLowerCase() === name.toLowerCase());
+  if (!existing) {
+    const id = 'e' + uid8(); const record = { name, status: 'draft', createdAt: Date.now() };
+    await dbPut('config/elections/' + id, record);
+    CONF.elections = Object.assign({}, CONF.elections || {}, { [id]: record });
+  }
+  const selected = existing || name;
+  await dbPatch('config/settings', { election: selected });
+  CONF.settings = Object.assign({}, CONF.settings || {}, { election: selected });
+  schedule('force'); renderPane(); toast('Election selected. You can import Excel now.');
+}
 /* ---------- setup ---------- */
 function sec(k, title, body) { return `<details ${UI.setupOpen === k ? 'open' : ''} data-sec="${k}" style="border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-bottom:8px"><summary style="font-weight:700;cursor:pointer;color:var(--navy)">${title}</summary><div style="margin-top:8px">${body}</div></details>`; }
 function paneSetup() {
   const s = S(), R = routes();   // Setup lists every route; the top-bar filters do not hide rows here
-  const els = [...new Set([...allRoutes().map(r => (r.election || '').trim()), ...Object.values(CONF.stations || {}).map(x => (x.el || '').trim()), ELEC()].filter(Boolean))].sort();
+  const els = trackElectionNames();
   const elSel = id => `<select id="${id}"><option value="">All elections (${allRoutes().length} routes)</option>${els.map(e => `<option value="${esc(e)}" ${e === ELEC() ? 'selected' : ''}>${esc(e)} (${allRoutes().filter(r => (r.election || '').trim() === e).length} routes)</option>`).join('')}</select>`;
   let h = sec('routes', `Routes (${routes().length}${ELEC() ? ' — ' + esc(ELEC()) : ''})`, `<p class="note">Use Assign member to set the officer name, mobile number and password. The APK loads their assigned route after login. Routes marked Review coverage have proposed merges or splits; check their polling locations before assigning.</p>
     <div class="row"><label class="f" style="flex:1">Election <span class="u">(choose one: the list below and the phones show only that election's routes)</span>${elSel('setElec')}</label></div>
-    <div class="row"><button class="btn small" data-act="routeAdd">Add a route</button><button class="btn small" data-act="routeImport">Import from Excel</button><button class="btn small" data-act="routeTemplate">Excel template</button><button class="btn small red" data-act="routeClearAll">Remove all routes</button>${ELEC() ? `<button class="btn small red" data-act="delElec">Delete election "${esc(ELEC())}"</button>` : ''}</div>
+    <div class="row"><button class="btn small" data-act="newElection">+ New election</button><button class="btn small" data-act="routeAdd">Add a route</button><button class="btn small" data-act="routeImport">Import from Excel</button><button class="btn small" data-act="trackTemplate">Download Excel format</button><button class="btn small red" data-act="routeClearAll">Remove all routes</button>${ELEC() ? `<button class="btn small red" data-act="delElec">Delete election "${esc(ELEC())}"</button>` : ''}</div>
     <div class="tw"><table class="t"><thead><tr><th>Election</th><th>Sub-division</th><th>PS</th><th>Route</th><th>Villages</th><th>Officer</th><th></th></tr></thead><tbody>${R.map(r => `<tr><td>${esc(r.election || '')}</td><td>${esc(r.sd)}</td><td>${esc(r.ps)}</td><td><b>${esc(r.route)}</b>${r.coverageStatus === 'proposed' ? '<br><span class="note" style="color:#a16207">Review coverage</span>' : ''}</td><td>${esc(r.villages || '')}</td><td>${esc(r.officer || '')} ${esc(r.mobile || '')}${r.vehicle ? '<br><span class="note">' + esc(r.vehicle) + '</span>' : ''}</td><td style="white-space:nowrap"><button class="btn small" data-act="routeQr" data-id="${r.id}">QR</button><button class="btn small" data-act="routeEdit" data-id="${r.id}">Edit</button>${USER_ROLE === 'admin' ? `<button class="btn small primary" data-act="memberAssign" data-id="${r.id}">Assign member</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="7" class="note">No routes yet.</td></tr>'}</tbody></table></div>`);
   h += sec('ps', `Polling locations (${stations().length})`, `<p class="note">Shown on the map, used for the incident search, the off-route alert and the "visited" check. Columns: Polling location, Latitude, Longitude, Sensitivity, Police station, Route No. One row per location, even if it has several booths.</p>
     <div class="row"><label class="f" style="flex:1">Election for these locations <span class="u">(the map shows the locations of the election chosen here)</span>${elSel('setElec2')}</label></div>
-    <div class="row"><button class="btn small" data-act="psImport">Import from Excel</button>${ELEC() ? `<button class="btn small red" data-act="delElec">Delete election "${esc(ELEC())}"</button>` : ''}<button class="btn small" data-act="psTemplate">Excel template</button>${stations().length ? '<button class="btn small" data-act="psClear">Remove all</button>' : ''}</div>`);
+    <div class="row"><button class="btn small" data-act="psImport">Import from Excel</button>${ELEC() ? `<button class="btn small red" data-act="delElec">Delete election "${esc(ELEC())}"</button>` : ''}${stations().length ? '<button class="btn small" data-act="psClear">Remove all</button>' : ''}</div>`);
   const D = Object.keys(DEV).filter(visible).sort((a, b) => dname(a).localeCompare(dname(b), undefined, { numeric: true }));
   h += sec('dev', `Registered phones (${Object.keys(DEV).length})`, `<div class="tw"><table class="t"><thead><tr><th>Vehicle</th><th>Officer</th><th>Phone</th><th>Set up</th><th></th></tr></thead><tbody>${D.map(u => `<tr><td><b>${esc(dname(u))}</b><br><span class="note">${esc(DEV[u].sd || '')}</span></td><td>${esc(DEV[u].officer || '')}<br>${esc(DEV[u].mobile || '')}</td><td class="note">${esc(DEV[u].model || '')}<br>app ${esc(DEV[u].v || '')}</td><td class="note">${fDT(DEV[u].setup)}</td><td><button class="btn small" data-act="editDev" data-u="${u}">Edit</button></td></tr>`).join('') || '<tr><td colspan="5" class="note">None yet.</td></tr>'}</tbody></table></div>`);
   return h;
@@ -5576,7 +5613,7 @@ window.addEventListener('afterprint', () => { $('#printArea').innerHTML = ''; })
 
 /* Excel import */
 /* reads one or more Excel files; each sheet is offered to the importer, which takes the sheets whose columns it recognises */
-function pickFile(cb) { const i = document.createElement('input'); i.type = 'file'; i.multiple = true; i.accept = '.xlsx,.xls,.csv'; i.onchange = async () => { const sheets = []; for (const f of i.files) { const wb = XLSX.read(await f.arrayBuffer(), { type: 'array' }); wb.SheetNames.forEach(n => sheets.push(XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, defval: '' }))); } if (sheets.length) cb(sheets); }; i.click(); }
+function pickFile(cb) { const i = document.createElement('input'); i.type = 'file'; i.multiple = true; i.accept = '.xlsx,.xls,.csv'; i.onchange = async () => { try { const sheets = []; for (const f of i.files) { const wb = XLSX.read(await f.arrayBuffer(), { type: 'array' }); wb.SheetNames.forEach(n => { const rows = XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, defval: '' }); rows.sheetName = n; sheets.push(rows); }); } if (sheets.length) await cb(sheets); } catch (e) { toast('Excel import failed: ' + e.message, 8000); } }; i.click(); }
 function mapCols(rows, want) {
   for (let i = 0; i < Math.min(rows.length, 15); i++) {
     const m = {};
@@ -5607,11 +5644,11 @@ document.addEventListener('click', async e => {
     else if (act === 'sumToggle') { const o = !+LS.get('sumOpen', 1); try { LS.set('sumOpen', o ? 1 : 0); } catch (x) {} renderPane(); }
     else if (act === 'msg') msgModal(a.dataset.u);
     else if (act === 'editDev') devModal(a.dataset.u);
-    else if (act === 'goto') MAP.setView([+a.dataset.lat, +a.dataset.lng], 16);
+    else if (act === 'goto') { UI.tab = 'veh'; MAP.setView([+a.dataset.lat, +a.dataset.lng], 16); renderTabs(); renderPane(); }
     else if (act === 'ack') { const id = a.dataset.id; await dbPatch(`events/${id}`, { ackBy: AU.email, ackAt: Date.now() }); const ev = EVT[id]; if (ev) { ev.ackBy = AU.email; ev.ackAt = Date.now(); } toast('SOS marked attended. The alert is cleared.'); schedule('force'); }
     else if (act === 'sosClear') { const id = a.dataset.id; const ev = EVT[id]; if (!ev) return; if (!ev.ackBy) { if (!confirm('This SOS has not been marked attended. Remove it anyway?')) return; await dbPatch(`events/${id}`, { ackBy: AU.email, ackAt: Date.now() }); ev.ackBy = AU.email; ev.ackAt = Date.now(); } await dbPatch(`events/${id}`, { cleared: true, clearedBy: AU.email, clearedAt: Date.now() }); ev.cleared = true; toast('SOS removed from the list.'); schedule('force'); }
     else if (act === 'incHere') setIncident(+a.dataset.lat, +a.dataset.lng, a.dataset.name);
-    else if (act === 'incMode') { UI.incMode = !UI.incMode; MAP.getContainer().style.cursor = UI.incMode ? 'crosshair' : ''; renderPane(); if (UI.incMode) toast('Click the incident place on the map'); }
+    else if (act === 'incMode') { UI.incMode = !UI.incMode; MAP.getContainer().style.cursor = UI.incMode ? 'crosshair' : ''; if (UI.incMode) { UI.tab = 'loc'; renderTabs(); toast('Click the incident place on the map'); } renderPane(); }
     else if (act === 'incClear') { UI.inc = null; LAYER_I.clearLayers(); renderPane(); }
     else if (act === 'incLL') { const m = /(-?\d+\.\d+)[,\s]+(-?\d+\.\d+)/.exec($('#incLL').value); if (m) setIncident(+m[1], +m[2], m[1] + ', ' + m[2]); else toast('Type the location as: 16.9604, 82.2381'); }
     else if (act === 'sendTo') { const I = UI.inc; msgModal(a.dataset.u, `Go to ${I.name} immediately (https://maps.google.com/?q=${I.lat.toFixed(5)},${I.lng.toFixed(5)}). Press REACHED SPOT on arrival.`); }
@@ -5621,6 +5658,7 @@ document.addEventListener('click', async e => {
     else if (act === 'rpPlay') { if (RP_TIMER) { clearInterval(RP_TIMER); RP_TIMER = null; } else { if (UI.replay.pos >= 1) UI.replay.pos = 0; RP_TIMER = setInterval(() => { UI.replay.pos = Math.min(1, UI.replay.pos + 0.004); drawReplay(); if ($('#rpPos')) { $('#rpPos').value = Math.round(UI.replay.pos * 1000); const P = UI.replay.pts; $('#rpPos').nextElementSibling.textContent = fTs(P[Math.round(UI.replay.pos * (P.length - 1))][0]); } if (UI.replay.pos >= 1) { clearInterval(RP_TIMER); RP_TIMER = null; renderPane(); } }, 80); } renderPane(); }
     else if (act === 'report') await makeReport($('#repD').value);
     else if (act === 'routeAdd') routeModal();
+    else if (act === 'newElection') await trackNewElection();
     else if (act === 'memberAssign') await memberModal(a.dataset.id);
     else if (act === 'delElec') {
       const name = ELEC(); if (!name) return;
@@ -5637,21 +5675,41 @@ document.addEventListener('click', async e => {
     else if (act === 'routeClearAll') { const n = Object.keys(CONF.routes || {}).length; if (!n) { toast('There are no routes to remove.'); return; } if (!confirm(`Remove ALL ${n} routes from the list?\n\nPhones already registered keep working until they restart. You can import the list again afterwards.\n\nDo not do this on poll day or the day before.`)) return; if (!confirm('Are you sure? This cannot be undone.')) return; await dbDel('config/routes'); CONF.routes = {}; toast(`${n} routes removed.`); schedule('force'); paneDirty = 'force'; renderPane(); }
     else if (act === 'routeEdit') routeModal(a.dataset.id);
     else if (act === 'routeQr') { const r = Object.assign({ id: a.dataset.id }, CONF.routes[a.dataset.id]); const m = document.createElement('div'); m.className = 'modal'; m.innerHTML = `<div class="card" style="text-align:center"><div style="max-width:320px;margin:auto">${qrSvg(qrPayload(r))}</div><h2>${esc(r.ps)} – ${esc(r.route)}</h2><p class="note">Scan with the Route Mobile app on the phone of this route.</p><button class="btn" data-x>Close</button></div>`; document.body.appendChild(m); m.addEventListener('click', ev => { if (ev.target === m || ev.target.hasAttribute('data-x')) m.remove(); }); }
-    else if (act === 'routeTemplate') xlsTemplate('Routes template.xlsx', ['Election', 'Sub-division', 'Police station', 'Route No.', 'Officer rank and name', 'Officer mobile'], [[ELEC() || 'Municipal 2026', 'Kakinada', 'I Town', 'Route 1', 'SI K. Ramesh', '9000000001']]);
+    else if (act === 'trackTemplate') {
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Election','Sub-division','PS','Route','Villages','Officer']]), 'TRACK Import');
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Election','Sub-division','Police Station','Route','Polling Location','Latitude','Longitude','Category','Voters']]), 'Polling Locations');
+      XLSX.writeFile(wb, 'TRACK_Excel_Format.xlsx');
+    }
     else if (act === 'routeImport') pickFile(async sheets => {
-      if (!ELEC()) { toast('Choose an election first (Setup → Routes), then import.', 6000); return; }
-      const have = new Set(allRoutes().map(r => (r.election || '').toLowerCase() + '|' + r.ps + '|' + norm(r.route))); const add = {}; let n = 0, used = 0;
+
+      const have = new Set(allRoutes().map(r => (r.election || '').trim().toLowerCase() + '|' + String(r.ps || '').toLowerCase() + '|' + norm(r.route))); const add = {}; let n = 0, used = 0; let importedName = ''; const hasPrimary = sheets.some(rows => rows.sheetName === 'TRACK Import');
       for (const rows of sheets) {
+      if (hasPrimary && rows.sheetName !== 'TRACK Import') continue;
       const h = mapCols(rows, { election: /election|poll type/, vehicle: /vehicle|reg/, sd: /sub.?div|sdpo|division/, ps: /police|^ps$|p\.s\b/, route: /route|beat|unit/, force: /type|force|categ/, villages: /village|ward|cover|area/, officer: /officer|in.?charge/, mobile: /mobile|phone|cell/ });
-      if (!h || h.m.ps === undefined || h.m.route === undefined || h.m.lat !== undefined || rows[h.row].some(c => /latitude/i.test(String(c)))) continue; used++;
-      rows.slice(h.row + 1).forEach(r => { const o = {}; Object.entries(h.m).forEach(([k, j]) => { o[k] = String(r[j] ?? '').trim(); }); if (!o.election) o.election = ELEC(); if (!o.ps || !o.route || have.has(o.election.toLowerCase() + '|' + o.ps + '|' + norm(o.route))) return; have.add(o.election.toLowerCase() + '|' + o.ps + '|' + norm(o.route)); o.force = forceCode(o.force); add['r' + uid8() + n] = Object.assign({ sd: '', villages: '', officer: '', mobile: '', vehicle: '', force: 'route' }, o); n++; });
+      if (!h || h.m.ps === undefined || h.m.route === undefined || rows[h.row].some(c => /latitude/i.test(String(c)))) continue;
+      const routeHeading = String(rows[h.row][h.m.route] || '').trim();
+      if (!/^(route(\s*(no\.?|number|id))?|beat(\s*no\.?)?|unit(\s*no\.?)?)$/i.test(routeHeading)) continue;
+      used++;
+      rows.slice(h.row + 1).forEach(r => { const o = {}; Object.entries(h.m).forEach(([k, j]) => { o[k] = String(r[j] ?? '').trim(); }); if (!o.election) o.election = ELEC() || importedName || (importedName = (prompt('Election name for Excel rows without an Election column:') || '').trim()); if (!o.ps || !o.route || !o.election || have.has(o.election.toLowerCase() + '|' + o.ps.toLowerCase() + '|' + norm(o.route))) return; have.add(o.election.toLowerCase() + '|' + o.ps.toLowerCase() + '|' + norm(o.route)); o.force = forceCode(o.force); add['r' + uid8() + n] = Object.assign({ sd: '', villages: '', officer: '', mobile: '', vehicle: '', force: 'route' }, o); n++; });
       }
       if (!used) { toast('No sheet with Police station and Route columns. Use the template.'); return; }
-      if (n) { await dbPatch('config/routes', add); CONF.routes = Object.assign({}, CONF.routes || {}, add); schedule('force'); paneDirty = 'force'; } toast(`${n} routes added${n ? '' : ' (all were already in the list)'}.`);
+      if (n) {
+        const names = [...new Set(Object.values(add).map(r => r.election))];
+        const known = new Set(trackElectionNames().map(n => n.toLowerCase()));
+        const elections = {};
+        names.forEach(name => { if (!known.has(name.toLowerCase())) { elections['e' + uid8()] = { name, status: 'draft', createdAt: Date.now() }; known.add(name.toLowerCase()); } });
+        if (Object.keys(elections).length) { await dbPatch('config/elections', elections); CONF.elections = Object.assign({}, CONF.elections || {}, elections); }
+        await dbPatch('config/routes', add);
+        CONF.routes = Object.assign({}, CONF.routes || {}, add);
+        if (!ELEC() && names.length === 1) { await dbPatch('config/settings', { election: names[0] }); CONF.settings = Object.assign({}, CONF.settings || {}, { election: names[0] }); }
+        schedule('force'); paneDirty = 'force'; renderPane();
+      }
+      toast(n + ' routes imported (duplicates skipped).', 7000);
     });
-    else if (act === 'psTemplate') xlsTemplate('Polling locations template.xlsx', ['Election', 'Polling location (building and village / ward)', 'Latitude', 'Longitude', 'Sensitivity', 'Police station', 'Route No.'], [[ELEC() || 'Municipal 2026', 'ZPHS, Gandhi Nagar', 16.9604, 82.2381, 'Sensitive', 'I Town', 'Route 1']]);
     else if (act === 'psImport') pickFile(async sheets => {
-      if (!ELEC()) { toast('Choose an election first (Setup → Routes), then import.', 6000); return; }
+
+      let importedName = '';
       const key = x => [(x.el || '').toLowerCase(), (x.ps || '').toLowerCase(), (x.name || '').toLowerCase()].join('|');
       const have = new Map(Object.entries(CONF.stations || {}).map(([id, x]) => [key(x), id])); const add = {}; let n = 0, upd = 0, used = 0, bad = 0;
       for (const rows of sheets) {
@@ -5663,7 +5721,7 @@ document.addEventListener('click', async e => {
           const lat = parseFloat(r[h.m.lat]), lng = parseFloat(r[h.m.lng]);
           if (!(lat > 5 && lat < 40 && lng > 65 && lng < 100)) { if (g(r, 'name') || g(r, 'num')) bad++; return; }
           const num = g(r, 'num'), nm = g(r, 'name');
-          const o = { name: [num && (/^\d/.test(num) ? 'PS ' + num : num), nm].filter(Boolean).join(', ') || 'Station', lat, lng, cat: g(r, 'cat'), ps: g(r, 'ps'), route: g(r, 'route'), el: g(r, 'el') || ELEC(), voters: parseInt(String(g(r, 'voters')).replace(/[^\d]/g, '')) || 0 };
+          const o = { name: [num && (/^\d/.test(num) ? 'PS ' + num : num), nm].filter(Boolean).join(', ') || 'Station', lat, lng, cat: g(r, 'cat'), ps: g(r, 'ps'), route: g(r, 'route'), el: g(r, 'el') || ELEC() || (importedName || (importedName = (prompt('Election for polling locations without an Election column:') || '').trim())), voters: parseInt(String(g(r, 'voters')).replace(/[^\d]/g, '')) || 0 };
           const ex = have.get(key(o)); if (ex) { if (!add[ex]) { add[ex] = Object.assign({}, CONF.stations[ex], o); upd++; } return; } const nid = 's' + uid8() + n; have.set(key(o), nid); add[nid] = o; n++;
         });
       }
@@ -5704,6 +5762,7 @@ document.addEventListener('change', e => {
   if (t.id === 'setElec' || t.id === 'setElec2') { (async () => {
     const v = t.value;
     await dbPatch('config/settings', { election: v });
+    CONF.settings = Object.assign({}, CONF.settings || {}, { election: v });
     toast(v ? `Election: ${v}. The list and the phones now show its routes.` : 'Showing routes of all elections.');
     renderPane();
   })(); return; }
@@ -5862,16 +5921,36 @@ let stationsSig = '';
 function drawStations() {
   updateVisits();
   const LS_ = locStatus();
-  const far = MAP.getZoom() < 12;
+  const zoom = MAP.getZoom();
+  const clustered = zoom < 15;
   const list = stations().filter(p => validLocation(p) && (!UI.fSd || !p.ps || routes().some(r => r.ps === p.ps && r.sd === UI.fSd) || !routes().length) && (!UI.fPs || p.ps === UI.fPs));
-  const b = (typeof MAP !== 'undefined' && MAP && MAP.getBounds) ? MAP.getBounds().pad(0.3) : null;
-  const inView = p => !b || b.contains([+p.lat, +p.lng]) || hot(LS_[p.id]) || UI.locSel === p.id;
+  const b = (typeof MAP !== 'undefined' && MAP && MAP.getBounds) ? MAP.getBounds() : null;
+  const inView = p => !b || b.contains([+p.lat, +p.lng]);
   const visibleStations = list.filter(inView);
   const bKey = b ? [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].map(n => n.toFixed(2)).join(',') : '';
-  const sig = (far ? 'F' : 'N') + ':' + bKey + ':' + visibleStations.length + ':' + visibleStations.map(p => p.id + ':' + cover(p.id).k + ((LS_[p.id] || {}).status || '') + (hot(LS_[p.id]) ? 'h' : '')).join(',') + (typeof votesSig === 'function' ? votesSig() : '');
+  const sig = zoom + ':' + bKey + ':' + visibleStations.length + ':' + visibleStations.map(p => p.id + ':' + cover(p.id).k + ((LS_[p.id] || {}).status || '') + (hot(LS_[p.id]) ? 'h' : '')).join(',') + (typeof votesSig === 'function' ? votesSig() : '');
   if (sig === stationsSig) return;
   stationsSig = sig; LAYER_S.clearLayers();
+  const groups = new Map();
   visibleStations.forEach(p => {
+    const point = MAP.project([+p.lat, +p.lng], zoom);
+    const key = clustered && UI.locSel !== p.id ? `${Math.floor(point.x / 48)}:${Math.floor(point.y / 48)}` : p.id;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(p);
+  });
+  groups.forEach(group => {
+    if (group.length > 1) {
+      const lat = group.reduce((n, p) => n + +p.lat, 0) / group.length;
+      const lng = group.reduce((n, p) => n + +p.lng, 0) / group.length;
+      const urgent = group.some(p => hot(LS_[p.id]));
+      const size = group.length > 99 ? 38 : 32;
+      L.marker([lat, lng], { icon: L.divIcon({ html: `<div class="pscluster${urgent ? ' urgent' : ''}">${group.length}</div>`, className: '', iconSize: [size, size], iconAnchor: [size / 2, size / 2] }), zIndexOffset: urgent ? 500 : 0 })
+        .bindTooltip(`${group.length} polling stations · click to zoom in`)
+        .on('click', () => MAP.setView([lat, lng], Math.min(zoom + 2, 17)))
+        .addTo(LAYER_S);
+      return;
+    }
+    const p = group[0];
     const cv = cover(p.id), r = LS_[p.id], rk = sensRank(p.cat), v = VISIT[p.id];
     const border = rk === 2 ? '3px solid #111' : rk === 1 ? '2px solid #444' : '2px solid #fff';
     const size = rk === 2 ? 16 : 13;
@@ -6195,17 +6274,6 @@ function drawGroups(ids) {
       .on('click', () => MAP.fitBounds(L.latLngBounds(us.map(u => [LIVE[u].lat, LIVE[u].lng])).pad(0.3), { maxZoom: 14 })).addTo(LAYER_G);
   });
 }
-function psBars(N) {
-  const pss = [...new Set(routes().map(r => r.ps).concat(Object.values(DEV).filter(d => inElection(d.el)).map(d => d.ps)).concat(stations().map(p => p.ps)).filter(Boolean))]
-    .filter(ps => (!UI.fPs || ps === UI.fPs) && (!UI.fSd || routes().some(r => r.ps === ps && r.sd === UI.fSd) || Object.values(DEV).some(d => d.ps === ps && d.sd === UI.fSd))).sort();
-  if (!pss.length) return '';
-  return `<h3>Police station-wise</h3><div class="psbars">${pss.map(ps => {
-    const st = stations().filter(p => p.ps === ps), c = { g: 0, y: 0, r: 0 }; st.forEach(p => c[cover(p.id).k]++);
-    const us = Object.keys(DEV).filter(u => DEV[u].ps === ps && inElection(DEV[u].el)), act = us.filter(u => ['move', 'stop', 'weak'].includes(status(u).k)).length;
-    const tot = st.length || 1, hotN = st.filter(p => hot(N.LS_[p.id])).length;
-    return `<div class="psb" title="${c.g} visited · ${c.y} due · ${c.r} overdue"><span class="nm">${esc(ps)}${hotN ? ' ⚠' : ''}</span><span class="bar">${st.length ? `<i style="width:${c.g * 100 / tot}%;background:#1e7b45"></i><i style="width:${c.y * 100 / tot}%;background:#e0a800"></i><i style="width:${c.r * 100 / tot}%;background:#c0392b"></i>` : ''}</span><span class="vc">${act}/${us.length} 🚓${typeof psTurn === 'function' ? psTurn(st) : ''}</span></div>`;
-  }).join('')}</div><p class="note" style="margin-top:0">Bar: polling locations green / yellow / red · 🚓 route mobiles active / registered</p>`;
-}
 function timeline() {
   const ev = [];
   Object.values(EVT).forEach(e => { if (dayKey(e.t) !== TODAY || !visible(e.uid)) return; if (e.type === 'sos') ev.push([e.t, 0, '#c0392b', 'SOS ' + dname(e.uid)]); else if (e.type === 'loc' && e.status !== 'normal') ev.push([e.t, 1, STAT_C[e.status] || '#d35400', `${e.status} – ${e.sname}`]); });
@@ -6221,7 +6289,7 @@ function timeline() {
   return `<h3>Today</h3>${svg}</svg>`;
 }
 const _paneSum = paneSum;
-paneSum = function () { const N = numbers(); return _paneSum() + psBars(N) + timeline(); };
+paneSum = function () { return _paneSum() + timeline(); };
 
 /* scrolling news strip */
 function ticker() {
@@ -6496,8 +6564,8 @@ function drawPhotos(force) {
 
 /* Photos strip at the top of the Alerts tab */
 function photoStrip() {
-  const all = photoEvents(), list = all.slice(0, 12);
-  if (!all.length) return `<h3>📷 Photos today</h3><p class="note">No photo received today. Photos sent from the route app (SEND PHOTO) appear here and as 📷 pins on the map.</p>`;
+  const all = photoEvents().filter(([, e]) => e.t > alertClearTime()), list = all.slice(0, 12);
+  if (!all.length) return `<h3>📷 Photos today</h3><p class="note">No recent photos. Photos sent from the route app (SEND PHOTO) appear here and as 📷 pins on the map.</p>`;
   list.forEach(([, e]) => { if (!PHC[e.pid]) loadPhoto(e.pid); });
   return `<h3>📷 Photos today (${all.length})</h3><div class="phgrid">${list.map(([, e]) => {
     const p = PHC[e.pid];
@@ -6506,7 +6574,20 @@ function photoStrip() {
   }).join('')}</div>${all.length > list.length ? `<p class="note">Showing the latest 12. Older photos are in "Activity today" below.</p>` : ''}`;
 }
 const _paneAlertsPh = paneAlerts;
-paneAlerts = function () { return photoStrip() + _paneAlertsPh(); };
+paneAlerts = function () { return `<div class="alerts-toolbar"><div><h2>Alerts</h2><p>Current issues and activity</p></div><button type="button" class="btn small" data-act="alertsClearAll">Clear all</button></div>` + photoStrip() + _paneAlertsPh(); };
+document.addEventListener('click', async e => {
+  const button = e.target.closest && e.target.closest('[data-act="alertsClearAll"]');
+  if (!button) return;
+  button.disabled = true;
+  try {
+    const acknowledged = Object.entries(EVT).filter(([, event]) => event.type === 'sos' && event.ackBy && !event.cleared && visible(event.uid) && Date.now() - event.t < 12 * HOUR);
+    await Promise.all(acknowledged.map(([id]) => dbPatch(`events/${id}`, { cleared: true, clearedBy: AU.email, clearedAt: Date.now() })));
+    acknowledged.forEach(([id]) => { EVT[id].cleared = true; });
+    LS.set('alertsCleared_' + (AU && AU.uid || 'guest'), Date.now());
+    renderTabs(); renderPane();
+    toast('Activity cleared. Active SOS and current issues remain visible.');
+  } catch (error) { button.disabled = false; toast(error.message, 7000); }
+});
 
 /* pop-up on arrival that stays for 20 s with a View photo button */
 function photoToast(e) {
@@ -6891,27 +6972,6 @@ document.addEventListener('click', e => {
   e.stopPropagation(); psEditModal(a.dataset.id);
 }, true);
 
-/* ===== Police station-wise: route mobiles bar (active / no signal / not started) + polling locations bar, matched loosely by name ===== */
-const psKey = x => String(x || '').toLowerCase().replace(/\bp\.?s\.?$/, '').replace(/[^a-z0-9]+/g, ' ').trim();
-psBars = function (N) {
-  const names = {};
-  routes().forEach(r => { if (r.ps) names[psKey(r.ps)] = names[psKey(r.ps)] || r.ps; });
-  stations().forEach(p => { if (p.ps) names[psKey(p.ps)] = names[psKey(p.ps)] || p.ps; });
-  devIds().forEach(u => { const d = DEV[u]; if (d.ps) names[psKey(d.ps)] = names[psKey(d.ps)] || d.ps; });
-  let keys = Object.keys(names).filter(k => k && (!UI.fPs || psKey(UI.fPs) === k) && (!UI.fSd || routes().some(r => psKey(r.ps) === k && r.sd === UI.fSd))).sort();
-  if (!keys.length) return '';
-  const row = k => {
-    const R = routes().filter(r => psKey(r.ps) === k), ids = Object.keys(DEV).filter(u => psKey(DEV[u].ps) === k && visible(u) && !isBlocked(u));
-    let act = 0, bad = 0; ids.forEach(u => { const s = status(u).k; if (['move', 'stop', 'weak'].includes(s)) act++; else bad++; });
-    const total = Math.max(R.length, ids.length), none = Math.max(0, total - act - bad), T = total || 1;
-    const st = stations().filter(p => psKey(p.ps) === k), c = { g: 0, y: 0, r: 0 }; st.forEach(p => c[cover(p.id).k]++); const S2 = st.length || 1;
-    const hotN = st.filter(p => hot(N.LS_[p.id])).length;
-    return `<div class="psr"><div class="psrh"><b>${esc(names[k])}${hotN ? ' ⚠' : ''}</b><span>${typeof psTurn === 'function' ? psTurn(st).replace(/^ · /, '🗳 ') : ''}</span></div>
-      <div class="psl"><span>🚓 Mobiles</span><span class="bar" title="${act} active · ${bad} no signal / GPS off · ${none} not started"><i style="width:${act * 100 / T}%;background:#1e9e57"></i><i style="width:${bad * 100 / T}%;background:#e0413a"></i><i style="width:${none * 100 / T}%;background:#b8c2cf"></i></span><span class="vc"><b style="color:#1e9e57">${act}</b>/${total}${bad ? ` · <b style="color:#e0413a">${bad} off</b>` : ''}${none ? ` · ${none} not started` : ''}</span></div>
-      <div class="psl"><span>🏫 Locations</span><span class="bar" title="${c.g} visited · ${c.y} due · ${c.r} overdue / not visited"><i style="width:${c.g * 100 / S2}%;background:#1e7b45"></i><i style="width:${c.y * 100 / S2}%;background:#e0a800"></i><i style="width:${c.r * 100 / S2}%;background:#c0392b"></i></span><span class="vc"><b style="color:#1e7b45">${c.g}</b>/${st.length} visited</span></div></div>`;
-  };
-  return `<h3>Police station-wise</h3><div class="psrs">${keys.map(row).join('')}</div><p class="note" style="margin-top:2px">🚓 green = active · red = no signal / GPS off · grey = not started. 🏫 green = visited in ${S().green} min · yellow = due · red = overdue / not visited.</p>`;
-};
 
 'use strict';
 /* ===== Visual extras: pulsing alert rings, animated numbers, coverage gauge, auto tour, alert pop-ups, poll countdown ===== */
@@ -7189,14 +7249,17 @@ const isDash = () => UI.tab === 'sum' && !document.body.classList.contains('wall
 function applyView() {
   const d = isDash(); document.body.classList.toggle('v-dash', d);
   const setup = UI.tab === 'setup';
+  const noMap = UI.tab !== 'sum' && UI.tab !== 'veh' && UI.tab !== 'loc';
+  const mapVisibilityChanged = document.body.classList.contains('v-no-map') !== noMap;
   const setupChanged = document.body.classList.contains('v-setup') !== setup;
   document.body.classList.toggle('v-setup', setup);
-  if (setupChanged && typeof MAP !== 'undefined' && MAP) setTimeout(() => MAP.invalidateSize(), 30);
+  document.body.classList.toggle('v-no-map', noMap);
+  if ((setupChanged || mapVisibilityChanged) && typeof MAP !== 'undefined' && MAP && !noMap) setTimeout(() => MAP.invalidateSize(), 30);
   $('#dash').hidden = !d;
   const mapEl = $('#map'), want = d ? $('#dMap') : $('.work');
   if (mapEl && want && mapEl.parentNode !== want) {
     if (d) want.appendChild(mapEl); else want.insertBefore(mapEl, want.querySelector('aside'));
-    if (typeof MAP !== 'undefined' && MAP) { setTimeout(() => MAP.invalidateSize(), 30); setTimeout(() => MAP.invalidateSize(), 300); }
+    if (typeof MAP !== 'undefined' && MAP) { setTimeout(() => { MAP.invalidateSize(); fitted = false; renderMap(); }, 30); setTimeout(() => MAP.invalidateSize(), 300); }
   }
 }
 
@@ -7258,15 +7321,16 @@ const LYR = () => [['units', 'Units (vehicles)', [LAYER_V, typeof LAYER_G !== 'u
 function setLayer(k, on) { const x = LYR().find(l => l[0] === k); if (!x || !MAP) return; x[2].forEach(g => { if (!g) return; if (on && !MAP.hasLayer(g)) g.addTo(MAP); if (!on && MAP.hasLayer(g)) MAP.removeLayer(g); }); }
 function dashLayers() {
   const box = $('#dLyr'); if (!box || !MAP) return;
-  const h = LYR().map(([k, l, gs]) => { const g = gs.find(Boolean); return `<label><input type="checkbox" data-lyr="${k}" ${g && MAP.hasLayer(g) ? 'checked' : ''}>${l}</label>`; }).join('');
-  if (box.dataset.h !== h) { box.innerHTML = h; box.dataset.h = h; }
+  const expanded = box.querySelector('.lyr-toggle')?.getAttribute('aria-expanded') === 'true';
+  const h = `<button type="button" class="lyr-toggle" aria-expanded="false" aria-controls="dLyrOptions">Layers</button><div id="dLyrOptions" class="lyr-options" hidden>${LYR().map(([k, l, gs]) => { const g = gs.find(Boolean); return `<label><input type="checkbox" data-lyr="${k}" ${g && MAP.hasLayer(g) ? 'checked' : ''}>${l}</label>`; }).join('')}</div>`;
+  if (box.dataset.h !== h) { box.innerHTML = h; box.dataset.h = h; if (expanded) { box.querySelector('.lyr-toggle').setAttribute('aria-expanded', 'true'); box.querySelector('.lyr-options').hidden = false; } }
 }
 document.addEventListener('change', e => { const k = e.target.dataset && e.target.dataset.lyr; if (k) setLayer(k, e.target.checked); });
+document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('#dLyr .lyr-toggle'); if (!b) return; const options = $('#dLyrOptions'); options.hidden = !options.hidden; b.setAttribute('aria-expanded', String(!options.hidden)); });
 
 function renderDash() {
   const put = (id, h) => { const el = $(id); if (el && el.innerHTML !== h) el.innerHTML = h; };
   try { put('#dDonut', dashDonut()); } catch (e) { console.error(e); }
-  try { put('#dAlerts', dashAlerts()); } catch (e) { console.error(e); }
   try { put('#dPs', dashPs()); } catch (e) { console.error(e); }
   try { put('#dRt', dashRoutes()); } catch (e) { console.error(e); }
   try { put('#dUw', dashUnits()); } catch (e) { console.error(e); }

@@ -35,11 +35,12 @@ test('signed-in control room displays live unit and SOS', async ({ page }) => {
   await expect(page.locator('#app')).toBeVisible();
   await expect(page.locator('#counts')).toContainText('All phones');
   await expect(page.locator('#counts')).toContainText('1');
-  await expect(page.getByText('SOS from Central', { exact: false }).first()).toBeVisible();
-  await expect(page.locator('#counts')).toContainText('SOS');
   await expect(page.locator('.trace-trip')).toBeVisible({ timeout: 8000 });
   await expect(page.locator('.trace-trip')).toContainText('28 km/h');
   await expect(page.locator('.trace-trip')).toContainText('81%');
+  await page.locator('#tabs [data-tab="alerts"]').click();
+  await expect(page.locator('#pane')).toContainText('pressed NEED HELP');
+  await expect(page.locator('#counts')).toContainText('SOS');
 });
 
 test('groups on the initial map are fitted and malformed fixes do not hide valid phones', async ({ page }) => {
@@ -101,6 +102,50 @@ async function controlRoom(page, overrides = {}) {
   return writes;
 }
 
+test('polling stations group on overview maps and separate when zoomed in', async ({ page }) => {
+  await controlRoom(page);
+  const result = await page.evaluate(() => {
+    for (let i = 0; i < 120; i++) CONF.stations['dense' + i] = { name: 'Polling ' + i, ps: 'Example Rural Police Station', route: 'Route 12', lat: 17 + (i % 12) * .002, lng: 81.8 + Math.floor(i / 12) * .002 };
+    fitted = true;
+    const originalBounds = MAP.getBounds;
+    const originalZoom = MAP.getZoom;
+    MAP.getBounds = () => L.latLngBounds([[16.9, 81.7], [17.1, 81.9]]);
+    MAP.getZoom = () => 10;
+    stationsSig = '';
+    renderMap();
+    const grouped = LAYER_S.getLayers().length, zoomLow = MAP.getZoom();
+    const clusters = LAYER_S.getLayers().filter(marker => marker.options.icon.options.html.includes('pscluster')).length;
+    MAP.getZoom = () => 16;
+    stationsSig = '';
+    renderMap();
+    MAP.getBounds = originalBounds;
+    MAP.getZoom = originalZoom;
+    return { grouped, clusters, expanded: LAYER_S.getLayers().length, zoomLow };
+  });
+  expect(result.grouped, JSON.stringify(result)).toBeLessThan(20);
+  expect(result.clusters).toBeGreaterThan(0);
+  expect(result.expanded).toBeGreaterThan(result.grouped);
+});
+
+test('clear all archives past activity and attended SOS while keeping active SOS', async ({ page }) => {
+  const now = Date.now();
+  const writes = await controlRoom(page, {
+    '/devices.json': { unit1: { ps: 'Example Rural Police Station', route: 'Route 12', election: 'Election 2026' } },
+    '/events.json': {
+      activity: { type: 'start', uid: 'unit1', t: now - 2000 },
+      attended: { type: 'sos', uid: 'unit1', t: now - 3000, ackBy: 'operator', ackAt: now - 1000 },
+      active: { type: 'sos', uid: 'unit1', t: now - 1000 }
+    }
+  });
+  await page.locator('#tabs [data-tab="alerts"]').click();
+  await expect(page.locator('#pane')).toContainText('started duty');
+  await expect(page.locator('#pane .alert.sos')).toHaveCount(2);
+  await page.getByRole('button', { name: 'Clear all' }).click();
+  await expect(page.locator('#pane')).not.toContainText('started duty');
+  await expect(page.locator('#pane .alert.sos')).toHaveCount(1);
+  expect(writes).toEqual([expect.objectContaining({ pathname: '/events/attended.json', body: expect.objectContaining({ cleared: true }) })]);
+});
+
 for (const width of [1920, 1536, 1280, 768, 390]) {
   test(`all eight tabs fit at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
@@ -108,6 +153,12 @@ for (const width of [1920, 1536, 1280, 768, 390]) {
     for (const tab of ['sum', 'veh', 'loc', 'alerts', 'inc', 'replay', 'report', 'setup']) {
       await page.locator(`#tabs [data-tab="${tab}"]`).click();
       await expect(page.locator(`#tabs [data-tab="${tab}"]`)).toHaveAttribute('aria-selected', 'true');
+      if (['sum', 'veh', 'loc'].includes(tab)) await expect(page.locator('#map')).toBeVisible();
+      else await expect(page.locator('#map')).toBeHidden();
+      if (tab === 'sum') {
+        await expect(page.locator('.c-alerts')).toHaveCount(0);
+        await expect(page.locator('#dSum .psbars')).toHaveCount(0);
+      }
       if (tab === 'setup') {
         const routes = page.locator('details[data-sec="routes"]');
         if (!(await routes.evaluate(el => el.open))) await routes.locator('summary').click();
@@ -415,10 +466,13 @@ test('active tab displays 5 status cards, active units and active routes with cl
   await expect(centerBtn).toBeVisible();
   await centerBtn.click();
 
-  // Verify selection
-  await expect(firstCard).toHaveClass(/sel/);
+  // Center opens the map on Live Tracking.
+  await expect(page.locator('#tabs [data-tab="veh"]')).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('#map')).toBeVisible();
+  await expect(page.locator('.veh.sel')).toBeVisible();
 
   // Switch to routes sub-view
+  await activeTab.click();
   await routesBtn.click();
   await expect(page.locator('.active-card')).toBeVisible();
 });

@@ -75,6 +75,25 @@ body.v-setup .rd .pane table.t th:first-child,body.v-setup .rd .pane table.t td:
 body.v-setup .rd .pane table.t th:nth-child(5),body.v-setup .rd .pane table.t td:nth-child(5){min-width:160px}
 body.v-setup .rd .pane table.t th:nth-child(6),body.v-setup .rd .pane table.t td:nth-child(6){min-width:160px}
 body.v-setup .rd .pane table.t th:last-child,body.v-setup .rd .pane table.t td:last-child{min-width:140px;white-space:nowrap}
+/* Only Dashboard, Live Tracking and Polling Stations display the map. */
+body.v-no-map .trace-trip{display:none!important}
+body.v-no-map .rd .work{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr)}
+body.v-no-map .rd .work #map,body.v-no-map #panelBtn,body.v-no-map #panelShow{display:none}
+body.v-no-map .rd .work aside.panel{display:flex;min-width:0;border:0;background:#fff}
+body.v-no-map .rd .pane{background:#fff}
+.rd .dash{grid-template-columns:minmax(0,1.7fr) minmax(0,1fr)}
+.rd .c-map{grid-column:1}
+.rd .c-uw{grid-column:1/-1}
+.rd .lyr{left:56px;padding:0;gap:0;max-width:min(240px,calc(100% - 112px))}
+.rd .lyr-toggle{border:0;border-radius:9px;background:#fff;color:#15233a;font:600 13px system-ui,sans-serif;padding:9px 12px;cursor:pointer}
+.rd .lyr-options{display:flex;flex-direction:column;gap:7px;padding:4px 12px 11px;max-height:220px;overflow:auto}
+.rd .lyr-options[hidden]{display:none}
+.pscluster{display:grid;place-items:center;width:100%;height:100%;border:2px solid #fff;border-radius:50%;background:#1f6fd1;color:#fff;font:700 12px system-ui,sans-serif;box-shadow:0 2px 7px #0005}
+.pscluster.urgent{background:#c0392b}
+.alerts-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:2px 0 10px;border-bottom:1px solid #e4e4e7}
+.alerts-toolbar h2{margin:0;font-size:19px}
+.alerts-toolbar p{margin:3px 0 0;color:#71717a;font-size:13px}
+.alerts-toolbar button{flex:none}
 .rd .mapbox .stamp{max-width:calc(100% - 24px);white-space:normal;text-align:center;line-height:1.25}
 .member-modal .card{width:min(560px,100%);max-height:calc(100dvh - 32px);overflow:auto}
 .member-modal h2{overflow-wrap:anywhere;margin-top:0}
@@ -83,6 +102,8 @@ body.v-setup .rd .pane table.t th:last-child,body.v-setup .rd .pane table.t td:l
 .member-modal .err{min-height:20px;margin-top:10px}
 body.v-dash #panelBtn{display:none}
 @media(max-width:1100px){
+  .rd .dash{grid-template-columns:minmax(0,1fr)}
+  .rd .c-map,.rd .c-uw{grid-column:1}
   .rd .bar .counts{grid-template-columns:repeat(3,minmax(0,1fr))}
   .rd .work{grid-template-columns:minmax(0,1fr) minmax(300px,42%)}
 }
