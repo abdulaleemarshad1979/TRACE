@@ -1292,7 +1292,6 @@ body.wall .rd .work{grid-template-columns:minmax(0,1fr) 40vw;margin:0 10px 10px}
     </div>
     <div class="ecr"><b>Election Control Room</b><em id="elecName">Route mobiles · polling locations</em></div>
     <div class="hright">
-      <span class="pollcd" id="pollCd"></span>
       <span class="conn" id="conn">Live</span>
       <span class="clock" id="clock"></span>
       <button class="ibtn vbtn3" id="voiceBtn" type="button" title="Record and send a voice message to the route mobiles">🎤 Voice</button>
@@ -1323,7 +1322,6 @@ body.wall .rd .work{grid-template-columns:minmax(0,1fr) 40vw;margin:0 10px 10px}
       <div class="card c-ps"><div class="ch"><h4><i>🏫</i>Polling Stations Status</h4><button type="button" class="lnk" data-tab="loc">View all</button></div><div id="dPs"></div></div>
       <div class="card c-rt"><div class="ch"><h4><i>🛣</i>Route Monitoring</h4><button type="button" class="lnk" data-tab="veh">View all</button></div><div id="dRt"></div></div>
       <div class="card c-uw"><div class="ch"><h4><i>👮</i>Unit Wise Status</h4><button type="button" class="lnk" data-tab="veh">View all</button></div><div id="dUw"></div></div>
-      <div class="card c-sum"><div class="ch"><h4><i>🗳</i>Poll Day Summary</h4></div><div class="pane dsum" id="dSum"></div></div>
     </section>
     <div class="work">
       <button class="btn panelshow" id="panelShow" type="button" hidden>Show panel ▸</button>
@@ -6296,25 +6294,7 @@ function psTurn(list) { const T = turnout(list, votes()); return T.pct != null ?
 
 /* turnout card on the Summary: big %, hourly line, fast-rise list */
 function turnoutCard() {
-  const list = stations().filter(p => !UI.fPs || p.ps === UI.fPs), V = votes(), T = turnout(list, V);
-  if (!list.length || (!T.rep && !T.voters)) return '';
-  const s = S(), d0 = new Date().setHours(0, 0, 0, 0), hm = x => { const [h, m] = String(x).split(':').map(Number); return d0 + (h || 0) * HOUR + (m || 0) * MIN; };
-  const a = hm(s.pollStart), b = Math.min(Date.now(), hm(s.pollEnd));
-  const pts = []; for (let t = a + HOUR; t <= b; t += HOUR) { const x = turnout(list, V, t); if (x.pct != null) pts.push([t, x.pct]); }
-  if (T.pct != null && (!pts.length || pts[pts.length - 1][0] < T.latest)) pts.push([T.latest, T.pct]);
-  let chart = '';
-  if (pts.length) {
-    const W = 460, H = 120, X = t => 36 + (t - a) / Math.max(HOUR, hm(s.pollEnd) - a) * (W - 46), Y = v => H - 18 - v / 100 * (H - 30);
-    chart = `<svg class="tline" viewBox="0 0 ${W} ${H}">${[0, 25, 50, 75, 100].map(v => `<line x1="36" x2="${W - 10}" y1="${Y(v)}" y2="${Y(v)}" stroke="#9aa8bb" stroke-width=".4"/><text x="30" y="${Y(v) + 3}" font-size="9" text-anchor="end" fill="currentColor">${v}%</text>`).join('')}
-      ${(() => { const L_ = []; for (let t = a; t <= hm(s.pollEnd); t += 2 * HOUR) L_.push(`<text x="${X(t)}" y="${H - 3}" font-size="9" text-anchor="middle" fill="currentColor">${fT(t)}</text>`); return L_.join(''); })()}
-      <polyline points="${[[a, 0]].concat(pts).map(p => X(p[0]) + ',' + Y(p[1])).join(' ')}" fill="none" stroke="#1f5fa8" stroke-width="2.5"/>
-      ${pts.map(p => `<circle cx="${X(p[0])}" cy="${Y(p[1])}" r="3.5" fill="#1f5fa8"><title>${fT(p[0])}: ${pctTxt(p[1])}</title></circle>`).join('')}</svg>`;
-  }
-  const fast = list.filter(p => surge(p, V));
-  return `<div class="turnout"><div class="trow"><div><span>Poll percentage</span><b data-k="turnout">${T.pct != null ? pctTxt(T.pct) : '–'}</b></div>
-    <div class="tsub">${fmtN(T.n)} votes polled${T.tot ? ` of ${fmtN(T.tot)} voters` : ''}<br>reported from <b>${T.rep}</b> of ${T.all} locations${T.latest ? ` · latest ${fT(T.latest)}` : ''}</div></div>${chart}
-    ${fast.length ? `<div class="banner bad" style="margin:6px 0 0"><b>⚡ Fast rise in votes (25%+ of voters within an hour):</b> ${fast.map(p => `<button class="btn small" data-act="locGo" data-id="${p.id}">${esc(p.name)}</button>`).join(' ')}</div>` : ''}
-    <p class="note" style="margin:4px 0 0">Figures as sent by the route mobiles (VOTES POLLED button); the official figures are with the election staff.</p></div>`;
+  return '';
 }
 const _paneSumV = paneSum;
 paneSum = function () { const h = _paneSumV(); const c = turnoutCard(); return c ? h.replace('<div class="tiles">', c + '<div class="tiles">') : h; };
@@ -6823,7 +6803,7 @@ setInterval(() => {
 
 /* the same Excel from the Poll Day Summary and the Dashboard home */
 const _paneSumX = paneSum;
-paneSum = function () { return _paneSumX().replace(/(<button class="btn small vbtn2" data-act="voiceMsg">[^<]*<\/button>)/, '$1<button class="btn small primary" data-act="pollXlsx" title="Poll percentage of every polling location at each interval, in Excel">📊 Poll % Excel</button><button class="btn small" data-act="pollOpts" title="Interval and automatic saving">⏱ Auto-save</button>'); };
+paneSum = function () { return _paneSumX(); };
 document.addEventListener('click', e => { const a = e.target.closest && e.target.closest('[data-act="pollOpts"]'); if (a) { UI.tab = 'loc'; UI.locF = 'votes'; renderTabs(); renderPane(); } });
 
 /* ===== Correct one polling location (position, name, sensitivity, route, voters) without re-importing the Excel ===== */
@@ -6925,17 +6905,7 @@ renderCounts = function () { _renderCounts(); animateNums($('#counts')); };
 
 /* ---------- 7: coverage gauge on the Summary ---------- */
 function gauge(N) {
-  const tot = N.all.length; if (!tot) return '';
-  const pct = Math.round(N.cv.g * 100 / tot), col = pct >= 80 ? '#1e7b45' : pct >= 50 ? '#e0a800' : '#c0392b';
-  const arc = (from, to) => { const a = Math.PI * (1 - from), b = Math.PI * (1 - to), R = 80, cx = 100, cy = 95; return `M ${cx + R * Math.cos(a)} ${cy - R * Math.sin(a)} A ${R} ${R} 0 ${to - from > .5 ? 1 : 0} 1 ${cx + R * Math.cos(b)} ${cy - R * Math.sin(b)}`; };
-  const g = N.cv.g / tot, y = N.cv.y / tot;
-  return `<div class="gauge"><svg viewBox="0 0 200 124">
-      <path d="${arc(0, 1)}" stroke="#e3e8ef" stroke-width="18" fill="none" stroke-linecap="round"/>
-      ${g > 0 ? `<path d="${arc(0, Math.max(g, .001))}" stroke="#1e7b45" stroke-width="18" fill="none" stroke-linecap="round"/>` : ''}
-      ${y > 0 ? `<path d="${arc(g, Math.min(1, g + y))}" stroke="#e0a800" stroke-width="18" fill="none"/>` : ''}
-      <text x="100" y="86" text-anchor="middle" font-size="34" font-weight="800" fill="${col}" data-k="gauge">${pct}%</text>
-      <text x="100" y="121" text-anchor="middle" font-size="10" fill="currentColor">polling locations visited in ${S().green} min</text></svg>
-    <div class="glist"><div><i style="background:#1e7b45"></i><b>${N.cv.g}</b> visited</div><div><i style="background:#e0a800"></i><b>${N.cv.y}</b> visit due</div><div><i style="background:#c0392b"></i><b>${N.cv.r}</b> overdue / not visited</div><div><i style="background:#111"></i><b>${N.redHyper.length}</b> hypersensitive overdue</div></div></div>`;
+  return '';
 }
 const _paneSum2 = paneSum;
 paneSum = function () { const h = _paneSum2(); return h.replace('<div class="tiles">', gauge(numbers()) + '<div class="tiles">'); };
@@ -7013,16 +6983,6 @@ function showBigAlert(a) {
 
 /* ---------- 13: poll countdown in the header ---------- */
 function pollCountdown() {
-  const el = $('#pollCd'); if (!el) return;
-  const s = S(), now = new Date(), at = hm => { const [h, m] = String(hm || '').split(':').map(Number); const d = new Date(now); d.setHours(h || 0, m || 0, 0, 0); return d.getTime(); };
-  const a = at(s.pollStart), b = at(s.pollEnd), t = now.getTime();
-  const dur = ms => { const m = Math.ceil(ms / MIN); return m >= 60 ? `${Math.floor(m / 60)} h ${pad(m % 60)} min` : `${m} min`; };
-  let txt, cls;
-  if (t < a) { txt = `Poll starts in ${dur(a - t)}`; cls = 'pre'; }
-  else if (t < b) { txt = `Poll closes in ${dur(b - t)}`; cls = b - t <= 15 * MIN ? 'last' : b - t <= HOUR ? 'hour' : 'on'; }
-  else { txt = 'Poll closed'; cls = 'done'; }
-  if (el.textContent !== txt) el.textContent = txt;
-  el.className = 'pollcd ' + cls;
 }
 
 /* ---------- 10: automatic tour of the sub-divisions on the big screen ---------- */
