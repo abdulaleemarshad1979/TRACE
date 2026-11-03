@@ -1269,12 +1269,13 @@ body.wall .rd .work{grid-template-columns:minmax(0,1fr) 40vw;margin:0 10px 10px}
       <button class="btn primary" type="submit">Save</button>
     </form>
     <form id="loginForm" hidden>
-      <label class="f">Admin email or SI mobile number<input type="text" id="lEmail" autocomplete="username" inputmode="email" required></label>
+      <label class="f">Administrator email<input type="email" id="lEmail" autocomplete="username" required></label>
       <label class="f">Password<input type="password" id="lPw" autocomplete="current-password" required></label>
       <label class="row agree"><input type="checkbox" id="lAgree" required> I am an authorised police officer. I will use this only for official election duty and will not share the login, screen, screenshots or data with anyone else.</label>
       <label class="row"><input type="checkbox" id="lKeep" checked> Keep me signed in on this computer <span class="use">(only on the control room computer)</span></label>
       <div class="err" id="lErr"></div>
       <button class="btn primary" type="submit">Sign in</button>
+      <p class="note" style="margin:14px 0 0">SI officer? <a href="si-monitor.html">Open the separate SI monitor login</a>.</p>
       <button class="btn ghost small" type="button" id="changeProj">Use a different Firebase project</button>
     </form>
     <div class="restricted"><b>🔒 RESTRICTED — FOR OFFICIAL USE OF TRACE CONTROL ROOM ONLY</b>
@@ -4470,7 +4471,6 @@ async function token() {
   return tokenRefresh;
 }
 async function signIn(email, pw, keep) {
-  if (!email.includes('@')) email = 'si' + memberPhone(email).slice(1) + '@members.track.invalid';
   const r = await fetchWithTimeout(`${AUTH_URL}/accounts:signInWithPassword?key=${CFG.k}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: pw, returnSecureToken: true }) });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(authErr(j));

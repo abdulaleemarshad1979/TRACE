@@ -7,7 +7,7 @@ const siUrl = pathToFileURL(path.resolve('dashboard/si-monitor.html')).href;
 
 test('SI monitor shows only assigned mandal routes and their live phones', async ({ page }) => {
   const now = Date.now(), reads = [];
-  await page.addInitScript(() => localStorage.setItem('rm_au', JSON.stringify({ rt: 'si-refresh', uid: 'si-1', email: 'si@example.test' })));
+  await page.addInitScript(() => localStorage.setItem('rm_au', JSON.stringify({ rt: 'si-refresh', uid: 'si-1', email: 'si919876543210@members.track.invalid' })));
   await page.route('https://securetoken.googleapis.com/**', route => route.fulfill({ json: { id_token: 'si-token', expires_in: '3600', refresh_token: 'si-refresh', user_id: 'si-1' } }));
   const data = {
     '/roles/si-1.json': 'si_monitor',
@@ -28,6 +28,8 @@ test('SI monitor shows only assigned mandal routes and their live phones', async
   await expect(page.locator('#routes')).toContainText('Kadiyam PS');
   await expect(page.locator('#routes')).toContainText('HC Example');
   await expect(page.locator('#alert')).toContainText('1 open SOS');
+  expect(await page.evaluate(() => localStorage.getItem('rm_au'))).toBeNull();
+  expect(JSON.parse(await page.evaluate(() => sessionStorage.getItem('rm_si_au'))).uid).toBe('si-1');
   expect(reads).not.toContain('/config/routes/r2.json');
   expect(reads).not.toContain('/devices.json');
   expect(reads).not.toContain('/live.json');
@@ -35,6 +37,7 @@ test('SI monitor shows only assigned mandal routes and their live phones', async
 
 test('SI monitor accepts the command control room mobile login', async ({ page }) => {
   const signIns = [];
+  await page.addInitScript(() => localStorage.setItem('rm_au', JSON.stringify({ rt: 'admin-refresh', uid: 'admin-1', email: 'admin@example.test' })));
   await page.route('https://identitytoolkit.googleapis.com/**', route => { signIns.push(route.request().postDataJSON()); route.fulfill({ json: { localId: 'si-1', idToken: 'si-token', refreshToken: 'si-refresh', expiresIn: '3600' } }); });
   await page.route('https://officer-8eb52-default-rtdb.asia-southeast1.firebasedatabase.app/**', route => {
     const data = { '/roles/si-1.json': 'si_monitor', '/siScopes/si-1.json': { mandal: 'Kadiyam', routes: { r1: true } }, '/config/routes/r1.json': { ps: 'Kadiyam PS', route: 'Route 1' } };
@@ -42,31 +45,24 @@ test('SI monitor accepts the command control room mobile login', async ({ page }
   });
   await page.route('https://*.tile.openstreetmap.org/**', route => route.abort());
   await page.goto(siUrl);
+  await expect(page.getByRole('link', { name: /Administrator Login/ })).toBeVisible();
   await page.locator('#mobile').fill('+91 98765 43210');
   await page.locator('#password').fill('Example-password');
-  await page.locator('#loginForm button').click();
+  await page.locator('#togglePassword').click();
+  await expect(page.locator('#password')).toHaveAttribute('type', 'text');
+  await page.locator('#loginForm [type=submit]').click();
   await expect(page.locator('#mandal')).toHaveText('Kadiyam');
   expect(signIns[0].email).toBe('si919876543210@members.track.invalid');
+  expect(JSON.parse(await page.evaluate(() => localStorage.getItem('rm_au'))).uid).toBe('admin-1');
 });
 
-test('SI sign-in redirects to the assigned monitor without keeping a persistent login', async ({ page }) => {
-  const signIns = [];
-  await page.route('https://identitytoolkit.googleapis.com/**', route => { signIns.push(route.request().postDataJSON()); route.fulfill({ json: { localId: 'si-1', idToken: 'si-token', refreshToken: 'si-refresh', expiresIn: '3600' } }); });
-  await page.route('https://securetoken.googleapis.com/**', route => route.fulfill({ json: { id_token: 'si-token', expires_in: '3600', refresh_token: 'si-refresh', user_id: 'si-1' } }));
-  await page.route('https://officer-8eb52-default-rtdb.asia-southeast1.firebasedatabase.app/**', route => {
-    const data = { '/roles/si-1.json': 'si_monitor', '/siScopes/si-1.json': { mandal: 'Kadiyam', routes: { r1: true } }, '/config/routes/r1.json': { ps: 'Kadiyam PS', route: 'Route 1' } };
-    route.fulfill({ json: data[new URL(route.request().url()).pathname] ?? null });
-  });
-  await page.route('https://*.tile.openstreetmap.org/**', route => route.abort());
+test('control room and SI monitor have separate sign-in screens', async ({ page }) => {
   await page.goto(url);
-  await page.locator('#lEmail').fill('9876543210');
-  await page.locator('#lPw').fill('Example-password');
-  await page.locator('#lAgree').check();
-  await page.locator('#lKeep').uncheck();
-  await page.locator('#loginForm [type=submit]').click();
+  await expect(page.locator('#lEmail')).toHaveAttribute('type', 'email');
+  await page.getByRole('link', { name: 'Open the separate SI monitor login' }).click();
   await expect(page).toHaveURL(/si-monitor\.html$/);
-  await expect(page.locator('#mandal')).toHaveText('Kadiyam');
-  expect(signIns[0].email).toBe('si919876543210@members.track.invalid');
+  await expect(page.locator('#mobile')).toBeVisible();
+  await expect(page.getByRole('link', { name: /Administrator Login/ })).toBeVisible();
   expect(await page.evaluate(() => localStorage.getItem('rm_au'))).toBeNull();
 });
 

@@ -2,10 +2,67 @@
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>TRACK · SI Monitor</title>
 <style>
   :root{font:15px system-ui,sans-serif;color:#15233a;background:#f1f4f8}*{box-sizing:border-box}body{margin:0}button,input{font:inherit}button{cursor:pointer}header{background:#15233a;color:#fff;padding:15px 22px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}header b{font-size:20px}header small{display:block;opacity:.8}header button{border:1px solid #9db1ca;border-radius:7px;color:#fff;background:transparent;padding:8px 12px}.wrap{max-width:1400px;margin:auto;padding:18px}.login{max-width:430px;margin:12vh auto;background:#fff;border-radius:12px;padding:25px;box-shadow:0 8px 28px rgba(0,0,0,.12)}.login h1{margin-top:0}.login label{display:block;margin:12px 0;font-weight:600}.login input{display:block;width:100%;padding:10px;margin-top:5px;border:1px solid #b7c5d5;border-radius:7px}.primary{background:#1f5fa8;color:#fff;border:0;border-radius:7px;padding:10px 16px;font-weight:700}.error{color:#b02424;font-weight:600;min-height:20px}.note{color:#53647a;font-size:13px}.top{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}.top h1{margin:0}.stats{display:flex;gap:9px;flex-wrap:wrap;margin:16px 0}.stat{background:#fff;border-radius:9px;padding:12px 17px;min-width:126px;box-shadow:0 1px 6px rgba(0,0,0,.07)}.stat b{font-size:25px;display:block}.stat span{font-size:12px;color:#52637a}.layout{display:grid;grid-template-columns:minmax(300px,1fr) minmax(340px,1.25fr);gap:16px}.card{background:#fff;border-radius:10px;box-shadow:0 1px 8px rgba(0,0,0,.08);padding:15px}.card h2{font-size:17px;margin:0 0 12px}.tablewrap{overflow:auto;max-height:68vh}table{border-collapse:collapse;width:100%;font-size:13px}th,td{padding:10px;text-align:left;border-bottom:1px solid #e2e8f0;vertical-align:top}th{position:sticky;top:0;background:#eaf0f7}td small{display:block;color:#5b6c81}.badge{display:inline-block;border-radius:99px;padding:3px 8px;font-weight:700;background:#edf2f7;white-space:nowrap}.badge.live{background:#d9f6e4;color:#146c39}.badge.sos{background:#fbe0df;color:#aa2424}.badge.stale{background:#fff0cb;color:#815506}#map{height:68vh;min-height:360px;border-radius:8px}.alert{background:#fff8e9;border:1px solid #e8d5aa;border-radius:7px;padding:10px;margin:12px 0}.restricted{margin-top:16px;color:#53647a;font-size:12px} [hidden]{display:none!important}@media(max-width:850px){.layout{grid-template-columns:1fr}#map{height:45vh}.tablewrap{max-height:none}}
+body.signin-view{min-height:100vh;background:radial-gradient(circle at 14% 12%,#26364a 0,transparent 36%),radial-gradient(circle at 88% 82%,#101827 0,transparent 42%),#1a2332;color:#e8eff8}
+.signin-view>header{display:none}
+.signin-view .login{max-width:none;min-height:100vh;margin:0;padding:32px 18px;display:grid;place-items:center;background:none;border-radius:0;box-shadow:none}
+.login-card{width:min(100%,580px);overflow:hidden;border:1px solid #3a485e;border-radius:20px;background:#151e2d;box-shadow:0 32px 70px #0a102080}
+.login-brand{text-align:center;padding:36px 34px 29px;background:#151d2c;border-bottom:1px solid #344258}
+.login-mark{height:64px;width:64px;display:grid;place-items:center;margin:0 auto 15px;color:#42baff}
+.login-mark svg{height:62px;width:56px}
+.login-eyebrow{color:#9aacc2;font-size:12px;font-weight:700;letter-spacing:.14em;text-transform:uppercase}
+.login-brand h1{margin:8px 0 3px;color:#42baff;font-size:22px;line-height:1.2;letter-spacing:.025em}
+.login-brand p{margin:0;color:#9aacc2;font-size:14px}
+.login-content{padding:26px 34px 24px;background:#253043}
+.login-tabs{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:6px;background:#151e2e;border:1px solid #3b4b61;border-radius:13px}
+.login-tab{display:flex;align-items:center;justify-content:center;gap:7px;min-height:45px;padding:8px 12px;color:#a7b7cb;text-decoration:none;font-size:14px;font-weight:700;border-radius:9px;text-align:center}
+.login-tab.active{background:#1386c9;color:#fff;box-shadow:0 4px 13px #087bb54d}
+.login-tab:not(.active):hover,.login-tab:not(.active):focus-visible{background:#34435a;color:#fff}
+.login-role{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:28px 3px 20px;padding:12px 14px;border:1px solid #235a7e;border-radius:9px;background:#203b55;font-size:13px}
+.login-role b{display:flex;align-items:center;gap:9px;color:#43bdff}
+.login-role>span{color:#a7b7c9;text-align:right}
+.role-dot{height:10px;width:10px;border-radius:50%;background:#43bdff}
+.login #loginForm label{display:block;margin:17px 3px 7px;color:#d0dae6;font-size:12px;font-weight:800;letter-spacing:.08em}
+.login #loginForm input{display:block;width:100%;height:53px;margin:0;padding:0 16px;border:1px solid #40516a;border-radius:9px;background:#151d2c;color:#fff;outline:0}
+.login #loginForm input::placeholder{color:#7f8da1}
+.login #loginForm input:focus-visible{border-color:#41bdff;box-shadow:0 0 0 3px #2caafc33}
+.password-field{position:relative}
+.login #loginForm .password-field input{padding-right:84px}
+.password-field button{position:absolute;right:10px;top:8px;padding:7px 13px;border:1px solid #4b5d75;border-radius:7px;background:#2d394c;color:#b9c8d9;font-size:12px;font-weight:700}
+.password-field button:hover,.password-field button:focus-visible{color:#fff;border-color:#7c91ab}
+.login .error{min-height:20px;margin:8px 3px 9px;color:#ffaaa9;font-size:13px}
+.login .login-submit{display:flex;align-items:center;justify-content:center;gap:12px;width:100%;min-height:54px;background:#1188ca;box-shadow:0 6px 18px #0782c44d;font-size:15px}
+.login .login-submit:hover,.login .login-submit:focus-visible{background:#279ddb}
+.login .login-submit:disabled{opacity:.65;cursor:wait}
+.login-help{margin:17px 3px 0;color:#acbbcd;font-size:12px;line-height:1.5;text-align:center}
+.login-footer{padding:17px 20px;border-top:1px solid #344258;color:#8798af;text-align:center;font-size:12px}
+@media(max-width:560px){.signin-view .login{padding:15px}.login-brand{padding:28px 18px 24px}.login-brand h1{font-size:19px}.login-content{padding:20px 18px}.login-tab{font-size:12px;padding:8px 5px}.login-role{display:block}.login-role>span{display:block;margin:5px 0 0 19px;text-align:left}}
 </style>
-<script>__LEAFLET__</script></head><body>
+<script>__LEAFLET__</script></head><body class="signin-view">
 <header><div><b>TRACK · SI Monitor</b><small>East Godavari District Police · Assigned mandal</small></div><button id="signout" hidden>Sign out</button></header>
-<section class="login" id="login"><h1>SI monitor sign in</h1><p class="note">Use the mobile number and password issued by the command control room.</p><form id="loginForm"><label>Mobile number<input id="mobile" type="tel" inputmode="tel" autocomplete="username" required></label><label>Password<input id="password" type="password" autocomplete="current-password" required></label><button class="primary">Sign in</button><p class="error" id="loginError" role="alert"></p></form></section>
+<section class="login" id="login" aria-labelledby="loginTitle">
+  <div class="login-card">
+    <div class="login-brand">
+      <div class="login-mark" aria-hidden="true"><svg viewBox="0 0 64 72" fill="none"><path d="M32 3 56 12v20c0 17-10 29-24 37C18 61 8 49 8 32V12L32 3Z" stroke="currentColor" stroke-width="2.5"/><path d="m32 16 5 11 12 1-9 8 3 12-11-6-11 6 3-12-9-8 12-1 5-11Z" fill="currentColor"/></svg></div>
+      <div class="login-eyebrow">East Godavari District Police</div>
+      <h1 id="loginTitle">TRACK MONITORING PORTAL</h1>
+      <p>Route tracking &amp; live duty monitoring</p>
+    </div>
+    <div class="login-content">
+      <nav class="login-tabs" aria-label="Choose sign-in portal"><span class="login-tab active" aria-current="page">◉ <span>SI Monitor Login</span></span><a class="login-tab" href="./">◇ <span>Administrator Login</span></a></nav>
+      <div class="login-role"><b><span class="role-dot" aria-hidden="true"></span>SI Monitor Portal</b><span>Assigned mandal · Read only</span></div>
+      <form id="loginForm">
+        <label for="mobile">MOBILE NUMBER</label>
+        <input id="mobile" type="tel" inputmode="tel" autocomplete="username" placeholder="Enter your mobile number" required>
+        <label for="password">PASSWORD</label>
+        <div class="password-field"><input id="password" type="password" autocomplete="current-password" placeholder="Enter password" required><button id="togglePassword" type="button" aria-label="Show password" aria-pressed="false">Show</button></div>
+        <p class="error" id="loginError" role="alert"></p>
+        <button class="primary login-submit" type="submit">Sign in to SI Monitor <span aria-hidden="true">→</span></button>
+      </form>
+      <p class="login-help">Use the mobile number and password issued by the command control room.</p>
+    </div>
+    <div class="login-footer">East Godavari District Police · Official duty access</div>
+  </div>
+</section>
 <main id="app" class="wrap" hidden><div class="top"><div><h1 id="mandal">Assigned mandal</h1><div class="note" id="officer"></div></div><div class="note" id="updated" role="status">Loading…</div></div><p class="alert" id="alert" hidden></p><div class="stats" id="stats"></div><div class="layout"><section class="card"><h2>Assigned routes and phones</h2><div class="tablewrap"><table><thead><tr><th>Route</th><th>Officer</th><th>Phone status</th><th>Last update</th></tr></thead><tbody id="routes"></tbody></table></div></section><section class="card"><h2>Live location</h2><div id="map" aria-label="Map of assigned route phones"></div></section></div><p class="restricted">Restricted to this SI account’s assigned routes. Live data refreshes every 15 seconds. Location and SOS information is for official duty only.</p></main>
 <script>
 'use strict';
@@ -14,15 +71,15 @@ const AUTH='https://identitytoolkit.googleapis.com/v1';
 const TOKEN='https://securetoken.googleapis.com/v1';
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let auth=null,idToken='',expiry=0,map,markers={},timer,scope=null,routes=[],keep=false;
-const saved=()=>{try{const local=localStorage.getItem('rm_au');keep=!!local;return JSON.parse(local||sessionStorage.getItem('rm_si_au')||'null')}catch{return null}};
-function save(){if(auth){if(keep)localStorage.setItem('rm_au',JSON.stringify(auth));else sessionStorage.setItem('rm_si_au',JSON.stringify(auth))}else{localStorage.removeItem('rm_au');sessionStorage.removeItem('rm_si_au')}}
-function stop(message){clearInterval(timer);auth=null;idToken='';save();$('#app').hidden=true;$('#signout').hidden=true;$('#login').hidden=false;$('#loginError').textContent=message||''}
+let auth=null,idToken='',expiry=0,map,markers={},timer,scope=null,routes=[];
+const saved=()=>{try{const session=JSON.parse(sessionStorage.getItem('rm_si_au')||'null');if(session)return session;const legacy=JSON.parse(localStorage.getItem('rm_au')||'null');if(/^si91[6-9][0-9]{9}@members\.track\.invalid$/.test(legacy?.email||'')){localStorage.removeItem('rm_au');sessionStorage.setItem('rm_si_au',JSON.stringify(legacy));return legacy}return null}catch{return null}};
+function save(){if(auth)sessionStorage.setItem('rm_si_au',JSON.stringify(auth));else sessionStorage.removeItem('rm_si_au')}
+function stop(message){clearInterval(timer);auth=null;idToken='';save();document.body.classList.add('signin-view');$('#app').hidden=true;$('#signout').hidden=true;$('#login').hidden=false;$('#loginError').textContent=message||''}
 async function request(url,options){const controller=new AbortController(),t=setTimeout(()=>controller.abort(),15000);try{const r=await fetch(url,{...options,signal:controller.signal});const data=await r.json().catch(()=>null);if(!r.ok)throw Error(data?.error?.message||`Request failed (${r.status})`);return data}finally{clearTimeout(t)}}
 async function token(){if(idToken&&Date.now()<expiry-120000)return idToken;if(!auth)throw Error('Sign in again.');const x=await request(`${TOKEN}/token?key=${encodeURIComponent(CFG.k)}`,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'grant_type=refresh_token&refresh_token='+encodeURIComponent(auth.rt)});idToken=x.id_token;expiry=Date.now()+(+x.expires_in||3600)*1000;auth.rt=x.refresh_token;auth.uid=x.user_id;save();return idToken}
 async function get(path,query=''){const t=await token();return request(`${CFG.d}/${path}.json?auth=${encodeURIComponent(t)}${query}`)}
 function siEmail(number){const digits=String(number||'').replace(/[\s()+-]/g,'');const national=digits.startsWith('91')&&digits.length===12?digits.slice(2):digits;if(!/^[6-9][0-9]{9}$/.test(national))throw Error('Enter a valid 10-digit Indian mobile number.');return `si91${national}@members.track.invalid`}
-async function signIn(number,password){const email=siEmail(number);const x=await request(`${AUTH}/accounts:signInWithPassword?key=${encodeURIComponent(CFG.k)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password,returnSecureToken:true})});auth={rt:x.refreshToken,uid:x.localId,email};idToken=x.idToken;expiry=Date.now()+(+x.expiresIn||3600)*1000;keep=false;save()}
+async function signIn(number,password){const email=siEmail(number);const x=await request(`${AUTH}/accounts:signInWithPassword?key=${encodeURIComponent(CFG.k)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password,returnSecureToken:true})});auth={rt:x.refreshToken,uid:x.localId,email};idToken=x.idToken;expiry=Date.now()+(+x.expiresIn||3600)*1000;save()}
 function initMap(){if(map)return;map=L.map('map').setView([17.0005,81.804],10);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors'}).addTo(map)}
 function time(v){return v?new Date(v).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):'Never'}
 function status(live,event){if(event)return{label:'SOS',css:'sos'};if(!live?.up||live.duty===false)return{label:'Not started',css:''};const age=Date.now()-live.up;if(age>5*60000)return{label:'No signal',css:'stale'};if(live.gps===false)return{label:'GPS off',css:'stale'};return{label:'Live',css:'live'}}
@@ -35,7 +92,8 @@ async function refresh(){const rows=await Promise.all(routes.map(async route=>{i
   const seen=new Set(),points=[];for(const x of rows){if(!x.uid||!Number.isFinite(+x.live.lat)||!Number.isFinite(+x.live.lng)||x.live.lat==null||x.live.lng==null)continue;seen.add(x.uid);const ll=[+x.live.lat,+x.live.lng],s=status(x.live,x.sos);points.push(ll);if(!markers[x.uid])markers[x.uid]=L.circleMarker(ll,{radius:9,color:x.sos?'#b02424':'#1f5fa8',fillOpacity:.8}).addTo(map);markers[x.uid].setLatLng(ll).setStyle({color:x.sos?'#b02424':'#1f5fa8'}).bindPopup(`<b>${esc(x.route.ps||'')} · ${esc(x.route.route||'')}</b><br>${esc(s.label)}<br>Last update: ${esc(time(x.live.up))}`)}for(const [uid,marker]of Object.entries(markers))if(!seen.has(uid)){map.removeLayer(marker);delete markers[uid]}if(points.length&&!map._trackFitted){map.fitBounds(points,{padding:[35,35],maxZoom:13});map._trackFitted=true}
   $('#updated').textContent=`Updated ${time(Date.now())}${missing?` · ${missing} unavailable`:''}`;
 }
-async function openMonitor(){await loadScope();$('#login').hidden=true;$('#app').hidden=false;$('#signout').hidden=false;initMap();setTimeout(()=>map.invalidateSize(),50);await refresh();clearInterval(timer);timer=setInterval(async()=>{try{await loadScope();await refresh()}catch(e){if(/PERMISSION_DENIED|not assigned|Sign in again/.test(e.message))stop(e.message);else $('#updated').textContent='Refresh failed: '+e.message}},15000)}
+async function openMonitor(){await loadScope();$('#login').hidden=true;document.body.classList.remove('signin-view');$('#app').hidden=false;$('#signout').hidden=false;initMap();setTimeout(()=>map.invalidateSize(),50);await refresh();clearInterval(timer);timer=setInterval(async()=>{try{await loadScope();await refresh()}catch(e){if(/PERMISSION_DENIED|not assigned|Sign in again/.test(e.message))stop(e.message);else $('#updated').textContent='Refresh failed: '+e.message}},15000)}
+$('#togglePassword').onclick=()=>{const input=$('#password'),show=input.type==='password';input.type=show?'text':'password';$('#togglePassword').textContent=show?'Hide':'Show';$('#togglePassword').setAttribute('aria-label',show?'Hide password':'Show password');$('#togglePassword').setAttribute('aria-pressed',String(show))};
 $('#loginForm').onsubmit=async e=>{e.preventDefault();const button=e.target.querySelector('button');button.disabled=true;$('#loginError').textContent='';try{await signIn($('#mobile').value.trim(),$('#password').value);await openMonitor()}catch(error){stop(error.message)}finally{button.disabled=false}};
 $('#signout').onclick=()=>stop('Signed out.');
 auth=saved();if(auth)openMonitor().catch(e=>stop(e.message));
