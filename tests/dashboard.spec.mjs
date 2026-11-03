@@ -102,10 +102,59 @@ async function controlRoom(page, overrides = {}) {
   return writes;
 }
 
-test('polling stations group on overview maps and separate when zoomed in', async ({ page }) => {
+test('fresh route phones remain visible when registration is missing or a route lock is stale', async ({ page }) => {
+  const now = Date.now();
+  await controlRoom(page, {
+    '/devices.json': { registered: { ps: 'Example Rural Police Station', route: 'Route 12', sd: 'Example Sub-division', force: 'route' } },
+    '/live.json': {
+      registered: { lat: 17, lng: 81.8, up: now, t: now, gps: true, duty: true },
+      unregistered: { lat: 17.001, lng: 81.801, up: now, t: now, gps: true, duty: true, ps: 'Other PS', route: 'Route 1', sd: 'Example Sub-division' }
+    }
+  });
+  const result = await page.evaluate(() => {
+    LOCK[lockKey(DEV.registered)] = { uid: 'previous-phone' };
+    return { ids: devIds(), count: devIds().length, other: DEV.unregistered?.route };
+  });
+  expect(result.ids).toEqual(['registered', 'unregistered']);
+  expect(result.count).toBe(2);
+  expect(result.other).toBe('Route 1');
+});
+
+test('closed incidents leave the live incident map and ticker', async ({ page }) => {
+  await controlRoom(page);
+  const result = await page.evaluate(() => {
+    const now = Date.now();
+    INC.closed = { no: 7, t: now, lat: 17, lng: 81.8, place: 'Closed location', status: 'closed' };
+    INC.open = { no: 8, t: now, lat: 17.01, lng: 81.81, place: 'Open location', status: 'open' };
+    drawIncidents(); ticker();
+    return { markers: LAYER_INC.getLayers().length, ticker: document.querySelector('#tkText').textContent, list: incList().map(x => x.no) };
+  });
+  expect(result.markers).toBe(1);
+  expect(result.ticker).toContain('Open location');
+  expect(result.ticker).not.toContain('Closed location');
+  expect(result.list).toEqual([8]);
+});
+
+test('closing a polling incident attends its linked tension report', async ({ page }) => {
+  const writes = await controlRoom(page);
+  await page.evaluate(() => {
+    const now = Date.now();
+    EVT.tension1 = { type: 'loc', uid: 'officer1', sid: 's1', sname: 'Example primary school polling location', status: 'tension', t: now };
+    INC.inc1 = { no: 1, t: now, lat: 17, lng: 81.8, place: 'Example primary school polling location', status: 'open', sourceEventId: 'tension1' };
+    UI.tab = 'inc'; UI.incSel = 'inc1'; renderTabs(); renderPane();
+  });
+  page.once('dialog', dialog => dialog.accept('Resolved'));
+  await page.locator('[data-act="incClose"][data-id="inc1"]').click();
+  await expect.poll(() => writes.length).toBe(2);
+  expect(writes.map(w => w.pathname)).toEqual(['/incidents/inc1.json', '/events/tension1.json']);
+  expect(await page.evaluate(() => ({ closed: INC.inc1.status, attended: EVT.tension1.ackBy, hot: hot(EVT.tension1) }))).toEqual({ closed: 'closed', attended: 'admin@example.test', hot: false });
+});
+
+test('every geocoded polling station keeps its own ballot marker at its exact coordinates', async ({ page }) => {
   await controlRoom(page);
   const result = await page.evaluate(() => {
     for (let i = 0; i < 120; i++) CONF.stations['dense' + i] = { name: 'Polling ' + i, ps: 'Example Rural Police Station', route: 'Route 12', lat: 17 + (i % 12) * .002, lng: 81.8 + Math.floor(i / 12) * .002 };
+    CONF.stations.far = { name: 'Suspect coordinate', ps: 'Example Rural Police Station', route: 'Route 12', lat: 16, lng: 80 };
     fitted = true;
     const originalBounds = MAP.getBounds;
     const originalZoom = MAP.getZoom;
@@ -113,18 +162,19 @@ test('polling stations group on overview maps and separate when zoomed in', asyn
     MAP.getZoom = () => 10;
     stationsSig = '';
     renderMap();
-    const grouped = LAYER_S.getLayers().length, zoomLow = MAP.getZoom();
-    const clusters = LAYER_S.getLayers().filter(marker => marker.options.icon.options.html.includes('pscluster')).length;
+    const low = LAYER_S.getLayers().map(marker => ({ position: marker.getLatLng(), html: marker.options.icon.options.html }));
     MAP.getZoom = () => 16;
     stationsSig = '';
     renderMap();
     MAP.getBounds = originalBounds;
     MAP.getZoom = originalZoom;
-    return { grouped, clusters, expanded: LAYER_S.getLayers().length, zoomLow };
+    return { low, expanded: LAYER_S.getLayers().length, suspect: stationGeoIssue(CONF.stations.far) };
   });
-  expect(result.grouped, JSON.stringify(result)).toBeLessThan(20);
-  expect(result.clusters).toBeGreaterThan(0);
-  expect(result.expanded).toBeGreaterThan(result.grouped);
+  expect(result.low).toHaveLength(121);
+  expect(result.expanded).toBe(121);
+  expect(result.suspect).toContain('over 40 km');
+  expect(result.low.every(x => x.html.includes('assets/ballot.png'))).toBe(true);
+  expect(result.low.some(x => x.position.lat === 17.002 && x.position.lng === 81.8)).toBe(true);
 });
 
 test('polling import skips a coordinate isolated from its police station', async ({ page }) => {

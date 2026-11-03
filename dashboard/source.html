@@ -4632,6 +4632,22 @@ const allRoutes = () => Object.entries(CONF.routes || {}).map(([id, r]) => Objec
 const routes = () => allRoutes().filter(r => inElection(r.election));
 const validLocation = p => p && p.lat != null && p.lng != null && p.lat !== '' && p.lng !== '' && Number.isFinite(+p.lat) && Number.isFinite(+p.lng) && Math.abs(+p.lat) <= 90 && Math.abs(+p.lng) <= 180;
 const stations = () => Object.entries(CONF.stations || {}).map(([id, s]) => Object.assign({ id }, s)).filter(x => inElection(x.el));
+let PS_GEO_CACHE = { src: null, count: -1, centers: {} };
+function stationGeoIssue(p) {
+  if (!validLocation(p)) return 'No coordinates supplied';
+  const count = Object.keys(CONF.stations || {}).length;
+  if (PS_GEO_CACHE.src !== CONF.stations || PS_GEO_CACHE.count !== count) {
+    const groups = {};
+    Object.values(CONF.stations || {}).forEach(s => { if (validLocation(s) && s.ps) (groups[s.ps] ||= []).push(s); });
+    const median = a => { const b = a.sort((x, y) => x - y); return b[Math.floor(b.length / 2)]; };
+    const centers = {};
+    Object.entries(groups).forEach(([ps, points]) => { if (points.length >= 3) centers[ps] = [median(points.map(s => +s.lat)), median(points.map(s => +s.lng))]; });
+    PS_GEO_CACHE = { src: CONF.stations, count, centers };
+  }
+  const center = PS_GEO_CACHE.centers[p.ps];
+  return !p.coordinateVerified && center && hav(+p.lat, +p.lng, center[0], center[1]) > 40000 ? 'Coordinate is over 40 km from other locations in this police station' : '';
+}
+const mappableStation = p => !stationGeoIssue(p);
 
 /* ---------- names and status ---------- */
 function dname(u) { const d = DEV[u] || {}; return [d.ps, d.route].filter(Boolean).join(' – ') || ('Phone ' + u.slice(0, 5)); }
@@ -4652,7 +4668,7 @@ function offRoute(u) {
 const norm = s => String(s || '').toLowerCase().replace(/route|no\.?|\s|-/g, '');
 function status(u) {
   const L = LIVE[u], s = S(), now = Date.now();
-  if (!L || !L.up) return { k: 'none', txt: 'Not started', c: C.none };
+  if (!L || !L.up || L.duty === false) return { k: 'none', txt: 'Not started', c: C.none };
   const age = now - L.up;
   if (age > s.nosig * MIN) return { k: 'nosig', txt: `No signal ${Math.floor(age / MIN)} min`, c: C.nosig };
   if (L.gps === false) return { k: 'gpsoff', txt: 'GPS switched off', c: C.gpsoff };
@@ -4679,7 +4695,17 @@ function visible(u) {
   if (UI.fForce && (FORCE[d.force] ? d.force : 'route') !== UI.fForce) return false;
   return true;
 }
-const devIds = () => Object.keys(DEV).filter(visible).filter(u => !(typeof isBlocked === 'function' && isBlocked(u))).sort((a, b) => (DEV[a].sd + dname(a)).localeCompare(DEV[b].sd + dname(b), undefined, { numeric: true }));
+function syncLiveDevices() {
+  Object.keys(DEV).forEach(u => { if (DEV[u]._fromLive && (!LIVE[u] || !LIVE[u].up || LIVE[u].duty === false || Date.now() - LIVE[u].up >= S().nosig * MIN)) delete DEV[u]; });
+  Object.entries(LIVE).forEach(([u, l]) => {
+    if (!l || (DEV[u] && !DEV[u]._fromLive)) return;
+    const recent = l.up && Date.now() - l.up < S().nosig * MIN;
+    if (!recent || l.duty === false) return;
+    const started = Object.values(EVT).filter(e => e && e.uid === u && e.type === 'start').sort((a, b) => b.t - a.t)[0] || {};
+    DEV[u] = { ps: l.ps || started.ps || '', route: l.route || started.route || '', sd: l.sd || '', officer: l.officer || '', mobile: l.mobile || '', force: l.force || 'route', el: l.el || '', _fromLive: true };
+  });
+}
+const devIds = () => { syncLiveDevices(); return Object.keys(DEV).filter(visible).filter(u => !(typeof isBlocked === 'function' && isBlocked(u) && !(LIVE[u] && LIVE[u].up && LIVE[u].duty !== false && Date.now() - LIVE[u].up < S().nosig * MIN))).sort((a, b) => ((DEV[a].sd || '') + dname(a)).localeCompare((DEV[b].sd || '') + dname(b), undefined, { numeric: true })); };
 
 /* ---------- start ---------- */
 function boot() {
@@ -4928,7 +4954,7 @@ function renderMap() {
   // first view: fit the phones AND the polling locations (filtered), so locations far from the phones are not off-screen
   if (!fitted) {
     const pts = ids.filter(u => validLocation(LIVE[u]) && matchStatus(u)).map(u => [+LIVE[u].lat, +LIVE[u].lng]);
-    stations().forEach(p => { if (validLocation(p) && (!UI.fPs || p.ps === UI.fPs) && (!UI.fSd || !routes().length || routes().some(r => r.ps === p.ps && r.sd === UI.fSd))) pts.push([+p.lat, +p.lng]); });
+    stations().forEach(p => { if (mappableStation(p) && (!UI.fPs || p.ps === UI.fPs) && (!UI.fSd || !routes().length || routes().some(r => r.ps === p.ps && r.sd === UI.fSd))) pts.push([+p.lat, +p.lng]); });
     if (pts.length) { fitted = true; try { MAP.invalidateSize(); } catch (e) { } MAP.fitBounds(L.latLngBounds(pts).pad(0.12), { maxZoom: 14 }); }
   }
 }
@@ -5799,40 +5825,19 @@ function drawStations() {
   updateVisits();
   const LS_ = locStatus();
   const zoom = MAP.getZoom();
-  const clustered = zoom < 15;
-  const list = stations().filter(p => validLocation(p) && (!UI.fSd || !p.ps || routes().some(r => r.ps === p.ps && r.sd === UI.fSd) || !routes().length) && (!UI.fPs || p.ps === UI.fPs));
+  const list = stations().filter(p => mappableStation(p) && (!UI.fSd || !p.ps || routes().some(r => r.ps === p.ps && r.sd === UI.fSd) || !routes().length) && (!UI.fPs || p.ps === UI.fPs));
   const b = (typeof MAP !== 'undefined' && MAP && MAP.getBounds) ? MAP.getBounds() : null;
   const inView = p => !b || b.contains([+p.lat, +p.lng]);
   const visibleStations = list.filter(inView);
   const bKey = b ? [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].map(n => n.toFixed(2)).join(',') : '';
-  const sig = zoom + ':' + bKey + ':' + visibleStations.length + ':' + visibleStations.map(p => p.id + ':' + cover(p.id).k + ((LS_[p.id] || {}).status || '') + (hot(LS_[p.id]) ? 'h' : '')).join(',') + (typeof votesSig === 'function' ? votesSig() : '');
+  const sig = zoom + ':' + bKey + ':' + visibleStations.length + ':' + visibleStations.map(p => p.id + ':' + p.lat + ':' + p.lng + ':' + cover(p.id).k + ((LS_[p.id] || {}).status || '') + (hot(LS_[p.id]) ? 'h' : '')).join(',') + (typeof votesSig === 'function' ? votesSig() : '');
   if (sig === stationsSig) return;
   stationsSig = sig; LAYER_S.clearLayers();
-  const groups = new Map();
   visibleStations.forEach(p => {
-    const point = MAP.project([+p.lat, +p.lng], zoom);
-    const key = clustered && UI.locSel !== p.id ? `${Math.floor(point.x / 48)}:${Math.floor(point.y / 48)}` : p.id;
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(p);
-  });
-  groups.forEach(group => {
-    if (group.length > 1) {
-      const lat = group.reduce((n, p) => n + +p.lat, 0) / group.length;
-      const lng = group.reduce((n, p) => n + +p.lng, 0) / group.length;
-      const urgent = group.some(p => hot(LS_[p.id]));
-      const size = group.length > 99 ? 38 : 32;
-      L.marker([lat, lng], { icon: L.divIcon({ html: `<div class="pscluster${urgent ? ' urgent' : ''}">${group.length}</div>`, className: '', iconSize: [size, size], iconAnchor: [size / 2, size / 2] }), zIndexOffset: urgent ? 500 : 0 })
-        .bindTooltip(`${group.length} polling stations · click to zoom in`)
-        .on('click', () => MAP.setView([lat, lng], Math.min(zoom + 2, 17)))
-        .addTo(LAYER_S);
-      return;
-    }
-    const p = group[0];
-    const cv = cover(p.id), r = LS_[p.id], rk = sensRank(p.cat), v = VISIT[p.id];
-    const border = rk === 2 ? '3px solid #111' : rk === 1 ? '2px solid #444' : '2px solid #fff';
-    const size = rk === 2 ? 16 : 13;
-    const html = `<div class="psm" style="width:${size}px;height:${size}px;background:${cv.c};border:${border};${rk === 2 ? 'transform:rotate(45deg);' : ''}"></div>${hot(r) ? `<div class="psw">⚠</div>` : ''}`;
-    L.marker([+p.lat, +p.lng], { icon: L.divIcon({ html, className: '', iconSize: [size, size], iconAnchor: [size / 2, size / 2] }), zIndexOffset: hot(r) ? 500 : 0 })
+    const cv = cover(p.id), r = LS_[p.id], v = VISIT[p.id];
+    const size = 28;
+    const html = `<img class="polling-pin" src="assets/ballot.png" alt="" style="--visit-color:${cv.c}">${hot(r) ? `<span class="psw">⚠</span>` : ''}`;
+    L.marker([+p.lat, +p.lng], { icon: L.divIcon({ html, className: 'polling-marker', iconSize: [size, size], iconAnchor: [size / 2, size / 2] }), zIndexOffset: hot(r) ? 500 : 0 })
       .bindTooltip(`<b>${esc(p.name)}</b><br>${esc(p.cat || 'Normal')}${p.ps ? ' · ' + esc(p.ps) : ''}${p.route ? ' · ' + esc(p.route) : ''}${p.coordinateNote ? `<br><b>${esc(p.coordinateNote)}</b>` : ''}<br><span style="color:${cv.c}">●</span> ${esc(cv.txt)}${v && v.by ? ' by ' + esc(dshort(v.by)) : ''}${v ? ` · ${v.n} visit${v.n === 1 ? '' : 's'} today` : ''}${r ? `<br><b style="color:${STAT_C[r.status] || '#333'}">${esc(String(r.status).toUpperCase())}</b> at ${fT(r.t)}${r.note ? ' – ' + esc(r.note) : ''}` : ''}${typeof voteTip === 'function' ? voteTip(p) : ''}`)
       .on('click', () => { UI.tab = 'loc'; UI.locSel = p.id; renderTabs(); renderPane(); })
       .addTo(LAYER_S);
@@ -5849,7 +5854,7 @@ function paneLoc() {
   const n = { g: 0, y: 0, r: 0 }; all.forEach(p => n[cover(p.id).k]++);
   const f = UI.locF || 'r';
   let L_ = all.map(p => ({ p, cv: cover(p.id), r: LS_[p.id], rk: sensRank(p.cat), v: VISIT[p.id] }));
-  if (f === 'r') L_ = L_.filter(x => x.cv.k === 'r'); else if (f === 'y') L_ = L_.filter(x => x.cv.k !== 'g'); else if (f === 'hot') L_ = L_.filter(x => x.r && x.r.status !== 'normal');
+  if (f === 'r') L_ = L_.filter(x => x.cv.k === 'r'); else if (f === 'y') L_ = L_.filter(x => x.cv.k !== 'g'); else if (f === 'hot') L_ = L_.filter(x => x.r && x.r.status !== 'normal'); else if (f === 'geo') L_ = L_.filter(x => !mappableStation(x.p));
   const VV = typeof votes === 'function' ? votes() : { last: {} };
   const vof = id => (VV.last[id] || {});
   if (f === 'votes') {
@@ -5858,10 +5863,12 @@ function paneLoc() {
   } else {
     L_.sort((a, b) => (hot(b.r) - hot(a.r)) || ('rgy'.indexOf(a.cv.k) - 'rgy'.indexOf(b.cv.k)) || (b.rk - a.rk) || ((a.v || {}).last || 0) - ((b.v || {}).last || 0));
   }
-  const reports = Object.values(LS_).filter(r => r.status !== 'normal').sort((a, b) => b.t - a.t);
+  const reports = Object.values(LS_).filter(r => r.status !== 'normal' && !r.ackBy).sort((a, b) => b.t - a.t);
   const btn = (k, t) => `<button class="btn small ${f === k ? 'primary' : ''}" data-act="locF" data-f="${k}">${t}</button>`;
   let h = `<div class="tally3"><div style="background:#e6f4ea"><b>${n.g}</b><span>visited in ${S().green} min</span></div><div style="background:#fff6dd"><b>${n.y}</b><span>${S().green}–${S().red} min</span></div><div style="background:#fdecea"><b>${n.r}</b><span>no visit ${S().red}+ min</span></div></div>
-    <div class="row">${btn('r', 'Red only')}${btn('y', 'Red + yellow')}${btn('hot', `Reported problems (${reports.length})`)}${btn('all', 'All')}${btn('votes', '🗳 Poll %')}<button class="btn small" data-act="turnoutPdf" title="Download the poll percentage for each polling location">Download PDF</button></div>`;
+    <div class="row">${btn('r', 'Red only')}${btn('y', 'Red + yellow')}${btn('hot', `Reported problems (${reports.length})`)}${btn('all', 'All')}${btn('geo', 'Verify coordinates')}${btn('votes', '🗳 Poll %')}<button class="btn small" data-act="turnoutPdf" title="Download the poll percentage for each polling location">Download PDF</button></div>`;
+  const needsVerification = all.filter(p => !mappableStation(p));
+  if (needsVerification.length) h += `<div class="banner warn"><b>${needsVerification.length} polling locations need coordinate verification.</b> They remain in this list and are not placed at uncertain positions on the map.</div>`;
   if (f === 'votes' && typeof turnout === 'function') {
     const Tn = turnout(all, VV);
     h += `<div class="turnout" style="margin:8px 0 2px"><div class="trow"><div><span>Poll percentage${UI.fPs ? ' · ' + esc(UI.fPs) : ''}</span><b data-k="turnoutLoc">${Tn.pct == null ? '–' : (Math.round(Tn.pct * 10) / 10).toFixed(1) + '%'}</b></div>
@@ -5870,12 +5877,12 @@ function paneLoc() {
   }
   h += L_.slice(0, 300).map(x => {
     const devs = routeDev(x.p.ps, x.p.route);
-    return `<div class="veh ${UI.locSel === x.p.id ? 'sel' : ''}" style="border-left-color:${x.cv.c}" data-act="locGo" data-id="${x.p.id}">
-      <div class="l1"><span>${x.rk === 2 ? '◆ ' : ''}${esc(x.p.name)}</span><span class="st" style="color:${x.cv.c}">${esc(x.cv.txt)}</span></div>
+    return `<div class="veh ${UI.locSel === x.p.id ? 'sel' : ''}" style="border-left-color:${x.cv.c}" ${mappableStation(x.p) ? `data-act="locGo" data-id="${x.p.id}"` : ''}>
+      <div class="l1"><span>${x.rk === 2 ? '◆ ' : ''}${esc(x.p.name)}</span><span class="st" style="color:${mappableStation(x.p) ? x.cv.c : '#b9770e'}">${mappableStation(x.p) ? esc(x.cv.txt) : 'Verify coordinates'}</span></div>
       <div class="l2"><span>${esc(x.p.cat || 'Normal')} · ${esc(x.p.ps || '')} ${esc(x.p.route || '')}</span><span>${x.v ? x.v.n + (x.v.n === 1 ? ' visit' : ' visits') : ''}</span></div>
       ${x.r ? `<div class="l2"><span style="color:${STAT_C[x.r.status]};font-weight:700">${esc(x.r.status.toUpperCase())}${x.r.note ? ' – ' + esc(x.r.note) : ''}</span><span>${fT(x.r.t)} · ${esc(dshort(x.r.uid))}</span></div>` : ''}
       ${typeof voteLine === 'function' ? voteLine(x.p) : ''}
-      <div class="acts">${devs.map(u => `<button class="btn small" data-act="locSend" data-u="${u}" data-id="${x.p.id}">Ask ${esc(dshort(u))} to visit</button>`).join('')}<button class="btn small" data-act="locInc" data-id="${x.p.id}">Make incident</button>${hot(x.r) ? `<button class="btn small" data-act="locAck" data-eid="${x.r.id}">Mark attended</button>` : ''}</div></div>`;
+      <div class="acts">${mappableStation(x.p) ? devs.map(u => `<button class="btn small" data-act="locSend" data-u="${u}" data-id="${x.p.id}">Ask ${esc(dshort(u))} to visit</button>`).join('') + `<button class="btn small" data-act="locInc" data-id="${x.p.id}">Make incident</button>` : `<button class="btn small" data-act="psEdit" data-id="${x.p.id}">✏ Verify coordinates</button>`}${hot(x.r) ? `<button class="btn small" data-act="locAck" data-eid="${x.r.id}">Mark attended</button>` : ''}</div></div>`;
   }).join('') || '<p class="note">None.</p>';
   if (L_.length > 300) h += `<p class="note">Showing 300 of ${L_.length}.</p>`;
   return h;
@@ -5883,7 +5890,12 @@ function paneLoc() {
 
 /* ---------- C: incident register ---------- */
 const INC_ST = { open: ['Open', '#c0392b'], sent: ['Vehicle sent', '#d35400'], reached: ['Reached', '#1f5fa8'], closed: ['Closed', '#1e7b45'] };
-const incList = () => Object.entries(INC).map(([id, x]) => Object.assign({ id }, x)).filter(x => dayKey(x.t) === TODAY || x.status !== 'closed').sort((a, b) => (a.status === 'closed') - (b.status === 'closed') || b.t - a.t);
+const incList = () => Object.entries(INC).map(([id, x]) => Object.assign({ id }, x)).filter(x => x.status !== 'closed').sort((a, b) => b.t - a.t);
+function linkedReportForIncident(x) {
+  if (x.sourceEventId) return x.sourceEventId;
+  const site = stations().find(s => s.name === x.place && validLocation(s) && hav(+s.lat, +s.lng, +x.lat, +x.lng) < 100);
+  return site ? (locStatus()[site.id] || {}).id : '';
+}
 const fMin = ms => ms == null || ms < 0 ? '–' : ms < HOUR ? `${Math.round(ms / MIN)} min` : `${Math.floor(ms / HOUR)} h ${Math.round(ms % HOUR / MIN)} min`;
 function paneInc() {
   let h = `<h3>New incident</h3>
@@ -5922,10 +5934,12 @@ setIncident = function (lat, lng, name) {
   L.marker([lat, lng], { icon: L.divIcon({ html: '<div class="incm">📍</div>', className: '', iconSize: [26, 26], iconAnchor: [13, 26] }) }).bindTooltip('New incident: ' + esc(name)).addTo(LAYER_I);
   MAP.setView([lat, lng], Math.max(MAP.getZoom(), 13)); renderTabs(); renderPane();
 };
-async function createIncident(lat, lng, place, desc) {
+async function createIncident(lat, lng, place, desc, sourceEventId) {
   const no = Object.values(INC).filter(x => dayKey(x.t) === TODAY).reduce((m, x) => Math.max(m, x.no || 0), 0) + 1;
-  const r = await dbPost('incidents', { no, t: Date.now(), lat, lng, place, desc: desc || '', status: 'open', by: AU.email });
-  INC[r.name] = { no, t: Date.now(), lat, lng, place, desc, status: 'open', by: AU.email };
+  const incident = { no, t: Date.now(), lat, lng, place, desc: desc || '', status: 'open', by: AU.email };
+  if (sourceEventId) incident.sourceEventId = sourceEventId;
+  const r = await dbPost('incidents', incident);
+  INC[r.name] = incident;
   UI.incSel = r.name; UI.inc = null; UI.incDesc = ''; UI.tab = 'inc'; LAYER_I.clearLayers(); drawIncidents(); renderTabs(); renderPane();
 }
 function drawIncidents() {
@@ -6085,9 +6099,9 @@ document.addEventListener('click', async e => {
   const a = e.target.closest('[data-act]'); if (!a) return; const act = a.dataset.act;
   try {
     if (act === 'locF') { UI.locF = a.dataset.f; renderPane(); }
-    else if (act === 'locGo') { if (e.target.closest('button') && e.target.closest('button') !== a) return; const p = stations().find(x => x.id === a.dataset.id); if (p) { UI.locSel = p.id; MAP.setView([+p.lat, +p.lng], Math.max(MAP.getZoom(), 16)); if (UI.tab !== 'loc') { UI.tab = 'loc'; renderTabs(); } renderPane(); } }
-    else if (act === 'locSend') { e.stopPropagation(); const p = stations().find(x => x.id === a.dataset.id); msgModal(a.dataset.u, `Visit ${p.name} now and report its status (REPORT AT POLLING LOCATION). Map: https://maps.google.com/?q=${(+p.lat).toFixed(5)},${(+p.lng).toFixed(5)}`); }
-    else if (act === 'locInc') { e.stopPropagation(); const p = stations().find(x => x.id === a.dataset.id); const r = locStatus()[p.id]; await createIncident(+p.lat, +p.lng, p.name, r && r.status !== 'normal' ? `${r.status.toUpperCase()} reported by ${dname(r.uid)}${r.note ? ': ' + r.note : ''}` : ''); }
+    else if (act === 'locGo') { if (e.target.closest('button') && e.target.closest('button') !== a) return; const p = stations().find(x => x.id === a.dataset.id); if (mappableStation(p)) { UI.locSel = p.id; MAP.setView([+p.lat, +p.lng], Math.max(MAP.getZoom(), 16)); if (UI.tab !== 'loc') { UI.tab = 'loc'; renderTabs(); } renderPane(); } else toast('Verify coordinates before opening this location on the map.'); }
+    else if (act === 'locSend') { e.stopPropagation(); const p = stations().find(x => x.id === a.dataset.id); if (!mappableStation(p)) { toast('Verify coordinates before sending a map link.'); return; } msgModal(a.dataset.u, `Visit ${p.name} now and report its status (REPORT AT POLLING LOCATION). Map: https://maps.google.com/?q=${(+p.lat).toFixed(5)},${(+p.lng).toFixed(5)}`); }
+    else if (act === 'locInc') { e.stopPropagation(); const p = stations().find(x => x.id === a.dataset.id); if (!mappableStation(p)) { toast('Verify coordinates before making an incident here.'); return; } const r = locStatus()[p.id]; await createIncident(+p.lat, +p.lng, p.name, r && r.status !== 'normal' ? `${r.status.toUpperCase()} reported by ${dname(r.uid)}${r.note ? ': ' + r.note : ''}` : '', r && r.status !== 'normal' ? r.id : ''); }
     else if (act === 'locAck') { e.stopPropagation(); await dbPatch(`events/${a.dataset.eid}`, { ackBy: AU.email, ackAt: Date.now() }); const ev = EVT[a.dataset.eid]; if (ev) { ev.ackBy = AU.email; } schedule('force'); }
     else if (act === 'incCreate') { const d = ($('#incDesc') || {}).value || ''; await createIncident(UI.inc.lat, UI.inc.lng, UI.inc.name, d.trim()); }
     else if (act === 'incPick') { UI.incSel = a.dataset.id; renderPane(); const x = INC[a.dataset.id]; if (x) MAP.setView([x.lat, x.lng], Math.max(MAP.getZoom(), 14)); }
@@ -6098,7 +6112,7 @@ document.addEventListener('click', async e => {
         const p = { status: 'sent', dev: u, sentAt: Date.now() }; await dbPatch(`incidents/${id}`, p); Object.assign(INC[id], p); drawIncidents(); renderPane();
       });
     }
-    else if (act === 'incClose') { const t = prompt('Action taken (closes the incident):', ''); if (t === null) return; const p = { status: 'closed', closedAt: Date.now(), action: t.trim() }; await dbPatch(`incidents/${a.dataset.id}`, p); Object.assign(INC[a.dataset.id], p); drawIncidents(); renderPane(); }
+    else if (act === 'incClose') { const t = prompt('Action taken (closes the incident):', ''); if (t === null) return; const x = INC[a.dataset.id]; const p = { status: 'closed', closedAt: Date.now(), action: t.trim() }; await dbPatch(`incidents/${a.dataset.id}`, p); Object.assign(x, p); const linked = linkedReportForIncident(x); if (linked && EVT[linked] && hot(EVT[linked])) { try { await dbPatch(`events/${linked}`, { ackBy: AU.email, ackAt: p.closedAt }); EVT[linked].ackBy = AU.email; } catch (err) { toast('Incident closed, but the polling alert still needs attendance: ' + err.message, 7000); } } drawIncidents(); stationsSig = ''; schedule('force'); }
     else if (act === 'bcast') broadcastModal();
     else if (act === 'turnoutPdf') turnoutReport();
     else if (act === 'sitrep') sitrepModal();
@@ -6153,8 +6167,8 @@ function drawGroups(ids) {
 }
 function timeline() {
   const ev = [];
-  Object.values(EVT).forEach(e => { if (dayKey(e.t) !== TODAY || !visible(e.uid)) return; if (e.type === 'sos') ev.push([e.t, 0, '#c0392b', 'SOS ' + dname(e.uid)]); else if (e.type === 'loc' && e.status !== 'normal') ev.push([e.t, 1, STAT_C[e.status] || '#d35400', `${e.status} – ${e.sname}`]); });
-  Object.values(INC).forEach(x => { if (dayKey(x.t) === TODAY) ev.push([x.t, 2, '#1f5fa8', `Incident ${x.no} – ${x.place}`]); });
+  Object.values(EVT).forEach(e => { if (dayKey(e.t) !== TODAY || !visible(e.uid)) return; if (e.type === 'sos') ev.push([e.t, 0, '#c0392b', 'SOS ' + dname(e.uid)]); else if (e.type === 'loc' && e.status !== 'normal' && !e.ackBy) ev.push([e.t, 1, STAT_C[e.status] || '#d35400', `${e.status} – ${e.sname}`]); });
+  Object.values(INC).forEach(x => { if (dayKey(x.t) === TODAY && x.status !== 'closed') ev.push([x.t, 2, '#1f5fa8', `Incident ${x.no} – ${x.place}`]); });
   if (!ev.length) return '';
   const d0 = dayStart(Date.now()), h0 = Math.min(6, ...ev.map(e => new Date(e[0]).getHours())), h1 = Math.max(19, new Date().getHours() + 1);
   const W = 460, X = t => 50 + (t - d0 - h0 * HOUR) / ((h1 - h0) * HOUR) * (W - 60);
@@ -6174,13 +6188,13 @@ function ticker() {
   Object.values(EVT).forEach(e => {
     if (dayKey(e.t) !== TODAY || !visible(e.uid)) return;
     if (e.type === 'sos') items.push([e.t, `🆘 SOS – ${dname(e.uid)}`]);
-    else if (e.type === 'loc') items.push([e.t, `${e.status === 'normal' ? '✅' : '⚠'} ${e.sname}: ${String(e.status).toUpperCase()}${e.note ? ' – ' + e.note : ''} (${dshort(e.uid)})`]);
+    else if (e.type === 'loc' && !e.ackBy) items.push([e.t, `${e.status === 'normal' ? '✅' : '⚠'} ${e.sname}: ${String(e.status).toUpperCase()}${e.note ? ' – ' + e.note : ''} (${dshort(e.uid)})`]);
     else if (e.type === 'reached') items.push([e.t, `🚓 ${dname(e.uid)} reached the spot`]);
     else if (e.type === 'votes') items.push([e.t, `🗳 ${e.sname}: ${fmtN(e.n)} votes polled`]);
     else if (e.type === 'photo') items.push([e.t, `📷 Photo from ${dname(e.uid)}`]);
     else if (e.type === 'msg' && e.dev === '*') items.push([e.t, `📢 To all: ${e.text}`]);
   });
-  Object.values(INC).forEach(x => { if (dayKey(x.t) !== TODAY) return; items.push([x.t, `📍 Incident ${x.no} – ${x.place}${x.desc ? ': ' + x.desc : ''}`]); if (x.reachedAt) items.push([x.reachedAt, `🚓 Incident ${x.no}: vehicle reached in ${fMin(x.reachedAt - x.sentAt)}`]); if (x.closedAt) items.push([x.closedAt, `✔ Incident ${x.no} closed${x.action ? ' – ' + x.action : ''}`]); });
+  Object.values(INC).forEach(x => { if (dayKey(x.t) !== TODAY || x.status === 'closed') return; items.push([x.t, `📍 Incident ${x.no} – ${x.place}${x.desc ? ': ' + x.desc : ''}`]); if (x.reachedAt) items.push([x.reachedAt, `🚓 Incident ${x.no}: vehicle reached in ${fMin(x.reachedAt - x.sentAt)}`]); });
   const txt = items.sort((a, b) => b[0] - a[0]).slice(0, 12).map(i => `${fT(i[0])}  ${i[1]}`).join('     •     ') || 'No events yet today.';
   const el = $('#tkText'); if (el && el.textContent !== txt) { el.textContent = txt; el.style.animationDuration = Math.max(30, txt.length / 6) + 's'; }
   const en = $('#elecName'); if (en) en.textContent = ELEC() || 'Route mobiles · polling locations';
@@ -6659,15 +6673,14 @@ paneVeh = function () {
 
 
 /* ===== App version of each phone ===== */
-const APP_LATEST = '3.0';
+const APP_LATEST = '__RELEASE_VERSION__';
 const vNum = v => { const m = String(v || '').match(/(\d+)\.(\d+)/); return m ? +m[1] * 100 + +m[2] : 0; };
 function appVer(u) { return (LIVE[u] && LIVE[u].v) || (DEV[u] && DEV[u].v) || ''; }
-/* 'ok' latest, 'upd' works but older, 'old' before 2.9 (no one-phone-per-route check), '' unknown */
-function verState(v) { const n = vNum(v); if (!n) return ''; if (n >= vNum(APP_LATEST)) return 'ok'; if (n >= vNum('2.9')) return 'upd'; return 'old'; }
+function verState(v) { const n = vNum(v); if (!n) return ''; return n >= vNum(APP_LATEST) ? 'ok' : 'upd'; }
 function verTag(u) {
   const v = appVer(u), s = verState(v); if (!v || v === 'demo') return '';
-  const c = s === 'ok' ? '#1e7b45' : s === 'upd' ? '#b9770e' : '#c0392b';
-  return `<span class="vtag" style="color:${c};border-color:${c}" title="${s === 'ok' ? 'Latest app' : s === 'upd' ? 'Works; update to v' + APP_LATEST + ' when convenient' : 'Old app: no one-phone-per-route check. Install v' + APP_LATEST}">app v${esc(v)}${s === 'old' ? ' ⬆' : ''}</span> `;
+  const c = s === 'ok' ? '#1e7b45' : '#b9770e';
+  return `<span class="vtag" style="color:${c};border-color:${c}" title="${s === 'ok' ? 'Latest app' : 'Update available: v' + APP_LATEST}">app v${esc(v)}${s === 'upd' ? ' ⬆' : ''}</span> `;
 }
 
 /* show the version on every unit card */
@@ -6809,7 +6822,7 @@ function psEditModal(id, vals) {
     if (e.target.hasAttribute('data-pick')) {
       PS_PICK = { id, vals: get() }; m.remove();
       if (UI.tab === 'sum' && !document.body.classList.contains('wall')) { UI.tab = 'loc'; renderTabs(); renderPane(); }
-      MAP.getContainer().style.cursor = 'crosshair'; if (p.lat != null) MAP.setView([+p.lat, +p.lng], Math.max(MAP.getZoom(), 16));
+      MAP.getContainer().style.cursor = 'crosshair'; if (mappableStation(p)) MAP.setView([+p.lat, +p.lng], Math.max(MAP.getZoom(), 16));
       toast('Click the correct place of the polling location on the map (zoom in and use Satellite for accuracy).', 9000);
       return;
     }
@@ -6817,7 +6830,7 @@ function psEditModal(id, vals) {
       const o = get(), v = parseLL(o.ll);
       if (!o.name) { toast('Enter the polling location name.'); return; }
       if (!v) { toast('The latitude/longitude is not valid. Example: 17.123456, 82.123456', 7000); return; }
-      const upd = { name: o.name, lat: +v[0].toFixed(6), lng: +v[1].toFixed(6), cat: o.cat, voters: parseInt(o.voters) || 0, ps: o.ps, route: o.route };
+      const upd = { name: o.name, lat: +v[0].toFixed(6), lng: +v[1].toFixed(6), cat: o.cat, voters: parseInt(o.voters) || 0, ps: o.ps, route: o.route, coordinateVerified: true };
       try {
         await dbPatch('config/stations/' + id, upd);
         CONF.stations = Object.assign({}, CONF.stations); CONF.stations[id] = Object.assign({}, CONF.stations[id], upd);
@@ -7157,7 +7170,7 @@ function dashAlerts() {
   Object.values(EVT).forEach(e => {
     if (!visible(e.uid) || Date.now() - e.t > 12 * HOUR) return;
     if (e.type === 'sos' && !e.cleared) it.push([e.t, 'sos', `SOS from ${dname(e.uid)}${e.ackBy ? ' · attended' : ''}`, 'sos']);
-    else if (e.type === 'loc' && ['problem', 'tension'].includes(e.status)) it.push([e.t, 'sos', `${e.status === 'problem' ? 'Problem' : 'Tension'} at ${e.sname || 'a polling location'}`, 'warn']);
+    else if (e.type === 'loc' && !e.ackBy && ['problem', 'tension'].includes(e.status)) it.push([e.t, 'sos', `${e.status === 'problem' ? 'Problem' : 'Tension'} at ${e.sname || 'a polling location'}`, 'warn']);
     else if (e.type === 'photo') it.push([e.t, 'pin', `Photo from ${dname(e.uid)}`, 'info']);
     else if (e.type === 'start') it.push([e.t, 'phone', `${dname(e.uid)} started duty`, 'ok']);
     else if (e.type === 'blocked') it.push([e.t, 'sos', `Second phone blocked – ${dname(e.uid)}${e.mobile ? ' (' + e.mobile + ')' : ''}`, 'bad']);

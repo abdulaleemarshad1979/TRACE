@@ -16,6 +16,7 @@ android {
 }
 dependencies {
     testImplementation 'junit:junit:4.13.2'
+    implementation 'androidx.core:core:1.16.0'
     implementation 'com.google.android.gms:play-services-location:21.4.0'
     implementation 'com.journeyapps:zxing-android-embedded:4.3.0'
 }

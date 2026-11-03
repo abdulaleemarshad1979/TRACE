@@ -14,6 +14,8 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
 import android.util.Base64;
 import android.util.TypedValue;
 import android.view.View;
@@ -29,9 +31,14 @@ import android.widget.Spinner;
 import android.widget.TextView;
 import com.google.zxing.integration.android.IntentIntegrator;
 import com.google.zxing.integration.android.IntentResult;
+import androidx.core.content.FileProvider;
 import org.json.JSONObject;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileOutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.security.MessageDigest;
 import java.nio.file.Files;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
@@ -88,6 +95,8 @@ public final class MainActivity extends Activity {
   private JSONObject routeCatalog = new JSONObject();
   private final java.util.ArrayList<JSONObject> routeChoices = new java.util.ArrayList<>();
   private boolean signingIn, checkingUpdate;
+  private long lastSosTap;
+  private File downloadedUpdate;
   private TextView assignmentCard;
   private EditText loginOfficer, loginMobile, loginSd;
   private TextView loginStatus;
@@ -705,28 +714,66 @@ public final class MainActivity extends Activity {
         if (!UpdatePolicy.validDownloadUrl(apkUrl) || remoteCode <= 0) throw new java.io.IOException("Invalid update manifest");
         if (UpdatePolicy.isNewer(BuildConfig.VERSION_CODE, remoteCode)) {
           if (userInitiated || !session.get("dismissedUpdate").equals(String.valueOf(remoteCode)))
-            ui.post(() -> { if (!isFinishing() && !isDestroyed()) showUpdateDialog(v.optString("versionName"), v.optString("releaseNotes"), apkUrl, remoteCode); });
+            ui.post(() -> { if (!isFinishing() && !isDestroyed()) showUpdateDialog(v.optString("versionName"), v.optString("releaseNotes"), apkUrl, v.optString("sha256"), remoteCode); });
         } else if (userInitiated) note("TRACK is up to date (v" + BuildConfig.VERSION_NAME + ")");
       } catch (Exception e) { if (userInitiated) note("Could not check for updates. Check your internet connection and try again."); }
       finally { if (conn != null) conn.disconnect(); ui.post(() -> checkingUpdate = false); }
     });
   }
 
-  private void showUpdateDialog(String versionName, String notes, String apkUrl, int remoteCode) {
+  private void showUpdateDialog(String versionName, String notes, String apkUrl, String expectedSha256, int remoteCode) {
     new AlertDialog.Builder(this)
       .setTitle("🚀 Update Available (v" + versionName + ")")
       .setMessage(notes + "\n\nA new update is ready on GitHub. Would you like to update now?")
       .setCancelable(true)
-      .setPositiveButton("Update Now", (d, w) -> {
-        try {
-          Intent intent = new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(apkUrl));
-          startActivity(intent);
-        } catch (Exception e) {
-          note("Error opening updater: " + e.getMessage());
-        }
-      })
+      .setPositiveButton("Update Now", (d, w) -> downloadUpdate(apkUrl, expectedSha256))
       .setNegativeButton("Later", (d, w) -> session.set("dismissedUpdate", String.valueOf(remoteCode)))
       .show();
+  }
+
+  private void downloadUpdate(String apkUrl, String expectedSha256) {
+    note("Downloading verified update…");
+    work(() -> {
+      HttpURLConnection conn = null;
+      File part = new File(new File(getCacheDir(), "updates"), "track-update.part");
+      try {
+        if (!UpdatePolicy.validDownloadUrl(apkUrl) || !expectedSha256.matches("[0-9a-fA-F]{64}")) throw new IllegalArgumentException("Invalid update manifest");
+        if (!part.getParentFile().isDirectory() && !part.getParentFile().mkdirs()) throw new java.io.IOException("Could not prepare download folder");
+        conn = (HttpURLConnection) new URL(apkUrl).openConnection();
+        conn.setConnectTimeout(12000); conn.setReadTimeout(30000);
+        if (conn.getResponseCode() != 200) throw new java.io.IOException("Update download failed: HTTP " + conn.getResponseCode());
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        long total = 0;
+        try (java.io.InputStream in = conn.getInputStream(); FileOutputStream out = new FileOutputStream(part)) {
+          byte[] buf = new byte[8192]; int n;
+          while ((n = in.read(buf)) != -1) { total += n; if (total > 100_000_000) throw new java.io.IOException("Update file too large"); digest.update(buf, 0, n); out.write(buf, 0, n); }
+        }
+        StringBuilder hex = new StringBuilder(); for (byte b : digest.digest()) hex.append(String.format(java.util.Locale.ROOT, "%02x", b & 255));
+        if (total < 100_000 || !hex.toString().equalsIgnoreCase(expectedSha256)) throw new java.io.IOException("Update file failed verification");
+        File apk = new File(part.getParentFile(), "track-update.apk");
+        if (apk.exists() && !apk.delete()) throw new java.io.IOException("Could not replace old download");
+        if (!part.renameTo(apk)) throw new java.io.IOException("Could not prepare update");
+        downloadedUpdate = apk;
+        ui.post(() -> openDownloadedUpdate());
+      } catch (Exception e) { part.delete(); note("Update failed: " + e.getMessage()); }
+      finally { if (conn != null) conn.disconnect(); }
+    });
+  }
+
+  private void openDownloadedUpdate() {
+    if (downloadedUpdate == null || !downloadedUpdate.isFile()) return;
+    if (Build.VERSION.SDK_INT >= 26 && !getPackageManager().canRequestPackageInstalls()) {
+      note("Allow TRACK to install updates, then return here");
+      startActivity(new Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, android.net.Uri.parse("package:" + getPackageName())));
+      return;
+    }
+    try {
+      android.net.Uri uri = FileProvider.getUriForFile(this, getPackageName() + ".files", downloadedUpdate);
+      Intent install = new Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/vnd.android.package-archive").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+      startActivity(install);
+      downloadedUpdate = null;
+      note("Install the update in Android's installer");
+    } catch (Exception e) { note("Could not open Android installer: " + e.getMessage()); }
   }
 
   private void askPermissions() {
@@ -850,8 +897,13 @@ public final class MainActivity extends Activity {
   }
 
   private void sos() {
+    if (!session.authenticated() || session.uid().isEmpty()) { note("Sign in before sending SOS"); return; }
+    long now = System.currentTimeMillis();
+    if (now - lastSosTap < 3000) return;
+    lastSosTap = now;
+    try { ((Vibrator) getSystemService(VIBRATOR_SERVICE)).vibrate(VibrationEffect.createOneShot(250, VibrationEffect.DEFAULT_AMPLITUDE)); } catch (Exception ignored) { }
+    note("Sending SOS to Control Room…");
     queueEvent("sos");
-    note("SOS queued; waiting for delivery confirmation");
   }
 
   private void report(String type) {
@@ -1041,6 +1093,7 @@ public final class MainActivity extends Activity {
 
   @Override protected void onResume() {
     super.onResume();
+    if (downloadedUpdate != null && Build.VERSION.SDK_INT >= 26 && getPackageManager().canRequestPackageInstalls()) openDownloadedUpdate();
     if (message != null) {
       message.setText(session.get("lastMsg").isEmpty() ? "No new control room messages." : session.get("lastMsg"));
     }

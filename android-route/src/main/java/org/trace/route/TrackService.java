@@ -48,6 +48,7 @@ public final class TrackService extends Service {
   private long lastPublished;
   private long lastQueuedFix;
   private long nextRetryAt;
+  private long nextDeviceRegistrationAt;
   private final Runnable tick = new Runnable() { public void run() { heartbeat(); loop.postDelayed(this, UPDATE_MS); } };
   @Override public void onCreate() {
     super.onCreate(); session = new Session(this); outbox = new Outbox(this);
@@ -141,7 +142,8 @@ public final class TrackService extends Service {
     io.execute(() -> {
       try {
         if (stopping || !session.get("duty").equals("1")) return;
-        JSONObject live = new JSONObject().put("up", now).put("gps", gps).put("bat", bat).put("sig", sig).put("v", BuildConfig.VERSION_NAME).put("duty", true).put("sessionId", session.get("sessionId"));
+        JSONObject live = new JSONObject().put("up", now).put("gps", gps).put("bat", bat).put("sig", sig).put("v", BuildConfig.VERSION_NAME).put("duty", true).put("sessionId", session.get("sessionId"))
+          .put("ps", session.get("ps")).put("route", session.get("route")).put("sd", session.get("sd")).put("officer", session.get("officer")).put("mobile", session.get("mobile")).put("el", session.get("el"));
         if (l != null) {
           live.put("lat", l.getLatitude()).put("lng", l.getLongitude()).put("t", l.getTime()).put("acc", l.getAccuracy()).put("spd", speed).put("hdg", l.getBearing());
           if (newFix) {
@@ -155,6 +157,17 @@ public final class TrackService extends Service {
         outbox.flush(session, 6);
         nextRetryAt = 0;
         session.set("syncError", ""); session.set("lastSync", String.valueOf(System.currentTimeMillis()));
+        if (System.currentTimeMillis() >= nextDeviceRegistrationAt) {
+          nextDeviceRegistrationAt = System.currentTimeMillis() + 5 * 60000;
+          try {
+            JSONObject device = new JSONObject().put("sd", session.get("sd")).put("ps", session.get("ps"))
+              .put("route", session.get("route")).put("officer", session.get("officer")).put("mobile", session.get("mobile"))
+              .put("force", "route").put("el", session.get("el")).put("v", BuildConfig.VERSION_NAME)
+              .put("model", android.os.Build.MODEL);
+            session.dbPut("devices/" + session.uid(), device);
+            nextDeviceRegistrationAt = System.currentTimeMillis() + 60 * 60000;
+          } catch (Exception ignored) { /* Live telemetry already reached the control room; retry registration later. */ }
+        }
         pollMessage();
       } catch (Exception e) {
         nextRetryAt = System.currentTimeMillis() + 15000;

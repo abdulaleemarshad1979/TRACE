@@ -7,6 +7,7 @@ const css = fs.readFileSync(path.join(root, 'dashboard/vercel-theme.css'), 'utf8
 const trip = fs.readFileSync(path.join(root, 'dashboard/live-trip.js'), 'utf8');
 const rules = JSON.parse(fs.readFileSync(path.join(root, 'firebase/database.rules.json'), 'utf8'));
 const staging = JSON.parse(fs.readFileSync(path.join(root, 'config/staging.json'), 'utf8'));
+const release = JSON.parse(fs.readFileSync(path.join(root, 'version.json'), 'utf8'));
 if (!staging.apiKey || !staging.databaseURL?.startsWith('https://') || !staging.projectId) throw new Error('Staging Firebase config is incomplete');
 
 // Configure runtime config
@@ -30,6 +31,7 @@ html = html.replaceAll('TRACE', 'TRACK');
 
 // Center map on Rajamahendravaram / East Godavari (17.0005, 81.8040)
 html = html.replace('setView([16.96, 82.24], 11)', 'setView([17.0005, 81.8040], 11)');
+html = html.replace("const APP_LATEST = '__RELEASE_VERSION__';", `const APP_LATEST = ${JSON.stringify(release.versionName)};`);
 
 // Operational routes and coordinates are loaded only from the authenticated database.
 // Never seed invented polling centers or embed election deployment data in public HTML.
@@ -56,4 +58,6 @@ fs.writeFileSync(path.join(root, 'dashboard/TRACK.html'), html);
 fs.writeFileSync(path.join(root, 'dashboard/TRACE.html'), html);
 fs.mkdirSync(path.join(root, 'dist'), { recursive: true });
 fs.writeFileSync(path.join(root, 'dist/index.html'), html);
+fs.mkdirSync(path.join(root, 'dist/assets'), { recursive: true });
+fs.copyFileSync(path.join(root, 'dashboard/assets/ballot.png'), path.join(root, 'dist/assets/ballot.png'));
 console.log(`Built dashboard/TRACK.html & dist/index.html (${Buffer.byteLength(html)} bytes) for East Godavari District Police`);
