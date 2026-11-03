@@ -14,6 +14,9 @@ test('Realtime Database grants only approved roles and route ownership', async (
       await set(ref(ctx.database(), '/'), {
         roles: { admin: 'admin', monitor: 'monitor', routeA: 'route', routeB: 'route', stranger: 'route' },
         assignments: { routeA: { ps: 'PS-1', route: 'R-1' }, routeB: { ps: 'PS-2', route: 'R-2' } },
+        mandals: { 'Kadiyam': { routes: 5 } },
+        routes: { legacyRoute: { ps: 'PS-1' } },
+        officers: { routeA: { name: 'Officer A' } },
         voice: { privateA: { uid: 'routeA', a: 'audio' }, privateB: { uid: 'routeB', a: 'audio' } },
       });
     });
@@ -28,6 +31,12 @@ test('Realtime Database grants only approved roles and route ownership', async (
     await assertFails(set(ref(anon, 'live/routeA'), { lat: 1 }));
     await assertSucceeds(get(ref(admin, 'live')));
     await assertSucceeds(get(ref(monitor, 'live')));
+    await assertSucceeds(get(ref(admin, 'roles')));
+    await assertSucceeds(get(ref(admin, 'assignments')));
+    await assertSucceeds(get(ref(monitor, 'mandals')));
+    await assertSucceeds(get(ref(routeA, 'routes')));
+    await assertSucceeds(get(ref(routeA, 'officers/routeA')));
+    await assertFails(get(ref(routeA, 'officers/routeB')));
     await assertFails(get(ref(routeA, 'live/routeB')));
     await assertSucceeds(set(ref(routeA, 'live/routeA'), { lat: 1, lng: 2, duty: true }));
     await assertFails(set(ref(routeA, 'live/routeB'), { lat: 1 }));
@@ -78,6 +87,8 @@ test('SI monitor reads only assigned route units and cannot write', async () => 
     await assertSucceeds(get(ref(si, 'config/routes/r1')));
     await assertFails(get(ref(si, 'config/routes/r2')));
     await assertFails(get(ref(si, 'config')));
+    await assertFails(get(ref(si, 'mandals')));
+    await assertFails(get(ref(si, 'routes')));
     await assertSucceeds(get(ref(si, 'devices/routeA')));
     await assertFails(get(ref(si, 'devices/routeB')));
     await assertFails(get(ref(si, 'devices')));

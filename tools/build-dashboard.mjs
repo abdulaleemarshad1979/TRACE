@@ -46,7 +46,9 @@ html = html.replace(/return \{ k: k\[1\], d: db\.replace\(\/\\\/\+\$\/, ''\), p:
 html = html.replace('Android.setAuth(CFG.k, CFG.d, AU.rt, AU.email)', 'Android.setAuth(CFG.k, CFG.d, AU.rt, AU.email, AU.uid, CFG.p || "", CFG.sender || "", CFG.appId || "")');
 html = html.replace(/<label class="row" style="margin-top:10px"><input type="checkbox" id="setAutoSos"[^\n]*/, '<p class="note">SOS backup dispatch requires an operator to send the message.</p>');
 html = html.replace(/async function autoDispatch\(\) \{[\s\S]*?\n\}\nsetInterval\(\(\) => \{ drawPulses\(\); checkBigAlerts\(\); autoDispatch\(\);/, 'setInterval(() => { drawPulses(); checkBigAlerts();');
-html = html.replace(/function rulesText\(\) \{[\s\S]*?\n\}\n\n\/\* route add/, `function rulesText() { return JSON.stringify(${JSON.stringify(rules)}, null, 2); }\n\n/* route add`);
+const rulesPattern = /^function rulesText\(\) \{[^\n]*\}$/m;
+if (!rulesPattern.test(html)) throw new Error('Dashboard rules preview injection point missing');
+html = html.replace(rulesPattern, `function rulesText() { return JSON.stringify(${JSON.stringify(rules)}, null, 2); }`);
 html = html.replace('</style></head><body>', `</style><style>\n${css}\n</style></head><body>`);
 html = html.replace('</script></body></html>', `\n${trip}\n</script></body></html>`);
 

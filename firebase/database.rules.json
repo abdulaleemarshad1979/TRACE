@@ -3,6 +3,7 @@
     ".read": false,
     ".write": false,
     "roles": {
+      ".read": "auth != null && root.child('roles').child(auth.uid).val() == 'admin'",
       "$uid": {
         ".read": "auth != null && (auth.uid == $uid || root.child('roles').child(auth.uid).val() == 'admin')",
         ".write": "auth != null && root.child('roles').child(auth.uid).val() == 'admin'",
@@ -10,8 +11,16 @@
       }
     },
     "assignments": {
+      ".read": "auth != null && root.child('roles').child(auth.uid).val() == 'admin'",
       "$uid": {
         ".read": "auth != null && (auth.uid == $uid || root.child('roles').child(auth.uid).val() == 'admin')",
+        ".write": "auth != null && root.child('roles').child(auth.uid).val() == 'admin'"
+      }
+    },
+    "officers": {
+      ".read": "auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor')",
+      "$uid": {
+        ".read": "auth != null && auth.uid == $uid",
         ".write": "auth != null && root.child('roles').child(auth.uid).val() == 'admin'"
       }
     },
@@ -35,14 +44,14 @@
       ".read": "auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor')",
       "$uid": {
         ".read": "(auth != null && auth.uid == $uid) || (auth != null && (root.child('roles').child(auth.uid).val() == 'si_monitor' && root.child('siScopes').child(auth.uid).child('routes').child(root.child('assignments').child($uid).child('routeId').val()).val() == true))",
-        ".write": "auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || (auth.uid == $uid && root.child('roles').child(auth.uid).val() == 'route' && root.child('assignments').child(auth.uid).exists()))"
+        ".write": "(auth != null && root.child('roles').child(auth.uid).val() == 'admin' || (auth != null && auth.uid == $uid && root.child('roles').child(auth.uid).val() == 'route' && root.child('assignments').child(auth.uid).exists()))"
       }
     },
     "track": {
       ".read": "auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor')",
       "$uid": {
         ".read": "(auth != null && auth.uid == $uid) || (auth != null && (root.child('roles').child(auth.uid).val() == 'si_monitor' && root.child('siScopes').child(auth.uid).child('routes').child(root.child('assignments').child($uid).child('routeId').val()).val() == true))",
-        ".write": "auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || (auth.uid == $uid && root.child('roles').child(auth.uid).val() == 'route' && root.child('assignments').child(auth.uid).exists()))"
+        ".write": "(auth != null && root.child('roles').child(auth.uid).val() == 'admin' || (auth != null && auth.uid == $uid && root.child('roles').child(auth.uid).val() == 'route' && root.child('assignments').child(auth.uid).exists()))"
       }
     },
     "events": {
@@ -53,7 +62,7 @@
       ],
       "$id": {
         ".read": "auth != null && root.child('roles').child(auth.uid).val() == 'route' && data.child('uid').val() == auth.uid",
-        ".write": "auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || (root.child('roles').child(auth.uid).val() == 'route' && root.child('assignments').child(auth.uid).exists() && !data.exists() && newData.child('uid').val() == auth.uid))"
+        ".write": "(auth != null && root.child('roles').child(auth.uid).val() == 'admin' || (auth != null && root.child('roles').child(auth.uid).val() == 'route' && root.child('assignments').child(auth.uid).exists() && !data.exists() && newData.child('uid').val() == auth.uid))"
       }
     },
     "msg": {
@@ -66,7 +75,8 @@
     "photos": {
       ".read": "auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor')",
       "$id": {
-        ".write": "auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || (root.child('roles').child(auth.uid).val() == 'route' && root.child('assignments').child(auth.uid).exists() && !data.exists() && newData.child('uid').val() == auth.uid))"
+        ".read": "auth != null && root.child('roles').child(auth.uid).val() == 'route' && data.child('uid').val() == auth.uid",
+        ".write": "(auth != null && root.child('roles').child(auth.uid).val() == 'admin' || (auth != null && root.child('roles').child(auth.uid).val() == 'route' && root.child('assignments').child(auth.uid).exists() && !data.exists() && newData.child('uid').val() == auth.uid))"
       }
     },
     "voice": {
@@ -86,6 +96,38 @@
     },
     "lock": {
       ".read": "auth != null && root.child('roles').child(auth.uid).exists()",
+      ".write": "auth != null && root.child('roles').child(auth.uid).val() == 'admin'"
+    },
+    "districtAbstract": {
+      ".read": "auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor')",
+      ".write": "auth != null && root.child('roles').child(auth.uid).val() == 'admin'"
+    },
+    "mandals": {
+      ".read": "(auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor') || (auth != null && root.child('roles').child(auth.uid).val() == 'route' && root.child('assignments').child(auth.uid).exists()))",
+      ".write": "auth != null && root.child('roles').child(auth.uid).val() == 'admin'"
+    },
+    "policeStations": {
+      ".read": "(auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor') || (auth != null && root.child('roles').child(auth.uid).val() == 'route' && root.child('assignments').child(auth.uid).exists()))",
+      ".write": "auth != null && root.child('roles').child(auth.uid).val() == 'admin'"
+    },
+    "routeGroups": {
+      ".read": "(auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor') || (auth != null && root.child('roles').child(auth.uid).val() == 'route' && root.child('assignments').child(auth.uid).exists()))",
+      ".write": "auth != null && root.child('roles').child(auth.uid).val() == 'admin'"
+    },
+    "routePoints": {
+      ".read": "(auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor') || (auth != null && root.child('roles').child(auth.uid).val() == 'route' && root.child('assignments').child(auth.uid).exists()))",
+      ".write": "auth != null && root.child('roles').child(auth.uid).val() == 'admin'"
+    },
+    "routes": {
+      ".read": "(auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor') || (auth != null && root.child('roles').child(auth.uid).val() == 'route' && root.child('assignments').child(auth.uid).exists()))",
+      ".write": "auth != null && root.child('roles').child(auth.uid).val() == 'admin'"
+    },
+    "stationAbstract": {
+      ".read": "auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor')",
+      ".write": "auth != null && root.child('roles').child(auth.uid).val() == 'admin'"
+    },
+    "subdivisions": {
+      ".read": "(auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor') || (auth != null && root.child('roles').child(auth.uid).val() == 'route' && root.child('assignments').child(auth.uid).exists()))",
       ".write": "auth != null && root.child('roles').child(auth.uid).val() == 'admin'"
     },
     "siScopes": {
