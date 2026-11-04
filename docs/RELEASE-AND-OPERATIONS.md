@@ -20,10 +20,19 @@ If an older removal left a route assignment without a route member link, the das
 The `si_monitor` role and `siScopes/{uid}/routes` and `stations` are enforced in Realtime Database rules. The SI can read only selected route records, their assigned phone data, selected polling booths and per-phone SOS events; database writes and other mandals are denied. New mobile assignments save a `routeId`; creating the SI account also links matching existing mobile assignments to their route IDs. SI mobile logins use a separate internal Firebase email (`si91…@members.track.invalid`), so an SI number cannot take over a route member account. Deploy the Hosting build and database rules together before issuing SI credentials. The workbook personnel abstracts are not imported into this monitor because several source figures need correction.
 
 1. Sign into the monitor as the control-room administrator, then open **Settings → Routes → Assign member** beside the chosen route.
-2. Enter officer name/rank, a 10-digit Indian mobile number (or +91 format), and a password of at least 8 characters. For an existing mobile login, use its current password. This form does not reset passwords.
+2. Enter officer name/rank, a 10-digit Indian mobile number (or +91 format), and a password of at least 8 characters. For an existing mobile login, use its current password; tick **Change this person's password** to replace it.
 3. For a route marked **Review coverage**, inspect the displayed polling locations and confirm the coverage before assigning it.
 4. Give that member the mobile number/password and the 2.2.3 APK. The member taps **Sign in and load my route**; only the assigned route is shown, with officer details filled automatically. Tap **Continue to duty**, grant precise location, turn GPS on and tap **START DUTY**.
 5. One account identifies one phone. An account cannot be moved from another route or modified while on duty through this form. Administrator/monitor accounts are never demoted to route accounts.
+
+### Changing passwords
+
+**Settings → Routes → Change all passwords** (also linked from **Assign member**) lists every Route app and viewer login. Enter one current password if everyone shares it, or fill each row, or use **Download list as Excel** and **Fill from Excel**. Choose one new password for everyone or **Make a different new password for each person**, tick who to change, then **Change passwords**. Each row reports its own result, so a wrong password affects only that person. **Download new passwords** is available until the window closes; nothing is saved on the site. Delete any Excel holding passwords after use.
+
+- The old password stops working at once. Firebase stores only the new one.
+- Firebase requires each person's current password unless an administrator key is used from a server. The site has no server, because Firebase Functions need the paid plan, so a forgotten password cannot be replaced here.
+- Changing a password ends that account's other sessions. A phone stops sending location within about an hour, until the officer signs out of the app and signs in with the new password. Change passwords off duty where possible.
+- Control-room administrator logins are not listed; they are managed in the Firebase console.
 
 Mobile logins use a normalized internal Firebase email identifier (`phone91…@members.track.invalid`), with Firebase Authentication handling passwords. The dashboard creates the member through the [Firebase Auth REST API](https://firebase.google.com/docs/reference/rest/auth), without replacing the administrator session. Roles, assignment, route member details and coverage review are saved together in one database update. Passwords are never stored in the Realtime Database. Existing administrator email logins remain supported. An account created before an interrupted database save can safely be retried using the same credentials.
 
