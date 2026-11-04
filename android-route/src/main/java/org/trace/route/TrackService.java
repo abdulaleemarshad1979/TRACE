@@ -32,8 +32,8 @@ import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.Priority;
 
 public final class TrackService extends Service {
-  private static final long UPDATE_MS = 10000;
-  private static final long FRESH_SPEED_MS = 25000;
+  private static final long UPDATE_MS = 30000;
+  private static final long FRESH_SPEED_MS = 45000;
   private final ExecutorService io = Executors.newSingleThreadExecutor();
   private final Handler loop = new Handler(Looper.getMainLooper());
   private Session session;
@@ -88,7 +88,7 @@ public final class TrackService extends Service {
   public void onLocationChanged(Location location) {
     if (stopping || (last != null && location.getTime() <= last.getTime())) return;
     long now = System.currentTimeMillis();
-    if (location.getTime() < now - 30000 || location.getTime() > now + 5000) return;
+    if (location.getTime() < now - 45000 || location.getTime() > now + 5000) return;
     if (!location.hasAccuracy() || location.getAccuracy() > 150) return;
     if (last != null && location.getAccuracy() > Math.max(50, last.getAccuracy() * 3) && now - last.getTime() < 60000) return;
     lastSpeedKmh = speedKmh(location, last);
@@ -105,7 +105,7 @@ public final class TrackService extends Service {
     }
     if (previous == null || !previous.hasAccuracy() || previous.getAccuracy() > 50 || current.getAccuracy() > 50) return 0;
     float seconds = (current.getTime() - previous.getTime()) / 1000f;
-    if (seconds < 3 || seconds > 30) return 0;
+    if (seconds < 3 || seconds > 70) return 0;
     float distance = previous.distanceTo(current);
     float noise = Math.max(10, previous.getAccuracy() + current.getAccuracy());
     float metresPerSecond = (distance - noise) / seconds;

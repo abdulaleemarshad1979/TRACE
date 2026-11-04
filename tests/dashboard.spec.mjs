@@ -255,8 +255,13 @@ test('removing a polling location deletes its database record and clears the das
 test('removing a route deletes its database record and clears the dashboard copy', async ({ page }) => {
   const writes = await controlRoom(page);
   await page.evaluate(() => routeModal('r1'));
-  page.once('dialog', dialog => dialog.accept());
   await page.getByRole('button', { name: 'Remove', exact: true }).click();
+  const confirmation = page.getByRole('dialog', { name: 'Delete route?' });
+  await expect(confirmation).toContainText('Are you sure');
+  await confirmation.getByRole('button', { name: 'Cancel' }).click();
+  expect(writes).toHaveLength(0);
+  await page.getByRole('button', { name: 'Remove', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Delete route?' }).getByRole('button', { name: 'Yes, delete route' }).click();
   await expect.poll(() => writes.find(write => write.pathname === '/.json')?.body).toMatchObject({ 'config/routes/r1': null });
   await expect.poll(() => page.evaluate(() => CONF.routes.r1)).toBeUndefined();
 });
@@ -629,9 +634,17 @@ test('removing an assigned phone revokes its route access and clears current dat
     '/roles/officer-1.json': 'route',
     '/assignments/officer-1.json': { routeId: 'r1', ps: 'Bommuru PS', route: 'Route 1' }
   });
+  const authActions = [];
+  await page.route('https://identitytoolkit.googleapis.com/**', route => {
+    const action = new URL(route.request().url()).pathname.split(':').pop(); authActions.push(action);
+    route.fulfill({ json: action === 'signInWithPassword' ? { localId: 'officer-1', idToken: 'member-token' } : {} });
+  });
   await page.evaluate(() => devModal('officer-1'));
-  page.once('dialog', dialog => dialog.accept());
   await page.getByRole('button', { name: 'Remove phone and assignment' }).click();
+  await page.getByRole('dialog', { name: 'Delete record?' }).getByRole('button', { name: 'Yes, remove' }).click();
+  const person = page.getByRole('dialog', { name: 'Remove person' });
+  await person.getByLabel('Current person password').fill('Existing-password');
+  await person.getByRole('button', { name: 'Yes, remove person' }).click();
   await expect.poll(() => writes.find(write => write.pathname === '/.json')?.body).toMatchObject({
     'roles/officer-1': null,
     'assignments/officer-1': null,
@@ -640,20 +653,114 @@ test('removing an assigned phone revokes its route access and clears current dat
     'live/officer-1': null
   });
   await expect.poll(() => page.evaluate(() => ({ member: CONF.routes.r1.memberUid, device: DEV['officer-1'], live: LIVE['officer-1'] }))).toEqual({});
+  expect(authActions).toEqual(['signInWithPassword', 'delete']);
+  expect(await page.evaluate(() => !!CONF.routes.r1)).toBe(true);
 });
 
-test('a route member can be removed from the assignment dialog', async ({ page }) => {
+test('a route member is deleted only after confirmation and the route remains', async ({ page }) => {
   const writes = await controlRoom(page, {
     '/config.json': { routes: { r1: { ps: 'Bommuru PS', route: 'Route 1', sd: 'North', officer: 'Officer A', mobile: '+919876543210', memberUid: 'officer-1' } }, stations: {}, settings: { election: '' } },
     '/roles/officer-1.json': 'route',
     '/assignments/officer-1.json': { routeId: 'r1', ps: 'Bommuru PS', route: 'Route 1' }
   });
+  const authActions = [];
+  await page.route('https://identitytoolkit.googleapis.com/**', route => {
+    const action = new URL(route.request().url()).pathname.split(':').pop(); authActions.push(action);
+    route.fulfill({ json: action === 'signInWithPassword' ? { localId: 'officer-1', idToken: 'member-token' } : {} });
+  });
   await page.evaluate(() => memberModal('r1'));
-  page.once('dialog', dialog => dialog.accept());
-  await page.getByRole('button', { name: 'Remove assignment' }).click();
+  await page.getByRole('button', { name: 'Remove person', exact: true }).click();
+  const person = page.getByRole('dialog', { name: 'Remove person' });
+  await expect(person).toContainText('The route will stay in the list.');
+  await person.getByRole('button', { name: 'Cancel' }).click();
+  expect(writes).toHaveLength(0);
+  await page.getByRole('button', { name: 'Remove person', exact: true }).click();
+  const confirmed = page.getByRole('dialog', { name: 'Remove person' });
+  await confirmed.getByLabel('Current person password').fill('Existing-password');
+  await confirmed.getByRole('button', { name: 'Yes, remove person' }).click();
   await expect.poll(() => writes.find(write => write.pathname === '/.json')?.body?.['assignments/officer-1']).toBeNull();
   await expect(page.getByRole('dialog', { name: 'Assign a member' })).toHaveCount(0);
   expect(await page.evaluate(() => CONF.routes.r1.memberUid)).toBeUndefined();
+  expect(await page.evaluate(() => !!CONF.routes.r1)).toBe(true);
+  expect(authActions).toEqual(['signInWithPassword', 'delete']);
+});
+
+test('removing an imported officer clears the person fields without deleting the route', async ({ page }) => {
+  const writes = await controlRoom(page);
+  await page.evaluate(() => { CONF.routes.r1.officer = 'Imported Officer'; CONF.routes.r1.mobile = '+919876543210'; });
+  await page.evaluate(() => memberModal('r1'));
+  await page.getByRole('button', { name: 'Remove person', exact: true }).click();
+  const confirmation = page.getByRole('dialog', { name: 'Remove person' });
+  await expect(confirmation).toContainText('no member sign-in is linked');
+  await confirmation.getByRole('button', { name: 'Yes, remove person' }).click();
+  await expect.poll(() => writes.find(w => w.pathname === '/config/routes/r1.json')?.body).toEqual({ officer: null, mobile: null });
+  expect(await page.evaluate(() => ({ exists: !!CONF.routes.r1, officer: CONF.routes.r1.officer }))).toEqual({ exists: true });
+});
+
+test('an older unlinked member matching the officer mobile is deleted with the person', async ({ page }) => {
+  const writes = await controlRoom(page, {
+    '/assignments.json': { older: { ps: 'Example Rural Police Station', route: 'Route 12', mobile: '+919876543210' } },
+    '/roles/older.json': 'route'
+  });
+  await page.route('https://identitytoolkit.googleapis.com/**', route => {
+    const action = new URL(route.request().url()).pathname.split(':').pop();
+    route.fulfill({ json: action === 'signInWithPassword' ? { localId: 'older', idToken: 'member-token' } : {} });
+  });
+  await page.evaluate(() => { CONF.routes.r1.officer = 'Older Officer'; CONF.routes.r1.mobile = '+919876543210'; });
+  await page.evaluate(() => memberModal('r1'));
+  await page.getByRole('button', { name: 'Remove person', exact: true }).click();
+  const confirmation = page.getByRole('dialog', { name: 'Remove person' });
+  await confirmation.getByLabel('Current person password').fill('Existing-password');
+  await confirmation.getByRole('button', { name: 'Yes, remove person' }).click();
+  await expect.poll(() => writes.find(w => w.pathname === '/.json')?.body).toMatchObject({
+    'roles/older': null, 'assignments/older': null, 'devices/older': null, 'live/older': null,
+    'config/routes/r1/officer': null, 'config/routes/r1/mobile': null
+  });
+  expect(await page.evaluate(() => !!CONF.routes.r1)).toBe(true);
+});
+
+test('route settings follow the chosen police station and election', async ({ page }) => {
+  await controlRoom(page);
+  await page.evaluate(() => {
+    CONF.routes.r2 = { ps: 'Other PS', sd: 'Other Division', route: 'Route 1', election: 'Election 2026' };
+    CONF.routes.r3 = { ps: 'Example Rural Police Station', sd: 'Example Sub-division', route: 'Route 3', election: 'Other Election' };
+    CONF.routes.r4 = { ps: 'Example Rural Police Station', sd: 'Example Sub-division', route: 'Route 4' };
+    CONF.settings.election = 'Election 2026';
+    render();
+  });
+  await page.locator('#tabs [data-tab="setup"]').click();
+  await expect(page.locator('details[data-sec="routes"] summary')).toContainText('Routes (2');
+  await page.locator('#fPs').selectOption('Example Rural Police Station');
+  await expect(page.locator('details[data-sec="routes"] summary')).toContainText('Routes (1');
+  await expect(page.locator('details[data-sec="routes"] tbody tr')).toHaveCount(1);
+  await expect(page.locator('details[data-sec="routes"] tbody')).toContainText('Route 12');
+});
+
+test('removing shown routes deletes only those routes and their member records', async ({ page }) => {
+  const writes = await controlRoom(page, {
+    '/roles.json': { 'admin-1': 'admin', 'officer-1': 'route', 'orphan-1': 'route' },
+    '/assignments.json': {
+      'officer-1': { routeId: 'r1', ps: 'Example Rural Police Station', route: 'Route 12' },
+      'orphan-1': { ps: 'Example Rural Police Station', route: 'Route 12' }
+    }
+  });
+  await page.evaluate(() => {
+    CONF.routes.r1.memberUid = 'officer-1';
+    CONF.routes.r2 = { ps: 'Other PS', sd: 'Other Division', route: 'Route 1', election: 'Election 2026', memberUid: 'officer-2' };
+    CONF.settings.election = 'Election 2026';
+    render();
+  });
+  await page.locator('#tabs [data-tab="setup"]').click();
+  await page.locator('#fPs').selectOption('Example Rural Police Station');
+  page.on('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: 'Remove shown routes' }).click();
+  await expect.poll(() => writes.find(w => w.pathname === '/.json')?.body).toMatchObject({
+    'config/routes/r1': null,
+    'roles/officer-1': null, 'assignments/officer-1': null, 'devices/officer-1': null, 'live/officer-1': null,
+    'roles/orphan-1': null, 'assignments/orphan-1': null
+  });
+  expect(writes.find(w => w.pathname === '/.json').body).not.toHaveProperty('config/routes/r2');
+  await expect.poll(() => page.evaluate(() => Object.keys(CONF.routes))).toEqual(['r2']);
 });
 
 test('existing mobile login requires its password and preserves the current admin login', async ({ page }) => {
@@ -918,9 +1025,11 @@ test('active tab displays 5 status cards, active units and active routes with cl
     LIVE.unit1.spd = 0;
     const stopped = status('unit1').k;
     LIVE.unit1.t = Date.now() - 50000;
-    return { stopped, stale: status('unit1').k };
+    const betweenUpdates = status('unit1').k;
+    LIVE.unit1.t = Date.now() - 100000;
+    return { stopped, betweenUpdates, stale: status('unit1').k };
   });
-  expect(gpsStates).toEqual({ stopped: 'stop', stale: 'weak' });
+  expect(gpsStates).toEqual({ stopped: 'stop', betweenUpdates: 'stop', stale: 'weak' });
 
   // Click center on map button
   const centerBtn = firstCard.locator('button[data-act="centerDev"]').first();

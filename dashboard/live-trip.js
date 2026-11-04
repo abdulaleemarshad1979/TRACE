@@ -43,8 +43,8 @@
         metres += hav(points[i - 1][1], points[i - 1][2], points[i][1], points[i][2]);
       }
     }
-    const age = Date.now() - (live.t || 0), stale = age > 45000;
-    const speedText = age <= 25000 && live.gps !== false ? `${Math.round(+live.spd || 0)} km/h` : '—';
+    const age = Date.now() - (live.t || 0), stale = age > 90000;
+    const speedText = age <= 45000 && live.gps !== false ? `${Math.round(+live.spd || 0)} km/h` : '—';
     const sites = stations().filter(p => p.lat && p.lng && p.ps === (DEV[uid] || {}).ps && (!p.route || norm(p.route) === norm((DEV[uid] || {}).route)));
     const nearest = sites.map(p => ({ name: p.name, m: hav(+live.lat, +live.lng, +p.lat, +p.lng) })).sort((a, b) => a.m - b.m)[0];
     const incomingVoice = Object.values(EVT).filter(e => e.voice && e.uid && DEV[e.uid] && e.uid !== AU.uid).sort((a, b) => b.t - a.t)[0];
