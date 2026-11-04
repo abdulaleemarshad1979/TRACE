@@ -8,6 +8,7 @@
 
   let dismissed = false;
   let lastSel = typeof UI !== 'undefined' ? UI.sel : null;
+  let shownUid = null, shownHtml = '', tripTimer = 0;
 
   function renderTrip() {
     if (document.querySelector('#app')?.hidden || typeof UI === 'undefined') {
@@ -26,11 +27,12 @@
       panel.hidden = true;
       return;
     }
-    const uid = UI.sel || (!dismissed && typeof devIds === 'function' ? devIds()[0] : null);
+    const uid = UI.sel || (!dismissed && !document.body.classList.contains('map-full') && typeof devIds === 'function' ? devIds()[0] : null);
     if (!uid) {
       panel.hidden = true;
       return;
     }
+    shownUid = uid;
     const live = LIVE[uid];
     if (!live || live.lat == null || live.lng == null) {
       panel.hidden = true;
@@ -50,7 +52,7 @@
     const incomingVoice = Object.values(EVT).filter(e => e.voice && e.uid && DEV[e.uid] && e.uid !== AU.uid).sort((a, b) => b.t - a.t)[0];
 
     panel.hidden = false;
-    panel.innerHTML = `
+    const html = `
       <div class="trip-head">
         <h3>● ${esc(dname(uid))} <small>· ${stale ? 'Location stale' : 'Live journey'}</small></h3>
         <button type="button" class="trip-close" id="tripClose" aria-label="Dismiss journey card" title="Dismiss">×</button>
@@ -67,6 +69,9 @@
       </div>
       ${incomingVoice ? `<div class="trip-foot"><span>Voice from ${esc(dname(incomingVoice.uid))} · ${esc(ago(incomingVoice.t))}</span><button type="button" id="tripVoice">Play</button></div>` : ''}
     `;
+    if (html === shownHtml) return;
+    shownHtml = html;
+    panel.innerHTML = html;
 
     const closeBtn = panel.querySelector('#tripClose');
     if (closeBtn) {
@@ -91,7 +96,9 @@
     const origOnLive = onLive;
     onLive = function (path) {
       origOnLive.apply(this, arguments);
-      renderTrip();
+      // at peak several phones report every second; only the unit on this card needs a refresh
+      const uid = String(path || '').split('/').filter(Boolean)[0];
+      if ((!uid || uid === shownUid) && !tripTimer) tripTimer = setTimeout(() => { tripTimer = 0; renderTrip(); }, 300);
     };
   }
 

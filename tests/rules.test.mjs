@@ -1,7 +1,8 @@
+import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { initializeTestEnvironment, assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
-import { get, ref, set, update, query, orderByChild, equalTo } from 'firebase/database';
+import { get, ref, set, update, query, orderByChild, equalTo, limitToLast } from 'firebase/database';
 
 test('Realtime Database grants only approved roles and route ownership', async () => {
   const env = await initializeTestEnvironment({
@@ -104,5 +105,28 @@ test('SI monitor reads only assigned route units and cannot write', async () => 
     await assertFails(update(ref(si), { 'roles/routeB': 'si_monitor' }));
     const admin = env.authenticatedContext('admin').database();
     await assertSucceeds(update(ref(admin), { 'roles/si2': 'si_monitor', 'siScopes/si2': { mandal: 'Kadiyam', routes: { r1: true } } }));
+  } finally { await env.cleanup(); }
+});
+
+test('The viewer SOS check with a result limit stays within assigned routes', async () => {
+  const env = await initializeTestEnvironment({
+    projectId: 'demo-trace',
+    database: { rules: readFileSync(new URL('../firebase/database.rules.json', import.meta.url), 'utf8') },
+  });
+  try {
+    await env.clearDatabase();
+    await env.withSecurityRulesDisabled(async ctx => {
+      await set(ref(ctx.database(), '/'), {
+        roles: { routeA: 'route', routeB: 'route', viewer: 'si_monitor' },
+        assignments: { routeA: { ps: 'PS-1', route: 'R-1', routeId: 'r1' }, routeB: { ps: 'PS-2', route: 'R-2', routeId: 'r2' } },
+        siScopes: { viewer: { mandal: 'Kadiyam', routes: { r1: true } } },
+        events: { e1: { uid: 'routeA', type: 'start', t: 1 }, e2: { uid: 'routeA', type: 'sos', t: 2 }, e3: { uid: 'routeB', type: 'sos', t: 3 } },
+      });
+    });
+    const viewer = env.authenticatedContext('viewer').database();
+    const allowed = await assertSucceeds(get(query(ref(viewer, 'events'), orderByChild('uid'), equalTo('routeA'), limitToLast(15))));
+    assert.deepEqual(Object.keys(allowed.val()).sort(), ['e1', 'e2']);
+    await assertFails(get(query(ref(viewer, 'events'), orderByChild('uid'), equalTo('routeB'), limitToLast(15))));
+    await assertFails(get(query(ref(viewer, 'events'), limitToLast(15))));
   } finally { await env.cleanup(); }
 });

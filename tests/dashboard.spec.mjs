@@ -302,7 +302,7 @@ test('signed-in control room displays live unit and SOS', async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem('rm_cfg', JSON.stringify({ k: 'test-key', d: 'https://trace-demo.firebaseio.test', p: 'trace-demo' }));
     localStorage.setItem('rm_au', JSON.stringify({ rt: 'test-refresh', uid: 'admin-1', email: 'admin@example.test' }));
-    localStorage.setItem('rm_poll', '1');
+    localStorage.setItem('rm_poll_force', '1');
   });
   await page.route('https://securetoken.googleapis.com/**', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id_token: 'test-id', expires_in: '3600', refresh_token: 'test-refresh', user_id: 'admin-1' }) }));
   await page.route('https://trace-demo.firebaseio.test/**', route => {
@@ -360,7 +360,7 @@ async function controlRoom(page, overrides = {}) {
   await page.addInitScript(() => {
     localStorage.setItem('rm_cfg', JSON.stringify({ k: 'test-key', d: 'https://trace-demo.firebaseio.test', p: 'trace-demo' }));
     localStorage.setItem('rm_au', JSON.stringify({ rt: 'test-refresh', uid: 'admin-1', email: 'admin@example.test' }));
-    localStorage.setItem('rm_poll', '1');
+    localStorage.setItem('rm_poll_force', '1');
   });
   const data = {
     '/roles/admin-1.json': 'admin',
@@ -844,7 +844,7 @@ test('live journey card has cross mark button, dismisses on click, does not auto
   await page.addInitScript(() => {
     localStorage.setItem('rm_cfg', JSON.stringify({ k: 'test-key', d: 'https://trace-demo.firebaseio.test', p: 'trace-demo' }));
     localStorage.setItem('rm_au', JSON.stringify({ rt: 'test-refresh', uid: 'admin-1', email: 'admin@example.test' }));
-    localStorage.setItem('rm_poll', '1');
+    localStorage.setItem('rm_poll_force', '1');
   });
   await page.route('https://securetoken.googleapis.com/**', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id_token: 'test-id', expires_in: '3600', refresh_token: 'test-refresh', user_id: 'admin-1' }) }));
   await page.route('https://trace-demo.firebaseio.test/**', route => {
@@ -1045,5 +1045,194 @@ test('active tab displays 5 status cards, active units and active routes with cl
   await activeTab.click();
   await routesBtn.click();
   await expect(page.locator('.active-card')).toBeVisible();
+});
+
+async function openControlRoom(page) {
+  const now = Date.now();
+  await page.addInitScript(() => {
+    localStorage.setItem('rm_cfg', JSON.stringify({ k: 'test-key', d: 'https://trace-demo.firebaseio.test', p: 'trace-demo' }));
+    localStorage.setItem('rm_au', JSON.stringify({ rt: 'test-refresh', uid: 'admin-1', email: 'admin@example.test' }));
+    localStorage.setItem('rm_poll_force', '1');
+  });
+  await page.route('https://securetoken.googleapis.com/**', route => route.fulfill({ json: { id_token: 'test-id', expires_in: '3600', refresh_token: 'test-refresh', user_id: 'admin-1' } }));
+  await page.route('https://trace-demo.firebaseio.test/**', route => {
+    const pathname = new URL(route.request().url()).pathname;
+    const data = {
+      '/roles/admin-1.json': 'admin',
+      '/devices.json': { unit1: { ps: 'Central', route: 'Route 1', sd: 'North', officer: 'Officer A', mobile: '1000000000', force: 'route' }, unit2: { ps: 'East', route: 'Route 2', sd: 'North', officer: 'Officer B', mobile: '1000000001', force: 'route' } },
+      '/live.json': { unit1: { lat: 16.98, lng: 82.24, t: now, up: now, gps: true, bat: 81, sig: 4, spd: 28, acc: 12 }, unit2: { lat: 17.02, lng: 82.3, t: now, up: now, gps: true, bat: 50, sig: 3, spd: 0, acc: 40 } },
+      '/config.json': { routes: { r1: { ps: 'Central', route: 'Route 1', sd: 'North', force: 'route' }, r2: { ps: 'East', route: 'Route 2', sd: 'North', force: 'route' } }, stations: {}, settings: { election: '', autoSos: false } },
+    };
+    route.fulfill({ json: data[pathname] ?? {} });
+  });
+  await page.route(/arcgisonline|openstreetmap/, route => route.abort());
+  await page.goto(url);
+  await expect(page.locator('#counts')).toContainText('All phones');
+}
+
+async function expectMapFillsWindow(page) {
+  const size = page.viewportSize();
+  await expect.poll(async () => {
+    const box = await page.locator('#map').boundingBox();
+    return box && [Math.round(box.x), Math.round(box.y), Math.round(box.width), Math.round(box.height)];
+  }).toEqual([0, 0, size.width, size.height]);
+  for (const hidden of ['.hdr', '#tabs', '.bar', '#counts', 'aside.panel', '.ticker', '#dash']) await expect(page.locator(hidden)).toBeHidden();
+  await expect(page.locator('.leaflet-control-zoom')).toBeVisible();
+  await expect(page.locator('#mapExit')).toBeVisible();
+  // Leaflet has to know the new size, or tiles and markers stop short of the window edge.
+  await expect.poll(() => page.evaluate(() => { const s = MAP.getSize(); return [s.x, s.y]; })).toEqual([size.width, size.height]);
+}
+
+test('Open full map on the Summary shows only the map and Exit returns to the Summary', async ({ page }) => {
+  await openControlRoom(page);
+  await expect(page.locator('#dash')).toBeVisible();
+  await page.getByRole('button', { name: 'Open full map' }).click();
+  await expectMapFillsWindow(page);
+  expect(page.url()).toContain('#fullmap');
+
+  await page.locator('#mapExit').click();
+  await expect(page.locator('#mapExit')).toBeHidden();
+  await expect(page.locator('#dash')).toBeVisible();
+  await expect(page.locator('.hdr')).toBeVisible();
+  await expect(page.locator('#tabs')).toBeVisible();
+  await expect(page.locator('#dMap #map')).toBeVisible();
+  expect(page.url()).not.toContain('#fullmap');
+});
+
+test('Full map button on Live Tracking shows only the map; Esc and Back both return', async ({ page }) => {
+  await openControlRoom(page);
+  await page.locator('#tabs [data-tab="veh"]').click();
+  await expect(page.locator('aside.panel')).toBeVisible();
+  const fullMap = page.locator('.fullmapctl a');
+  await fullMap.click();
+  await expectMapFillsWindow(page);
+  await expect(fullMap).toBeHidden();
+
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#mapExit')).toBeHidden();
+  await expect(page.locator('aside.panel')).toBeVisible();
+  await expect(page.locator('#tabs [data-tab="veh"]')).toHaveAttribute('aria-selected', 'true');
+
+  await fullMap.click();
+  await expectMapFillsWindow(page);
+  await page.goBack();
+  await expect(page.locator('#mapExit')).toBeHidden();
+  await expect(page.locator('aside.panel')).toBeVisible();
+});
+
+test('Full map fills a phone screen and keeps showing live positions', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openControlRoom(page);
+  await page.getByRole('button', { name: 'Open full map' }).click();
+  await expectMapFillsWindow(page);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.evaluate(() => { MAP.setView([16.98, 82.24], 15, { animate: false }); });
+  await expect(page.locator('#map .vm').first()).toBeVisible();
+  await page.evaluate(() => {
+    Object.assign(LIVE.unit1, { lat: 16.981, t: Date.now(), up: Date.now() });
+    onLive('/unit1'); schedule();
+  });
+  // A new position is on screen quickly: redraw plus the marker's short slide, with no long catch-up glide.
+  await expect.poll(() => page.evaluate(() => MK.unit1.getLatLng().lat), { timeout: 3000 }).toBeCloseTo(16.981, 5);
+});
+
+test('redraws stay quick and few while 190 phones report', async ({ page }) => {
+  await openControlRoom(page);
+  const result = await page.evaluate(async () => {
+    const now = Date.now();
+    for (let i = 0; i < 190; i++) {
+      const u = 'load' + i;
+      DEV[u] = { ps: 'PS ' + (i % 29), route: 'Route ' + i, sd: 'SD ' + (i % 4), officer: 'Officer', mobile: '1', force: 'route' };
+      LIVE[u] = { lat: 17 + (i % 14) * 0.03, lng: 81.8 + Math.floor(i / 14) * 0.03, t: now, up: now, gps: true, bat: 80, sig: 4, spd: 20, acc: 12 };
+      TRAIL[u] = Array.from({ length: 300 }, (_, k) => [now - (300 - k) * 30000, 17 + k * 0.00001, 81.8, 12, 20]);
+    }
+    for (let i = 0; i < 1500; i++) EVT['load-event-' + i] = { type: 'loc', uid: 'load' + (i % 190), t: now - i * 1000 };
+    UI.tab = 'sum'; renderTabs(); renderPane();
+    let renders = 0, slowest = 0;
+    const original = render;
+    render = function () { const started = performance.now(); original.apply(this, arguments); renders++; slowest = Math.max(slowest, performance.now() - started); };
+    let n = 0;
+    const reports = setInterval(() => { const u = 'load' + (n++ % 190); LIVE[u].t = LIVE[u].up = Date.now(); onLive('/' + u); schedule(); }, 150);
+    await new Promise(done => setTimeout(done, 6200));
+    clearInterval(reports);
+    render = original;
+    return { renders, slowest };
+  });
+  // Often enough that new positions show promptly, without a redraw for every report. Limits allow for slower test machines.
+  expect(result.renders).toBeGreaterThanOrEqual(5);
+  expect(result.renders).toBeLessThanOrEqual(14);
+  expect(result.slowest).toBeLessThan(1000);
+});
+
+test('a computer left on slow polling by an older version goes back to live streaming', async ({ page }) => {
+  await page.addInitScript(() => { if (!sessionStorage.getItem('seeded')) { sessionStorage.setItem('seeded', '1'); localStorage.setItem('rm_poll', '1'); localStorage.setItem('rm_poll_until', String(Date.now() + 1000)); } });
+  await page.goto(url);
+  const state = await page.evaluate(() => [localStorage.getItem('rm_poll'), pollForced(), pollUntil() > Date.now()]);
+  expect(state).toEqual([null, false, true]);
+  await expect.poll(() => page.evaluate(() => pollUntil() > Date.now()), { timeout: 3000 }).toBe(false);
+});
+
+const viewerFixture = now => ({
+  '/roles/si-1.json': 'si_monitor',
+  '/siScopes/si-1.json': { mandal: 'Kadiyam', officer: 'SI Example', routes: { r1: true, r2: true }, stations: { s1: true, s2: true } },
+  '/config/routes/r1.json': { ps: 'Kadiyam PS', route: 'Route 1', memberUid: 'unit-1' },
+  '/config/routes/r2.json': { ps: 'Kadiyam PS', route: 'Route 2', memberUid: 'unit-2' },
+  '/config/stations/s1.json': { name: 'Booth 1', ps: 'Kadiyam PS', route: 'Route 1', lat: 16.91, lng: 81.84 },
+  '/config/stations/s2.json': { name: 'Booth 2', ps: 'Kadiyam PS', route: 'Route 2', lat: 16.92, lng: 81.85 },
+  '/devices/unit-1.json': { ps: 'Kadiyam PS', officer: 'HC Example', mobile: '9000000000' },
+  '/devices/unit-2.json': { ps: 'Kadiyam PS', officer: 'PC Example', mobile: '9000000001' },
+  '/live/unit-1.json': { lat: 16.95, lng: 81.9, up: now, t: now, gps: true, duty: true, acc: 10 },
+  '/live/unit-2.json': { lat: 16.96, lng: 81.91, up: now, t: now, gps: true, duty: true, acc: 40 },
+  '/events.json': {},
+});
+
+test('viewer refresh re-reads only positions and latest events, so many viewers stay light', async ({ page }) => {
+  const reads = [], data = viewerFixture(Date.now());
+  await page.addInitScript(() => sessionStorage.setItem('rm_si_au', JSON.stringify({ rt: 'si-refresh', uid: 'si-1', email: 'si919876543210@members.track.invalid' })));
+  await page.route('https://securetoken.googleapis.com/**', route => route.fulfill({ json: { id_token: 'si-token', expires_in: '3600', refresh_token: 'si-refresh', user_id: 'si-1' } }));
+  await page.route('https://officer-8eb52-default-rtdb.asia-southeast1.firebasedatabase.app/**', route => {
+    const address = new URL(route.request().url());
+    reads.push(address.pathname + address.search);
+    route.fulfill({ json: data[address.pathname] ?? null });
+  });
+  await page.route('https://*.tile.openstreetmap.org/**', route => route.abort());
+  await page.goto(siUrl);
+  await expect(page.locator('#routes')).toContainText('HC Example');
+  expect(reads.filter(x => x.startsWith('/events.json')).every(x => x.includes('limitToLast=15'))).toBe(true);
+  reads.length = 0;
+  await page.evaluate(() => refresh());
+  expect(reads.map(x => x.split('?')[0]).sort()).toEqual(['/events.json', '/events.json', '/live/unit-1.json', '/live/unit-2.json']);
+});
+
+test('standalone viewer full map shows only the map', async ({ page }) => {
+  const data = viewerFixture(Date.now());
+  await page.addInitScript(() => sessionStorage.setItem('rm_si_au', JSON.stringify({ rt: 'si-refresh', uid: 'si-1', email: 'si919876543210@members.track.invalid' })));
+  await page.route('https://securetoken.googleapis.com/**', route => route.fulfill({ json: { id_token: 'si-token', expires_in: '3600', refresh_token: 'si-refresh', user_id: 'si-1' } }));
+  await page.route('https://officer-8eb52-default-rtdb.asia-southeast1.firebasedatabase.app/**', route => route.fulfill({ json: data[new URL(route.request().url()).pathname] ?? null }));
+  await page.route('https://*.tile.openstreetmap.org/**', route => route.abort());
+  await page.goto(siUrl);
+  await expect(page.locator('#routes')).toContainText('HC Example');
+  await page.locator('#fullMap').click();
+  await expect.poll(async () => { const b = await page.locator('#map').boundingBox(); return [b.x, b.y, b.width, b.height]; }).toEqual([0, 0, 1440, 900]);
+  await expect.poll(() => page.evaluate(() => { const s = map.getSize(); return [s.x, s.y]; })).toEqual([1440, 900]);
+  await expect(page.locator('#fullMap')).toHaveText(/Exit full map/);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#fullMap')).toHaveText(/Full map/);
+  await expect.poll(async () => (await page.locator('#map').boundingBox()).width).toBeLessThan(1440);
+});
+
+test('viewer portal on the main site has a full map too', async ({ page }) => {
+  const data = viewerFixture(Date.now());
+  await page.addInitScript(() => localStorage.setItem('rm_au', JSON.stringify({ rt: 'si-refresh', uid: 'si-1', email: 'si919876543210@members.track.invalid' })));
+  await page.route('https://securetoken.googleapis.com/**', route => route.fulfill({ json: { id_token: 'si-token', expires_in: '3600', refresh_token: 'si-refresh', user_id: 'si-1' } }));
+  await page.route('https://officer-8eb52-default-rtdb.asia-southeast1.firebasedatabase.app/**', route => route.fulfill({ json: data[new URL(route.request().url()).pathname] ?? null }));
+  await page.route('https://*.tile.openstreetmap.org/**', route => route.abort());
+  await page.goto(url);
+  await expect(page.locator('#viewerRoutes')).toContainText('HC Example');
+  await page.locator('#viewerFullMap').click();
+  await expect.poll(async () => { const b = await page.locator('#viewerMap').boundingBox(); return [b.x, b.y, b.width, b.height]; }).toEqual([0, 0, 1440, 900]);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#viewerFullMap')).toHaveText(/Full map/);
+  await expect.poll(async () => (await page.locator('#viewerMap').boundingBox()).width).toBeLessThan(1440);
 });
 

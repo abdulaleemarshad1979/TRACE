@@ -1426,6 +1426,23 @@ body.v-dash #panelBtn{display:none}
   .trace-trip .trip-foot{font-size:11.5px;padding-top:6px}
 }
 
+/* Full map: nothing but the map fills the window */
+.mapexit{display:none}
+body.map-full .rd .hdr,body.map-full .rd .side,body.map-full .rd .bar,body.map-full .rd .ticker,body.map-full #dash,body.map-full aside.panel,body.map-full #panelShow,body.map-full .fullmapctl{display:none!important}
+body.map-full .app.rd{display:block;height:100dvh;min-height:0;padding:0}
+body.map-full .rd main.body{display:block;height:100%}
+body.map-full .rd .work{display:block;height:100%;margin:0;border:0;border-radius:0;box-shadow:none}
+body.map-full #map{position:fixed!important;inset:0;width:100%!important;height:100%!important;z-index:1}
+body.map-full .mapexit{display:block;position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:1200;padding:9px 16px;border:0;border-radius:999px;background:#0f1b2e;color:#fff;font-weight:700;font-size:14px;box-shadow:0 4px 14px rgba(0,0,0,.35);cursor:pointer}
+body.map-full .mapexit:hover{background:#1f6fd1}
+body.map-full .trace-trip{left:12px;bottom:28px}
+.fullmapctl a{width:auto!important;padding:0 10px;font-weight:700;font-size:13px;white-space:nowrap;color:#15233a}
+.viewer-map-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
+.viewer-map-head h2{margin:0}
+.viewer-full-btn{flex:none;padding:7px 12px;border:1px solid #cfd8e3;border-radius:8px;background:#fff;color:#15233a;font-weight:700;font-size:13px;cursor:pointer}
+body.viewer-map-full #viewerMap{position:fixed!important;inset:0;width:100%!important;height:100%!important;min-height:0!important;max-height:none!important;z-index:1000;border-radius:0}
+body.viewer-map-full .viewer-full-btn{position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:1200;border:0;border-radius:999px;background:#0f1b2e;color:#fff;box-shadow:0 4px 14px rgba(0,0,0,.35)}
+
 </style></head><body>
 <div id="login" class="login" hidden>
   <div class="card">
@@ -1461,7 +1478,7 @@ body.v-dash #panelBtn{display:none}
 
 <section id="viewerApp" class="viewer-app" hidden>
   <header class="viewer-head"><div><strong>TRACK · Viewer Portal</strong><small>East Godavari District Police · Assigned mandal</small></div><button id="viewerLogout" type="button">Sign out</button></header>
-  <main class="viewer-main"><div class="viewer-top"><div><h1 id="viewerMandal">Assigned mandal</h1><p id="viewerOfficer"></p></div><p id="viewerUpdated" role="status">Loading…</p></div><p id="viewerAlert" class="viewer-alert" role="alert" hidden></p><div id="viewerStats" class="viewer-stats"></div><div class="viewer-grid"><section class="viewer-panel"><h2>Assigned routes and phones</h2><div class="viewer-table-wrap"><table><thead><tr><th>Route</th><th>Officer</th><th>Phone status</th><th>Last update</th></tr></thead><tbody id="viewerRoutes"></tbody></table></div></section><section class="viewer-panel"><h2>Live location and polling booths</h2><div id="viewerMap" aria-label="Map of assigned route phones and polling booths"></div><p id="viewerMapNote" class="note"></p></section></div><p class="viewer-foot">Restricted to your assigned routes and polling booths. Live data refreshes every 15 seconds. Location and SOS information is for official duty only.</p></main>
+  <main class="viewer-main"><div class="viewer-top"><div><h1 id="viewerMandal">Assigned mandal</h1><p id="viewerOfficer"></p></div><p id="viewerUpdated" role="status">Loading…</p></div><p id="viewerAlert" class="viewer-alert" role="alert" hidden></p><div id="viewerStats" class="viewer-stats"></div><div class="viewer-grid"><section class="viewer-panel"><h2>Assigned routes and phones</h2><div class="viewer-table-wrap"><table><thead><tr><th>Route</th><th>Officer</th><th>Phone status</th><th>Last update</th></tr></thead><tbody id="viewerRoutes"></tbody></table></div></section><section class="viewer-panel"><div class="viewer-map-head"><h2>Live location and polling booths</h2><button id="viewerFullMap" class="viewer-full-btn" type="button" aria-pressed="false">⛶ Full map</button></div><div id="viewerMap" aria-label="Map of assigned route phones and polling booths"></div><p id="viewerMapNote" class="note"></p></section></div><p class="viewer-foot">Restricted to your assigned routes and polling booths. Live data refreshes every 10 seconds. Location and SOS information is for official duty only.</p></main>
 </section>
 
 <div id="app" class="app rd" hidden>
@@ -1477,7 +1494,7 @@ body.v-dash #panelBtn{display:none}
       <span class="clock" id="clock"></span>
       <button class="ibtn vbtn3" id="voiceBtn" type="button" title="Record and send a voice message to the route mobiles">🎤 Voice</button>
       <button class="ibtn bell" id="bellBtn" type="button" title="Alerts">🔔<b id="bellN" hidden></b></button>
-      <button class="ibtn" id="panelBtn" type="button" title="Hide the side panel to see the full map">Hide panel ◂</button>
+      <button class="ibtn" id="panelBtn" type="button" title="Hide the side panel beside the map">Hide panel ◂</button>
       <button class="ibtn" id="wallBtn" type="button" title="Full-screen view for the control room TV">Big screen</button>
       <div class="user"><span class="uav">👤</span><div><b>Control Room</b><span class="who" id="who"></span></div></div>
       <button class="ibtn" id="logout" type="button">Sign out</button>
@@ -1495,7 +1512,7 @@ body.v-dash #panelBtn{display:none}
     </div>
     <section class="dash" id="dash" hidden>
       <div class="card c-map">
-        <div class="ch"><h4><i>📍</i>Live Tracking Map</h4><button type="button" class="lnk" data-tab="veh">Open full map ›</button></div>
+        <div class="ch"><h4><i>📍</i>Live Tracking Map</h4><button type="button" class="lnk" data-fullmap>Open full map ›</button></div>
         <div class="mapbox" id="dMap"><div class="lyr" id="dLyr"></div></div>
         <div class="mleg" id="dLeg"></div>
       </div>
@@ -1506,6 +1523,7 @@ body.v-dash #panelBtn{display:none}
     </section>
     <div class="work">
       <button class="btn panelshow" id="panelShow" type="button" hidden>Show panel ▸</button>
+      <button class="btn mapexit" id="mapExit" type="button">✕ Exit full map</button>
       <div id="map"></div>
       <aside class="panel"><div class="pane" id="pane"></div></aside>
     </div>
@@ -4700,11 +4718,14 @@ function setAt(root, path, data, patch) {
 }
 const STREAMS = [];
 let CONN_OK = true;
+const POLL_RETRY_MS = 30 * 60000;
+const pollForced = () => { try { return localStorage.getItem('rm_poll_force') === '1'; } catch (e) { return false; } };
+try { localStorage.removeItem('rm_poll'); } catch (e) { }   // earlier versions stayed on slower polling for good after any network blip
+const pollUntil = () => { try { return +localStorage.getItem('rm_poll_until') || 0; } catch (e) { return 0; } };
 /* Live updates by streaming; if streaming fails on this network, falls back to reading every 10 seconds. */
 function stream(path, query, target, onChange, opt) {
   opt = opt || {};
-  const preferPoll = (() => { try { return localStorage.getItem('rm_poll') === '1'; } catch (e) { return false; } })();
-  const s = { path, query: query || '', every: opt.every || 15000, inc: opt.inc, last: 0, lastOk: 0, es: null, ok: false, mode: preferPoll ? 'poll' : 'stream', fails: 0, opened: false, err: '', timer: null };
+  const s = { path, query: query || '', every: opt.every || 15000, inc: opt.inc, last: 0, lastOk: 0, es: null, ok: false, mode: pollForced() || pollUntil() > Date.now() ? 'poll' : 'stream', fails: 0, opened: false, err: '', timer: null, retry: null };
   const apply = (p, d, patch) => { setAt(target, p, d, patch); onChange(p); };
   s.poll = async () => {
     try {
@@ -4722,12 +4743,18 @@ function stream(path, query, target, onChange, opt) {
     catch (e) { if (e.auth) { signOut(); return; } s.ok = false; s.err = e.message; if (/Permission denied/.test(e.message)) showError(`Permission denied for "${path}". Check the database rules (Setup tab) and that you signed in with an email listed there.`); }
     setConn();
   };
-  s.startPoll = () => { if (s.mode !== 'poll') { try { localStorage.setItem('rm_poll', '1'); } catch (e) { } } if (s.es) s.es.close(); s.mode = 'poll'; clearInterval(s.timer); s.poll(); s.timer = setInterval(s.poll, s.every); };
+  s.startPoll = () => {
+    if (s.mode !== 'poll') { try { localStorage.setItem('rm_poll_until', String(Date.now() + POLL_RETRY_MS)); } catch (e) { } }
+    if (s.es) s.es.close(); s.mode = 'poll'; clearInterval(s.timer); s.poll(); s.timer = setInterval(s.poll, s.every);
+    // reading at intervals re-downloads the whole branch, so go back to streaming once the bad patch has had time to pass
+    clearTimeout(s.retry);
+    if (!pollForced()) s.retry = setTimeout(() => { clearInterval(s.timer); s.mode = 'stream'; s.fails = 0; s.open(); }, Math.max(pollUntil() - Date.now(), 60000));
+  };
   s.open = async () => {
     if (s.mode === 'poll') { s.startPoll(); return; }
     let t; try { t = await token(); } catch (e) { if (e.auth) { signOut(); return; } s.err = e.message; s.ok = false; setConn(); setTimeout(s.open, 15000); return; }
     s.es = new EventSource(`${CFG.d}/${path}.json?auth=${t}${s.query}`);
-    const h = patch => ev => { try { const m = JSON.parse(ev.data); apply(m.path, m.data, patch); s.ok = true; s.opened = true; s.err = ''; setConn(); } catch (e) { } };
+    const h = patch => ev => { try { const m = JSON.parse(ev.data); apply(m.path, m.data, patch); s.ok = true; s.opened = true; s.fails = 0; s.err = ''; setConn(); } catch (e) { } };
     s.es.addEventListener('put', h(false));
     s.es.addEventListener('patch', h(true));
     s.es.addEventListener('auth_revoked', () => { s.es.close(); ID_TOKEN = null; s.open(); });
@@ -4737,7 +4764,7 @@ function stream(path, query, target, onChange, opt) {
       s.ok = false; s.fails++; setConn();
       // streaming blocked, or opens then gets cut by the network: switch to reading at intervals (and remember it for this computer)
       const closed = s.es.readyState === 2;
-      if (closed || s.fails >= 2) { s.err = 'Streaming not stable on this network; reading at intervals'; s.startPoll(); }
+      if (closed || (s.fails >= 3 && navigator.onLine)) { s.err = 'Streaming not stable on this network; reading at intervals'; s.startPoll(); }
     };
   };
   s.restart = () => { if (s.mode === 'poll') { s.poll(); return; } if (s.es) s.es.close(); s.open(); };
@@ -4807,13 +4834,22 @@ function hav(a1, o1, a2, o2) { const R = 6371000, r = Math.PI / 180, x = Math.si
 const uid8 = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 function toast(m, ms) { const t = document.createElement('div'); t.className = 'toast'; t.textContent = m; document.body.appendChild(t); setTimeout(() => t.remove(), ms || 3200); }
 function showError(m) { toast(m, 8000); }
-const S = () => Object.assign({ nosig: 5, stop: 15, offkm: 2, pin: '0000', trail: 60, sound: true, election: '', visitR: 200, green: 60, red: 120, pollStart: '07:00', pollEnd: '17:00', voteRemind: 60, autoSos: false }, CONF.settings || {});
+/* Values many render steps ask for: worked out once, then reused until the current task ends.
+   With 190 phones each step would otherwise repeat them hundreds of times per redraw. */
+const TASK_CACHE = new Map();
+function perTask(key, make) {
+  if (TASK_CACHE.has(key)) return TASK_CACHE.get(key);
+  if (!TASK_CACHE.size) queueMicrotask(() => TASK_CACHE.clear());
+  const value = make(); TASK_CACHE.set(key, value); return value;
+}
+const NUM_COLLATOR = new Intl.Collator(undefined, { numeric: true });
+const S = () => perTask('S', () => Object.assign({ nosig: 5, stop: 15, offkm: 2, pin: '0000', trail: 60, sound: true, election: '', visitR: 200, green: 60, red: 120, pollStart: '07:00', pollEnd: '17:00', voteRemind: 60, autoSos: false }, CONF.settings || {}));
 const ELEC = () => (S().election || '').trim();
 const inElection = el => !ELEC() || !el || String(el).trim().toLowerCase() === ELEC().toLowerCase();
-const allRoutes = () => Object.entries(CONF.routes || {}).map(([id, r]) => Object.assign({ id }, r)).sort((a, b) => (a.sd + a.ps + a.route).localeCompare(b.sd + b.ps + b.route, undefined, { numeric: true }));
-const routes = () => allRoutes().filter(r => !ELEC() || String(r.election || '').trim().toLowerCase() === ELEC().toLowerCase());
+const allRoutes = () => perTask('allRoutes', () => Object.entries(CONF.routes || {}).map(([id, r]) => Object.assign({ id }, r)).sort((a, b) => NUM_COLLATOR.compare(a.sd + a.ps + a.route, b.sd + b.ps + b.route))).slice();
+const routes = () => perTask('routes', () => allRoutes().filter(r => !ELEC() || String(r.election || '').trim().toLowerCase() === ELEC().toLowerCase())).slice();
 const validLocation = p => p && p.lat != null && p.lng != null && p.lat !== '' && p.lng !== '' && Number.isFinite(+p.lat) && Number.isFinite(+p.lng) && Math.abs(+p.lat) <= 90 && Math.abs(+p.lng) <= 180;
-const stations = () => Object.entries(CONF.stations || {}).map(([id, s]) => Object.assign({ id }, s)).filter(x => inElection(x.el));
+const stations = () => perTask('stations', () => Object.entries(CONF.stations || {}).map(([id, s]) => Object.assign({ id }, s)).filter(x => inElection(x.el))).slice();
 let PS_GEO_CACHE = { src: null, count: -1, centers: {} };
 function stationGeoIssue(p) {
   if (!validLocation(p)) return 'No coordinates supplied';
@@ -4834,11 +4870,15 @@ const mappableStation = p => !stationGeoIssue(p);
 /* ---------- names and status ---------- */
 function dname(u) { const d = DEV[u] || {}; return [d.ps, d.route].filter(Boolean).join(' – ') || ('Phone ' + u.slice(0, 5)); }
 function dshort(u) { const d = DEV[u] || {}; return [d.ps, (d.route || '').replace(/^route\s*/i, 'R')].filter(Boolean).join(' ') || u.slice(0, 5); }
+const STOP_MEMO = {};
 function stoppedMins(u) {
   const tr = TRAIL[u]; if (!tr || !tr.length) return 0;
+  const memo = STOP_MEMO[u]; if (memo && memo.tr === tr && memo.n === tr.length) return memo.mins;
   const last = tr[tr.length - 1]; let i = tr.length - 1;
   while (i > 0 && hav(tr[i - 1][1], tr[i - 1][2], last[1], last[2]) < 150) i--;
-  return Math.floor((last[0] - tr[i][0]) / MIN);
+  const mins = Math.floor((last[0] - tr[i][0]) / MIN);
+  STOP_MEMO[u] = { tr, n: tr.length, mins };
+  return mins;
 }
 function offRoute(u) {
   const d = DEV[u], L = LIVE[u]; if (!d || !L || L.lat == null) return null;
@@ -4860,7 +4900,9 @@ function status(u) {
   if ((+L.spd || 0) < 2) return { k: 'stop', txt: 'Stopped', c: C.stop };
   return { k: 'move', txt: `Moving ${L.spd || 0} km/h`, c: C.move };
 }
-function sosOpen(u) { return Object.values(EVT).some(e => e.type === 'sos' && e.uid === u && !e.ackBy && Date.now() - e.t < 6 * HOUR); }
+function sosOpen(u) {
+  return perTask('sosOpen', () => { const now = Date.now(), open = new Set(); Object.values(EVT).forEach(e => { if (e.type === 'sos' && !e.ackBy && now - e.t < 6 * HOUR) open.add(e.uid); }); return open; }).has(u);
+}
 /* a phone belongs to the election in use if its saved election matches, OR its police station + route is in the current route list
    (so renaming the election or re-importing the routes does not hide phones that registered earlier) */
 let RK_CACHE = { src: null, el: null, set: null };
@@ -4887,10 +4929,15 @@ function syncLiveDevices() {
     DEV[u] = { ps: l.ps || started.ps || '', route: l.route || started.route || '', sd: l.sd || '', officer: l.officer || '', mobile: l.mobile || '', force: l.force || 'route', el: l.el || '', _fromLive: true };
   });
 }
-const devIds = () => { syncLiveDevices(); return Object.keys(DEV).filter(visible).filter(u => !(typeof isBlocked === 'function' && isBlocked(u) && !(LIVE[u] && LIVE[u].up && LIVE[u].duty !== false && Date.now() - LIVE[u].up < S().nosig * MIN))).sort((a, b) => ((DEV[a].sd || '') + dname(a)).localeCompare((DEV[b].sd || '') + dname(b), undefined, { numeric: true })); };
+const devIds = () => perTask(`devIds|${UI.fSd}|${UI.fPs}|${UI.fForce}`, () => {
+  syncLiveDevices();
+  const ids = Object.keys(DEV).filter(visible).filter(u => !(typeof isBlocked === 'function' && isBlocked(u) && !(LIVE[u] && LIVE[u].up && LIVE[u].duty !== false && Date.now() - LIVE[u].up < S().nosig * MIN)));
+  return ids.map(u => [(DEV[u].sd || '') + dname(u), u]).sort((a, b) => NUM_COLLATOR.compare(a[0], b[0])).map(x => x[1]);
+}).slice();
 
 /* ---------- start ---------- */
-let LOGIN_MODE = 'viewer', VIEWER_SCOPE = null, VIEWER_ROUTES = [], VIEWER_STATIONS = [], VIEWER_MAP = null, VIEWER_MARKERS = {}, VIEWER_BOOTH_LAYER = null, VIEWER_TIMER = null, VIEWER_RANK = '', VIEWER_SCOPE_KEY = '';
+let LOGIN_MODE = 'viewer', VIEWER_SCOPE = null, VIEWER_ROUTES = [], VIEWER_STATIONS = [], VIEWER_MAP = null, VIEWER_MARKERS = {}, VIEWER_BOOTH_LAYER = null, VIEWER_TIMER = null, VIEWER_RANK = '', VIEWER_SCOPE_KEY = '', VIEWER_SCOPE_AT = 0, VIEWER_BOOTH_KEY = '';
+const VIEWER_DETAIL = {}, VIEWER_SCOPE_MS = 5 * 60000, VIEWER_DEVICE_MS = 5 * 60000;
 const VIEWER_RANKS = ['Incharge', 'Striking Force', 'Sub-Striking Force', 'DSP'];
 function setLoginMode(mode) {
   LOGIN_MODE = mode;
@@ -4919,6 +4966,7 @@ function viewerStatus(live, sos) {
   return { label: +live.spd > 3 ? 'Moving' : 'Live', css: 'live' };
 }
 async function loadViewerScope() {
+  VIEWER_SCOPE_AT = Date.now();
   const scope = await dbGet('siScopes/' + AU.uid);
   if (!scope?.mandal || !scope.routes || !Object.values(scope.routes).some(Boolean)) throw new Error('No mandal routes have been assigned to this viewer account. Ask the control room to assign routes.');
   const savedRank = VIEWER_RANKS.includes(scope.rank) ? scope.rank : '';
@@ -4940,14 +4988,17 @@ async function loadViewerScope() {
 async function refreshViewer() {
   const rows = await Promise.all(VIEWER_ROUTES.map(async route => {
     if (!route.memberUid) return { route, dev: {}, live: {}, sos: false };
-    const uid = route.memberUid;
+    const uid = route.memberUid, now = Date.now(), seen = VIEWER_DETAIL[uid] || (VIEWER_DETAIL[uid] = { devAt: 0, dev: {}, events: [] });
+    // position and the phone's latest events every refresh, so SOS shows quickly; officer details change rarely
+    const wantDev = now - seen.devAt >= VIEWER_DEVICE_MS;
     const [d, l, e] = await Promise.allSettled([
-      dbGet('devices/' + encodeURIComponent(uid)), dbGet('live/' + encodeURIComponent(uid)),
-      dbGet('events', '&orderBy=%22uid%22&equalTo=' + encodeURIComponent(JSON.stringify(uid)))
+      wantDev ? dbGet('devices/' + encodeURIComponent(uid)) : null, dbGet('live/' + encodeURIComponent(uid)),
+      dbGet('events', '&orderBy=%22uid%22&equalTo=' + encodeURIComponent(JSON.stringify(uid)) + '&limitToLast=15')
     ]);
-    const events = e.status === 'fulfilled' ? Object.values(e.value || {}) : [];
-    return { route, uid, dev: d.status === 'fulfilled' ? d.value || {} : {}, live: l.status === 'fulfilled' ? l.value || {} : {},
-      sos: events.some(x => x?.type === 'sos' && !x.ackBy && !x.cleared && Date.now() - (+x.t || 0) < 21600000),
+    if (wantDev && d.status === 'fulfilled') { seen.dev = d.value || {}; seen.devAt = now; }
+    if (e.status === 'fulfilled') seen.events = Object.values(e.value || {});
+    return { route, uid, dev: seen.dev, live: l.status === 'fulfilled' ? l.value || {} : {},
+      sos: seen.events.some(x => x?.type === 'sos' && !x.ackBy && !x.cleared && Date.now() - (+x.t || 0) < 21600000),
       error: d.status === 'rejected' || l.status === 'rejected' || e.status === 'rejected' };
   }));
   const active = rows.filter(x => x.uid && x.live?.up && Date.now() - x.live.up <= 300000).length;
@@ -4959,10 +5010,12 @@ async function refreshViewer() {
     const s = viewerStatus(x.live, x.sos);
     return `<tr><td><b>${esc(x.route.ps || 'Police station')}</b><small>${esc(x.route.route || x.route.id)}</small></td><td>${esc(x.dev.officer || x.route.officer || 'Unassigned')}${x.dev.mobile ? `<small>${esc(x.dev.mobile)}</small>` : ''}</td><td><span class="viewer-badge ${s.css}">${esc(x.uid ? s.label : 'No assigned phone')}</span></td><td>${esc(viewerTime(x.live.up))}</td></tr>`;
   }).join('');
-  VIEWER_BOOTH_LAYER.clearLayers();
-  const boothPoints = VIEWER_STATIONS.map(p => [+p.lat, +p.lng]);
-  VIEWER_STATIONS.forEach(p => L.circleMarker([+p.lat, +p.lng], { radius: 5, color: '#6b4aa5', fillColor: '#ab88d5', fillOpacity: .9, weight: 1 })
-    .bindPopup(`<b>Polling booth</b><br>${esc(p.name || p.id)}<br>${esc(p.ps || '')} · ${esc(p.route || '')}`).addTo(VIEWER_BOOTH_LAYER));
+  const boothPoints = VIEWER_STATIONS.map(p => [+p.lat, +p.lng]), boothKey = JSON.stringify(VIEWER_STATIONS.map(p => [p.id, p.lat, p.lng, p.name, p.ps, p.route]));
+  if (boothKey !== VIEWER_BOOTH_KEY) {
+    VIEWER_BOOTH_KEY = boothKey; VIEWER_BOOTH_LAYER.clearLayers();
+    VIEWER_STATIONS.forEach(p => L.circleMarker([+p.lat, +p.lng], { radius: 5, color: '#6b4aa5', fillColor: '#ab88d5', fillOpacity: .9, weight: 1 })
+      .bindPopup(`<b>Polling booth</b><br>${esc(p.name || p.id)}<br>${esc(p.ps || '')} · ${esc(p.route || '')}`).addTo(VIEWER_BOOTH_LAYER));
+  }
   const seen = new Set(), points = [];
   for (const x of rows) {
     if (!x.uid || !viewerHasLocation(x.live)) continue;
@@ -4977,6 +5030,13 @@ async function refreshViewer() {
   $('#viewerMapNote').textContent = `${boothPoints.length} polling booths · ${points.length} phone location${points.length === 1 ? '' : 's'}${waiting ? ` · ${waiting} phone${waiting === 1 ? '' : 's'} waiting for GPS fix` : ''}`;
   $('#viewerUpdated').textContent = `Updated ${viewerTime(Date.now())}${missing ? ` · ${missing} unavailable` : ''}`;
 }
+function setViewerFullMap(on) {
+  document.body.classList.toggle('viewer-map-full', on);
+  const button = $('#viewerFullMap'); button.textContent = on ? '✕ Exit full map' : '⛶ Full map'; button.setAttribute('aria-pressed', String(on));
+  if (VIEWER_MAP) { setTimeout(() => VIEWER_MAP.invalidateSize(), 30); setTimeout(() => VIEWER_MAP.invalidateSize(), 300); }
+}
+$('#viewerFullMap').addEventListener('click', () => setViewerFullMap(!document.body.classList.contains('viewer-map-full')));
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && document.body.classList.contains('viewer-map-full')) setViewerFullMap(false); });
 async function startViewer() {
   await loadViewerScope();
   $('#login').hidden = true; $('#app').hidden = true; $('#viewerApp').hidden = false;
@@ -4984,12 +5044,13 @@ async function startViewer() {
   setTimeout(() => VIEWER_MAP.invalidateSize(), 50);
   await refreshViewer();
   clearTimeout(VIEWER_TIMER);
+  const nextWait = () => (document.hidden ? 60000 : 10000) + Math.floor(Math.random() * 2000);
   const tick = async () => {
-    try { await loadViewerScope(); await refreshViewer(); }
+    try { if (Date.now() - VIEWER_SCOPE_AT >= VIEWER_SCOPE_MS) await loadViewerScope(); await refreshViewer(); }
     catch (error) { if (/No mandal routes|Permission denied|Sign in again/i.test(error.message)) { signOut(); return; } $('#viewerUpdated').textContent = 'Refresh failed: ' + error.message; }
-    if (AU) VIEWER_TIMER = setTimeout(tick, 15000 + Math.floor(Math.random() * 3000));
+    if (AU) VIEWER_TIMER = setTimeout(tick, nextWait());
   };
-  VIEWER_TIMER = setTimeout(tick, 15000 + Math.floor(Math.random() * 3000));
+  VIEWER_TIMER = setTimeout(tick, nextWait());
 }
 function boot() {
   if (!CFG) { $('#login').hidden = false; $('#projForm').hidden = false; return; }
@@ -5035,7 +5096,7 @@ function start() {
   bridgeAuth();
   initMap();
   stream('devices', '', DEV, () => { loadTrails(); schedule(); }, { every: 15000 });
-  stream('live', '', LIVE, path => { onLive(path); schedule(); }, { every: 15000 });
+  stream('live', '', LIVE, path => { onLive(path); schedule(); }, { every: 8000 });
   stream('config', '', CONF, () => { googleLayers(); const n = Object.keys(CONF.stations || {}).length; if (n !== PS_N) { PS_N = n; fitted = false; stationsSig = ''; } schedule(true); }, { every: 300000 });
   stream('events', `&orderBy="t"&startAt=${dayStart(Date.now()) - 6 * HOUR}`, EVT, () => { onEvents(); schedule(); }, { every: 15000, inc: 't' });
   setInterval(() => { $('#clock').textContent = fTs(Date.now()); }, 1000);
@@ -5048,14 +5109,18 @@ function start() {
 let TODAY = dayKey(Date.now());
 const TRAIL_LOADED = new Set();
 async function loadTrails() {
+  let loaded = 0;
   for (const u of Object.keys(DEV)) {
     if (TRAIL_LOADED.has(u)) continue; TRAIL_LOADED.add(u);
     try {
       const pts = await fetchTrack(u, TODAY);
       const have = TRAIL[u] || [];
-      TRAIL[u] = mergePts(pts, have); VISIT_DIRTY = true;
+      TRAIL[u] = mergePts(pts, have);
+      // recounting coverage is costly, so do it after every few phones rather than after each one
+      if (++loaded % 20 === 0) { VISIT_DIRTY = true; schedule(); }
     } catch (e) { TRAIL_LOADED.delete(u); }
   }
+  if (loaded) VISIT_DIRTY = true;
   schedule();
 }
 async function fetchTrack(u, day) {
@@ -5111,9 +5176,23 @@ function checkTransitions() {
 }
 
 /* ---------- rendering ---------- */
-let renderPending = false, paneDirty = false;
-function schedule(pane) { if (pane) paneDirty = true; if (renderPending) return; renderPending = true; setTimeout(() => { renderPending = false; render(); }, 400); }
+let renderTimer = 0, renderDue = 0, renderCost = 0, renderSkipped = false, paneDirty = false;
+/* Phone updates share one redraw every half second, or less often if redraws are slow on this computer,
+   so a new position shows almost at once and 190 phones still cannot overload the browser. */
+function schedule(pane, soon) {
+  if (pane) paneDirty = true;
+  const wait = pane || soon ? 300 : Math.max(500, renderCost * 6), due = Date.now() + wait;
+  if (renderTimer && renderDue <= due) return;
+  clearTimeout(renderTimer); renderDue = due;
+  renderTimer = setTimeout(() => {
+    renderTimer = 0;
+    if (document.hidden) { renderSkipped = true; return; }
+    const started = performance.now(); render(); renderCost = performance.now() - started;
+  }, wait);
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden && renderSkipped) { renderSkipped = false; schedule(true); } });
 function render() {
+  if (document.body.classList.contains('map-full')) { renderMap(); paneDirty = false; return; }
   renderFilters(); renderCounts(); renderMap();
   const editing = document.activeElement && $('#pane').contains(document.activeElement) && /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);
   if (!editing || paneDirty === 'force') renderPane();
@@ -5182,11 +5261,11 @@ function initMap() {
     return d; };
   lg.addTo(MAP);
   if (typeof initHeat === 'function') initHeat();
-  MAP.on('zoomend moveend', () => schedule());
+  MAP.on('zoomend moveend', () => schedule(false, true));
   MAP.on('click', e => { if (UI.incMode) { setIncident(e.latlng.lat, e.latlng.lng, 'Marked on map'); UI.incMode = false; MAP.getContainer().style.cursor = ''; } });
 }
-const MK = {};
-let stationsDrawn = '';
+const MK = {}, TRAIL_LINES = {};
+let stationsDrawn = '', TRAIL_CANVAS = null;
 /* hover a route mobile (map marker or Vehicles card): show the nearest units and polling locations with distance in km */
 let HOVER_U = null;
 function hvKm(a, b, c, d) { const R = 6371, r = Math.PI / 180, x = (c - a) * r, y = (d - b) * r; const h = Math.sin(x / 2) ** 2 + Math.cos(a * r) * Math.cos(c * r) * Math.sin(y / 2) ** 2; return 2 * R * Math.asin(Math.min(1, Math.sqrt(h))); }
@@ -5244,14 +5323,25 @@ function renderMap() {
     keep.add(u);
     const st = status(u), sos = sosOpen(u), hd = typeof heading === 'function' ? heading(u) : null;
     const force = forceOf(u); const ring = sos ? '' : st.k === 'stop' ? '#e0a800' : st.k === 'nosig' ? '#c0392b' : (st.k === 'gpsoff' || st.k === 'weak') ? '#7f8c8d' : ''; const html = `<div class="vm ${sos ? 'sos' : ''}"><div class="pin car" style="background:${sos ? C.sos : fcol(force)}${ring ? `;box-shadow:0 0 0 2px #fff,0 0 0 4px ${ring}` : ''}">${hd != null && st.k === 'move' ? `<svg viewBox="0 0 24 24" style="transform:rotate(${Math.round(hd)}deg)"><path d="M12 3l6 16-6-4-6 4z" fill="#fff"/></svg>` : '<i></i>'}</div><div class="lab">${esc(dshort(u))}</div></div>`;
-    if (!MK[u]) { MK[u] = L.marker([Lv.lat, Lv.lng], { icon: L.divIcon({ html, className: '', iconSize: [22, 22], iconAnchor: [11, 11] }) }).addTo(LAYER_V); MK[u].on('click', () => selectDev(u)); MK[u].on('mouseover', () => hoverUnit(u, true)); MK[u].on('mouseout', () => hoverUnit(u, false)); MK[u]._h = html; MK[u]._t = Lv.t; }
+    if (!MK[u]) { MK[u] = L.marker([Lv.lat, Lv.lng], { icon: L.divIcon({ html, className: '', iconSize: [22, 22], iconAnchor: [11, 11] }) }).addTo(LAYER_V); MK[u].bindTooltip(() => unitTip(u), { direction: 'right', offset: [14, 0], className: 'vtip' }); MK[u].on('click', () => selectDev(u)); MK[u].on('mouseover', () => hoverUnit(u, true)); MK[u].on('mouseout', () => hoverUnit(u, false)); MK[u]._h = html; MK[u]._t = Lv.t; }
     else { if (typeof moveMarker === 'function') moveMarker(u, MK[u], Lv); else MK[u].setLatLng([Lv.lat, Lv.lng]); if (MK[u]._h !== html) { MK[u].setIcon(L.divIcon({ html, className: '', iconSize: [22, 22], iconAnchor: [11, 11] })); MK[u]._h = html; } }
-    MK[u].setZIndexOffset(sos ? 1000 : st.k === 'nosig' ? 500 : 0); MK[u].bindTooltip(unitTip(u), { direction: 'right', offset: [14, 0], className: 'vtip' }); if (HOVER_U === u) MK[u].openTooltip();
+    const z = sos ? 1000 : st.k === 'nosig' ? 500 : 0; if (MK[u]._z !== z) { MK[u].setZIndexOffset(z); MK[u]._z = z; }
+    if (HOVER_U === u) { MK[u].setTooltipContent(unitTip(u)); MK[u].openTooltip(); }
   });
   Object.keys(MK).forEach(u => { if (!keep.has(u)) { LAYER_V.removeLayer(MK[u]); delete MK[u]; if (typeof stopGlide === 'function') stopGlide(u); } });
   // trails
-  LAYER_T.clearLayers();
-  if (s.trail > 0) keep.forEach(u => { const tr = (TRAIL[u] || []).filter(p => p[0] > Date.now() - s.trail * MIN && p[3] <= 150); if (tr.length > 1) L.polyline(tr.map(p => [p[1], p[2]]), { color: status(u).c, weight: UI.sel === u ? 5 : 3, opacity: .7 }).addTo(LAYER_T); });
+  const since = Date.now() - s.trail * MIN;
+  Object.keys(TRAIL_LINES).forEach(u => { if (!s.trail || !keep.has(u)) { LAYER_T.removeLayer(TRAIL_LINES[u].line); delete TRAIL_LINES[u]; } });
+  if (s.trail > 0) keep.forEach(u => {
+    const all = TRAIL[u] || [], tr = [];
+    for (let i = all.length - 1; i >= 0 && all[i][0] > since; i--) if (all[i][3] <= 150) tr.push(all[i]);
+    const have = TRAIL_LINES[u];
+    if (tr.length < 2) { if (have) { LAYER_T.removeLayer(have.line); delete TRAIL_LINES[u]; } return; }
+    const color = status(u).c, weight = UI.sel === u ? 5 : 3, sig = `${tr.length}|${tr[0][0]}|${tr[tr.length - 1][0]}`;
+    if (!have) { TRAIL_LINES[u] = { sig, line: L.polyline(tr.map(p => [p[1], p[2]]), { color, weight, opacity: .7, renderer: TRAIL_CANVAS || (TRAIL_CANVAS = L.canvas({ padding: .2 })), interactive: false }).addTo(LAYER_T) }; return; }
+    if (have.sig !== sig) { have.sig = sig; have.line.setLatLngs(tr.map(p => [p[1], p[2]])); }
+    if (have.line.options.color !== color || have.line.options.weight !== weight) have.line.setStyle({ color, weight });
+  });
   // first view: fit the phones AND the polling locations (filtered), so locations far from the phones are not off-screen
   if (!fitted) {
     const pts = ids.filter(u => validLocation(LIVE[u]) && matchStatus(u)).map(u => [+LIVE[u].lat, +LIVE[u].lng]);
@@ -6267,13 +6357,13 @@ document.addEventListener('change', e => {
 });
 document.addEventListener('toggle', e => { const d = e.target; if (d.dataset && d.dataset.sec && d.open) { UI.setupOpen = d.dataset.sec; LS.set('setupOpen', UI.setupOpen); } }, true);
 $('#conn').addEventListener('click', async () => {
-  const polling = (() => { try { return localStorage.getItem('rm_poll') === '1'; } catch (e) { return false; } })();
+  const polling = pollForced() || pollUntil() > Date.now();
   const m = document.createElement('div'); m.className = 'modal';
   m.innerHTML = `<div class="card"><h2>Connection check</h2><div id="diag">Checking…</div>
     ${polling ? `<p class="note">This computer is reading updates at short intervals because live streaming was blocked or unstable on this network. The dashboard is up to date — this is normal and fine for poll day.</p><button class="btn small" data-act="tryStream">Try live streaming again</button>` : ''}
     <div class="row" style="justify-content:flex-end"><button class="btn" data-x>Close</button></div></div>`;
   document.body.appendChild(m); m.addEventListener('click', e => {
-    if (e.target.closest('[data-act=tryStream]')) { try { localStorage.removeItem('rm_poll'); } catch (er) { } toast('Reloading to try live streaming…'); setTimeout(() => location.reload(), 800); return; }
+    if (e.target.closest('[data-act=tryStream]')) { try { localStorage.removeItem('rm_poll_force'); localStorage.removeItem('rm_poll_until'); } catch (er) { } toast('Reloading to try live streaming…'); setTimeout(() => location.reload(), 800); return; }
     if (e.target === m || e.target.hasAttribute('data-x')) m.remove();
   });
   $('#diag').innerHTML = await diagnose();
@@ -6319,6 +6409,7 @@ let glideRaf = 0;
 const glideOn = () => { try { return localStorage.getItem('rm_glide') !== '0'; } catch (e) { return true; } };
 function setGlide(on) { try { localStorage.setItem('rm_glide', on ? '1' : '0'); } catch (e) { } if (!on) Object.keys(GL).forEach(u => { const g = GL[u]; stopGlide(u); if (MK[u]) MK[u].setLatLng(g.to); }); }
 function stopGlide(u) { delete GL[u]; }
+const GLIDE_MS = 800;
 function moveMarker(u, m, Lv) {
   const to = L.latLng(Lv.lat, Lv.lng), g = GL[u];
   if (g && g.to.equals(to)) return;                     // already on its way there
@@ -6330,9 +6421,8 @@ function moveMarker(u, m, Lv) {
   const mid = (TRAIL[u] || []).filter(p => p[0] > prevT && p[0] < Lv.t && p[3] <= 150).map(p => L.latLng(p[1], p[2]));
   const pts = [cur].concat(mid, [to]), cum = [0];
   for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + pts[i - 1].distanceTo(pts[i]));
-  // spread the movement over most of the gap until the next fix, so the car moves steadily (2 to 20 s)
-  const gap = prevT && Lv.t > prevT ? Lv.t - prevT : 10000;
-  GL[u] = { to, toT: Lv.t, pts, cum, len: cum[cum.length - 1] || 1, t0: performance.now(), dur: Math.max(2000, Math.min(30000, gap * 0.8)) };
+  // a short slide keeps movement readable while the marker stays on the phone's latest position
+  GL[u] = { to, toT: Lv.t, pts, cum, len: cum[cum.length - 1] || 1, t0: performance.now(), dur: GLIDE_MS };
   if (!glideRaf) glideRaf = requestAnimationFrame(glideFrame);
 }
 function glideFrame(now) {
@@ -6781,15 +6871,20 @@ const WORST = ['sos', 'nosig', 'gpsoff', 'weak', 'stop', 'move', 'none'];
 /* when zoomed out, vehicles are shown as one bubble per police station */
 function drawGroups(ids) {
   if (!LAYER_G) LAYER_G = L.layerGroup().addTo(MAP);
-  LAYER_G.clearLayers(); if (!ids.length) return;
+  if (!ids.length) { LAYER_G.clearLayers(); LAYER_G._sig = ''; return; }
   const g = {};
   ids.forEach(u => { const k = DEV[u].ps || 'Other'; (g[k] = g[k] || []).push(u); });
-  Object.entries(g).forEach(([ps, us]) => {
-    const lat = us.reduce((a, u) => a + LIVE[u].lat, 0) / us.length, lng = us.reduce((a, u) => a + LIVE[u].lng, 0) / us.length;
-    const w = us.map(u => sosOpen(u) ? 'sos' : status(u).k).sort((a, b) => WORST.indexOf(a) - WORST.indexOf(b))[0];
+  const groups = Object.entries(g).map(([ps, us]) => ({
+    ps, us, lat: us.reduce((a, u) => a + +LIVE[u].lat, 0) / us.length, lng: us.reduce((a, u) => a + +LIVE[u].lng, 0) / us.length,
+    w: us.map(u => sosOpen(u) ? 'sos' : status(u).k).sort((a, b) => WORST.indexOf(a) - WORST.indexOf(b))[0]
+  }));
+  const sig = groups.map(x => [x.ps, x.us.join(), x.lat.toFixed(4), x.lng.toFixed(4), x.w].join('|')).join(';');
+  if (sig === LAYER_G._sig) return;
+  LAYER_G._sig = sig; LAYER_G.clearLayers();
+  groups.forEach(({ ps, us, lat, lng, w }) => {
     const col = w === 'sos' ? C.sos : C[w] || C.move;
     L.marker([lat, lng], { icon: L.divIcon({ html: `<div class="vcl" style="border-color:${col}">${esc(ps)} <b>${us.length}</b></div>`, className: '', iconSize: null, iconAnchor: [30, 14] }), zIndexOffset: w === 'sos' ? 1000 : 0 })
-      .bindTooltip(us.map(u => `${esc(dshort(u))}: ${esc(sosOpen(u) ? 'SOS' : status(u).txt)}`).join('<br>'))
+      .bindTooltip(() => us.map(u => `${esc(dshort(u))}: ${esc(sosOpen(u) ? 'SOS' : status(u).txt)}`).join('<br>'))
       .on('click', () => MAP.fitBounds(L.latLngBounds(us.map(u => [LIVE[u].lat, LIVE[u].lng])).pad(0.3), { maxZoom: 14 })).addTo(LAYER_G);
   });
 }
@@ -7730,12 +7825,13 @@ renderCounts = function () {
   const ids = devIds(); const n = {}; ids.forEach(u => { const k = status(u).k; n[k] = (n[k] || 0) + 1; });
   const sos = ids.filter(sosOpen).length;
   const box = (k, label, c, v, ic) => `<button type="button" class="cnt t-${k || 'all'} ${UI.fStatus === k ? 'on' : ''}" data-fs="${k}" style="--c:${c}"><i>${svg(ic, 22)}</i><span><b data-k="c-${k || 'all'}"${['nosig', 'gps', 'sos'].includes(k) ? ' data-bad="up"' : k === 'move' ? ' data-bad="down"' : ''}>${v}</b><em>${label}</em></span></button>`;
-  $('#counts').innerHTML = box('', 'All phones', '#1f6fd1', ids.length, 'phone') + box('move', 'Moving', '#1e9e57', n.move || 0, 'move') + box('stop', 'Stopped', '#f0a500', n.stop || 0, 'pause')
+  const tiles = box('', 'All phones', '#1f6fd1', ids.length, 'phone') + box('move', 'Moving', '#1e9e57', n.move || 0, 'move') + box('stop', 'Stopped', '#f0a500', n.stop || 0, 'pause')
     + box('nosig', 'No signal', '#e0413a', n.nosig || 0, 'nosig') + box('gps', 'GPS off/weak', '#8e44ad', (n.gpsoff || 0) + (n.weak || 0), 'sat') + box('sos', 'SOS', '#d62d2d', sos, 'sos');
+  if ($('#counts').dataset.h !== tiles) { $('#counts').innerHTML = tiles; $('#counts').dataset.h = tiles; }
 };
 
 /* ---------- which layout is showing ---------- */
-const isDash = () => UI.tab === 'sum' && !document.body.classList.contains('wall');
+const isDash = () => UI.tab === 'sum' && !document.body.classList.contains('wall') && !document.body.classList.contains('map-full');
 function applyView() {
   const d = isDash(); document.body.classList.toggle('v-dash', d);
   const setup = UI.tab === 'setup';
@@ -7832,9 +7928,33 @@ function renderDash() {
 const _renderPaneRD = renderPane;
 renderPane = function () {
   applyView();
+  if (document.body.classList.contains('map-full')) return;
   if (isDash()) { renderDash(); return; }
   _renderPaneRD();
 };
+
+/* Full map: the map alone fills the window, whichever view opened it.
+   Exit full map, Esc or the browser's Back button returns to that view. */
+function setFullMap(on) {
+  if (on === document.body.classList.contains('map-full')) return;
+  document.body.classList.toggle('map-full', on);
+  if (on) {
+    if (!['sum', 'veh', 'loc'].includes(UI.tab)) UI.tab = 'veh';
+    try { history.pushState({ fullMap: true }, '', '#fullmap'); } catch (e) { }
+  } else if (history.state && history.state.fullMap) { try { history.back(); } catch (e) { } }
+  renderTabs(); renderPane();
+  if (typeof MAP === 'undefined' || !MAP) return;
+  // keep the view on a selected unit; otherwise show everything in the larger space
+  setTimeout(() => { MAP.invalidateSize(); if (!UI.sel) fitted = false; renderMap(); if (typeof renderTrip === 'function') renderTrip(); }, 30);
+  setTimeout(() => MAP.invalidateSize(), 300);
+  schedule(true);
+}
+document.addEventListener('click', e => {
+  const t = e.target.closest && e.target.closest('[data-fullmap],#mapExit'); if (!t) return;
+  e.preventDefault(); setFullMap(t.id !== 'mapExit');
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && document.body.classList.contains('map-full') && !document.querySelector('.modal')) setFullMap(false); });
+window.addEventListener('popstate', () => { if (!(history.state && history.state.fullMap)) setFullMap(false); });
 
 /* top bar buttons */
 document.addEventListener('click', e => {
@@ -7854,6 +7974,10 @@ start = function () {
     const c = L.control({ position: 'topleft' });
     c.onAdd = () => { const d = L.DomUtil.create('div', 'leaflet-bar fitctl'); d.innerHTML = '<a href="#" title="Show all units and polling locations" role="button">⤢</a>'; L.DomEvent.on(d, 'click', e => { L.DomEvent.stop(e); fitted = false; renderMap(); }); L.DomEvent.disableClickPropagation(d); return d; };
     c.addTo(MAP);
+    const fm = L.control({ position: 'topright' });
+    fm.onAdd = () => { const d = L.DomUtil.create('div', 'leaflet-bar fullmapctl'); d.innerHTML = '<a href="#" role="button" data-fullmap title="Show only the map, filling the whole window">⛶ Full map</a>'; L.DomEvent.disableClickPropagation(d); return d; };
+    fm.addTo(MAP);
+    if (location.hash === '#fullmap') setFullMap(true);
   } catch (e) { console.error('fit control', e); }
 };
 
@@ -7867,6 +7991,7 @@ start = function () {
 
   let dismissed = false;
   let lastSel = typeof UI !== 'undefined' ? UI.sel : null;
+  let shownUid = null, shownHtml = '', tripTimer = 0;
 
   function renderTrip() {
     if (document.querySelector('#app')?.hidden || typeof UI === 'undefined') {
@@ -7885,11 +8010,12 @@ start = function () {
       panel.hidden = true;
       return;
     }
-    const uid = UI.sel || (!dismissed && typeof devIds === 'function' ? devIds()[0] : null);
+    const uid = UI.sel || (!dismissed && !document.body.classList.contains('map-full') && typeof devIds === 'function' ? devIds()[0] : null);
     if (!uid) {
       panel.hidden = true;
       return;
     }
+    shownUid = uid;
     const live = LIVE[uid];
     if (!live || live.lat == null || live.lng == null) {
       panel.hidden = true;
@@ -7909,7 +8035,7 @@ start = function () {
     const incomingVoice = Object.values(EVT).filter(e => e.voice && e.uid && DEV[e.uid] && e.uid !== AU.uid).sort((a, b) => b.t - a.t)[0];
 
     panel.hidden = false;
-    panel.innerHTML = `
+    const html = `
       <div class="trip-head">
         <h3>● ${esc(dname(uid))} <small>· ${stale ? 'Location stale' : 'Live journey'}</small></h3>
         <button type="button" class="trip-close" id="tripClose" aria-label="Dismiss journey card" title="Dismiss">×</button>
@@ -7926,6 +8052,9 @@ start = function () {
       </div>
       ${incomingVoice ? `<div class="trip-foot"><span>Voice from ${esc(dname(incomingVoice.uid))} · ${esc(ago(incomingVoice.t))}</span><button type="button" id="tripVoice">Play</button></div>` : ''}
     `;
+    if (html === shownHtml) return;
+    shownHtml = html;
+    panel.innerHTML = html;
 
     const closeBtn = panel.querySelector('#tripClose');
     if (closeBtn) {
@@ -7950,7 +8079,9 @@ start = function () {
     const origOnLive = onLive;
     onLive = function (path) {
       origOnLive.apply(this, arguments);
-      renderTrip();
+      // at peak several phones report every second; only the unit on this card needs a refresh
+      const uid = String(path || '').split('/').filter(Boolean)[0];
+      if ((!uid || uid === shownUid) && !tripTimer) tripTimer = setTimeout(() => { tripTimer = 0; renderTrip(); }, 300);
     };
   }
 
