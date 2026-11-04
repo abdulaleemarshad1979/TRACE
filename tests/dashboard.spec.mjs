@@ -1186,7 +1186,7 @@ const viewerFixture = now => ({
   '/events.json': {},
 });
 
-test('viewer refresh re-reads only live positions, so many viewers stay light', async ({ page }) => {
+test('viewer refresh re-reads only positions and latest events, so many viewers stay light', async ({ page }) => {
   const reads = [], data = viewerFixture(Date.now());
   await page.addInitScript(() => sessionStorage.setItem('rm_si_au', JSON.stringify({ rt: 'si-refresh', uid: 'si-1', email: 'si919876543210@members.track.invalid' })));
   await page.route('https://securetoken.googleapis.com/**', route => route.fulfill({ json: { id_token: 'si-token', expires_in: '3600', refresh_token: 'si-refresh', user_id: 'si-1' } }));
@@ -1198,10 +1198,10 @@ test('viewer refresh re-reads only live positions, so many viewers stay light', 
   await page.route('https://*.tile.openstreetmap.org/**', route => route.abort());
   await page.goto(siUrl);
   await expect(page.locator('#routes')).toContainText('HC Example');
-  expect(reads.filter(x => x.startsWith('/events.json')).every(x => x.includes('limitToLast=25'))).toBe(true);
+  expect(reads.filter(x => x.startsWith('/events.json')).every(x => x.includes('limitToLast=15'))).toBe(true);
   reads.length = 0;
   await page.evaluate(() => refresh());
-  expect(reads.map(x => x.split('?')[0]).sort()).toEqual(['/live/unit-1.json', '/live/unit-2.json']);
+  expect(reads.map(x => x.split('?')[0]).sort()).toEqual(['/events.json', '/events.json', '/live/unit-1.json', '/live/unit-2.json']);
 });
 
 test('standalone viewer full map shows only the map', async ({ page }) => {

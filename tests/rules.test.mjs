@@ -124,9 +124,9 @@ test('The viewer SOS check with a result limit stays within assigned routes', as
       });
     });
     const viewer = env.authenticatedContext('viewer').database();
-    const allowed = await assertSucceeds(get(query(ref(viewer, 'events'), orderByChild('uid'), equalTo('routeA'), limitToLast(25))));
+    const allowed = await assertSucceeds(get(query(ref(viewer, 'events'), orderByChild('uid'), equalTo('routeA'), limitToLast(15))));
     assert.deepEqual(Object.keys(allowed.val()).sort(), ['e1', 'e2']);
-    await assertFails(get(query(ref(viewer, 'events'), orderByChild('uid'), equalTo('routeB'), limitToLast(25))));
-    await assertFails(get(query(ref(viewer, 'events'), limitToLast(25))));
+    await assertFails(get(query(ref(viewer, 'events'), orderByChild('uid'), equalTo('routeB'), limitToLast(15))));
+    await assertFails(get(query(ref(viewer, 'events'), limitToLast(15))));
   } finally { await env.cleanup(); }
 });

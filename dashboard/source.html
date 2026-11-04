@@ -4750,7 +4750,7 @@ const devIds = () => perTask(`devIds|${UI.fSd}|${UI.fPs}|${UI.fForce}`, () => {
 
 /* ---------- start ---------- */
 let LOGIN_MODE = 'viewer', VIEWER_SCOPE = null, VIEWER_ROUTES = [], VIEWER_STATIONS = [], VIEWER_MAP = null, VIEWER_MARKERS = {}, VIEWER_BOOTH_LAYER = null, VIEWER_TIMER = null, VIEWER_RANK = '', VIEWER_SCOPE_KEY = '', VIEWER_SCOPE_AT = 0, VIEWER_BOOTH_KEY = '';
-const VIEWER_DETAIL = {}, VIEWER_SCOPE_MS = 5 * 60000, VIEWER_DEVICE_MS = 5 * 60000, VIEWER_SOS_MS = 30000;
+const VIEWER_DETAIL = {}, VIEWER_SCOPE_MS = 5 * 60000, VIEWER_DEVICE_MS = 5 * 60000;
 const VIEWER_RANKS = ['Incharge', 'Striking Force', 'Sub-Striking Force', 'DSP'];
 function setLoginMode(mode) {
   LOGIN_MODE = mode;
@@ -4801,15 +4801,15 @@ async function loadViewerScope() {
 async function refreshViewer() {
   const rows = await Promise.all(VIEWER_ROUTES.map(async route => {
     if (!route.memberUid) return { route, dev: {}, live: {}, sos: false };
-    const uid = route.memberUid, now = Date.now(), seen = VIEWER_DETAIL[uid] || (VIEWER_DETAIL[uid] = { devAt: 0, sosAt: 0, dev: {}, events: [] });
-    // the live position every refresh; officer details and SOS checks only as often as they are useful
-    const wantDev = now - seen.devAt >= VIEWER_DEVICE_MS, wantSos = now - seen.sosAt >= VIEWER_SOS_MS;
+    const uid = route.memberUid, now = Date.now(), seen = VIEWER_DETAIL[uid] || (VIEWER_DETAIL[uid] = { devAt: 0, dev: {}, events: [] });
+    // position and the phone's latest events every refresh, so SOS shows quickly; officer details change rarely
+    const wantDev = now - seen.devAt >= VIEWER_DEVICE_MS;
     const [d, l, e] = await Promise.allSettled([
       wantDev ? dbGet('devices/' + encodeURIComponent(uid)) : null, dbGet('live/' + encodeURIComponent(uid)),
-      wantSos ? dbGet('events', '&orderBy=%22uid%22&equalTo=' + encodeURIComponent(JSON.stringify(uid)) + '&limitToLast=25') : null
+      dbGet('events', '&orderBy=%22uid%22&equalTo=' + encodeURIComponent(JSON.stringify(uid)) + '&limitToLast=15')
     ]);
     if (wantDev && d.status === 'fulfilled') { seen.dev = d.value || {}; seen.devAt = now; }
-    if (wantSos && e.status === 'fulfilled') { seen.events = Object.values(e.value || {}); seen.sosAt = now; }
+    if (e.status === 'fulfilled') seen.events = Object.values(e.value || {});
     return { route, uid, dev: seen.dev, live: l.status === 'fulfilled' ? l.value || {} : {},
       sos: seen.events.some(x => x?.type === 'sos' && !x.ackBy && !x.cleared && Date.now() - (+x.t || 0) < 21600000),
       error: d.status === 'rejected' || l.status === 'rejected' || e.status === 'rejected' };
