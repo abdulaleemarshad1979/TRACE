@@ -5932,6 +5932,7 @@ async function changeAllPasswordsModal() {
       <label class="f">Select PS<select data-ps-select><option value="">All logins (including viewers)</option><option value="${PW_ALL_ROUTES}">All route officers (all PS)</option>${stations.map(ps => `<option value="${esc(ps)}">${esc(ps)}</option>`).join('')}</select></label>
       <p class="note" data-scope-count role="status"></p>
     </div>
+    <p class="note pw-reset-note"><b>Already reset by an administrator?</b> Officers can sign in with the issued password now. This form changes it again; enter that issued password as the current password only if you want another change.</p>
     <div class="pw-fill">
       <label class="f">Current password <span class="u">(if everyone has the same one)</span><input type="password" data-fill-current autocomplete="off"></label>
       <label class="f">New password <span class="u">(the same for everyone)</span><input type="text" data-fill-new autocomplete="off" placeholder="At least 8 characters"></label>

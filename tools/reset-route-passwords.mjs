@@ -48,6 +48,12 @@ function newPassword() {
   const random = crypto.randomBytes(20);
   return Array.from(random, byte => alphabet[byte % alphabet.length]).join('');
 }
+function plannedPassword() {
+  if (!process.argv.includes('--password-stdin')) return newPassword();
+  const password = fs.readFileSync(0, 'utf8').replace(/\r?\n$/, '');
+  if (!/^[\x20-\x7e]{8,128}$/.test(password)) fail('The supplied password must be 8-128 printable characters.');
+  return password;
+}
 function stationCounts(people) {
   const counts = new Map();
   people.forEach(person => counts.set(person.ps, (counts.get(person.ps) || 0) + 1));
@@ -108,7 +114,7 @@ async function main() {
   if (command === 'plan') {
     const plan = {
       schema: 1, projectId, createdAt: new Date().toISOString(), officerCount: people.length,
-      stationCount: stations.length, stations, rosterDigest: digest(people), password: newPassword()
+      stationCount: stations.length, stations, rosterDigest: digest(people), password: plannedPassword()
     };
     writePrivate(planPath, plan);
     console.log(`Verified ${people.length} route officer logins across ${stations.length} PS. No passwords changed.`);
@@ -119,7 +125,7 @@ async function main() {
   if (plan.schema !== 1 || plan.projectId !== projectId || plan.rosterDigest !== digest(people) || plan.officerCount !== people.length) fail('The plan does not match the current live route assignments. Create a new plan.');
   if (process.argv.includes('--confirm-project') && option('--confirm-project') !== projectId) fail('Project confirmation does not match.');
   if (!process.argv.includes('--confirm-project') || Number(option('--confirm-count', -1)) !== people.length) fail(`Apply requires --confirm-project ${projectId} --confirm-count ${people.length}.`);
-  if (!/^[A-Za-z0-9]{20}$/.test(plan.password)) fail('The plan password is invalid.');
+  if (!/^[\x20-\x7e]{8,128}$/.test(plan.password)) fail('The plan password is invalid.');
   const resultPath = planPath.replace(/\.json$/, '') + '-result.json';
   let result = fs.existsSync(resultPath) ? readPrivate(resultPath) : { projectId, rosterDigest: plan.rosterDigest, changed: [], failed: [] };
   if (result.projectId !== projectId || result.rosterDigest !== plan.rosterDigest) fail('Existing result file belongs to a different reset plan.');

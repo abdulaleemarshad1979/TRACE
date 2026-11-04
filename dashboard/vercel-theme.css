@@ -207,6 +207,7 @@ body.wall .ps-turnout b{color:#5aa2ff}
 .member-modal.pw-modal .card{width:min(1080px,100%);max-width:none}
 .pw-scope{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 14px;margin-top:12px}
 .pw-scope .note{grid-column:1/-1;margin:4px 0 0}
+.pw-reset-note{margin:8px 0 12px;padding:10px 12px;border:1px solid #d7dee9;border-radius:8px;background:#f5f8fc}
 .pw-fill{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 14px}
 .pw-fill .row{grid-column:1/-1;flex-wrap:wrap;margin-top:10px}
 .pw-table input[type=password],.pw-table input[type=text]{width:100%;min-width:120px;box-sizing:border-box}
