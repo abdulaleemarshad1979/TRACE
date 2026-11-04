@@ -6147,7 +6147,7 @@ async function changeAllPasswordsModal() {
   const modal = document.createElement('div'); modal.className = 'modal member-modal pw-modal';
   modal.setAttribute('role', 'dialog'); modal.setAttribute('aria-modal', 'true'); modal.setAttribute('aria-labelledby', 'pwTitle');
   modal.innerHTML = `<form class="card" novalidate><h2 id="pwTitle">Change all passwords</h2>
-    <p class="note">Each person's old password stops working at once and only the new one is kept. Firebase needs each person's current password to do this. If you no longer have someone's current password, that person cannot be changed here.</p>
+    <p class="note">Each person's old password stops working at once and only the new one is kept. This page needs each person's current password. If those passwords are unknown, ask the Firebase project administrator to run the secure route officer reset; this page cannot reset them.</p>
     <div class="banner warn"><b>Tell the officers first.</b> A phone signed in with the old password stops sending its location within about an hour, until the officer signs out of the app and signs in with the new password. <b data-duty-count>${onDuty ? `${onDuty} phone${onDuty === 1 ? ' is' : 's are'} on duty now.` : ''}</b></div>
     <div class="pw-scope">
       <label class="f">Search PS<input type="search" data-ps-search autocomplete="off" placeholder="Type a police station name"></label>
