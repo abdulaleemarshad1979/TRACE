@@ -65,7 +65,9 @@ fs.copyFileSync(path.join(root, 'dashboard/assets/ballot.png'), path.join(root, 
 const leafletScript = /<script>(\/\* @preserve[\s\S]*?Leaflet 1\.9\.4[\s\S]*?)<\/script>/.exec(html)?.[1];
 if (!leafletScript) throw new Error('Leaflet bundle for SI monitor was not found');
 const siTemplate = fs.readFileSync(path.join(root, 'dashboard/si-monitor.template.html'), 'utf8');
-const siHtml = siTemplate.replace('__LEAFLET__', leafletScript).replace('__CONFIG__', JSON.stringify(runtimeConfig));
+const moveScript = /\/\* ===== Smooth vehicle movement[\s\S]*?\/\* ===== end of smooth vehicle movement ===== \*\//.exec(html)?.[0];
+if (!moveScript) throw new Error('Smooth movement code for SI monitor was not found');
+const siHtml = siTemplate.replace('__LEAFLET__', leafletScript).replace('__MOVE__', () => moveScript).replace('__CONFIG__', JSON.stringify(runtimeConfig));
 fs.writeFileSync(path.join(root, 'dashboard/si-monitor.html'), siHtml);
 fs.writeFileSync(path.join(root, 'dist/si-monitor.html'), siHtml);
 console.log(`Built dashboard/TRACK.html & dist/index.html (${Buffer.byteLength(html)} bytes) for East Godavari District Police`);

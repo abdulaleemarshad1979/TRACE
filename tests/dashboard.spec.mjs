@@ -1136,6 +1136,126 @@ test('Full map fills a phone screen and keeps showing live positions', async ({ 
   await expect.poll(() => page.evaluate(() => MK.unit1.getLatLng().lat), { timeout: 3000 }).toBeCloseTo(16.981, 5);
 });
 
+/* The next report from unit1, as the live stream would deliver it. */
+const report = (page, fields) => page.evaluate(fields => {
+  const now = Date.now();
+  Object.assign(LIVE.unit1, { t: now, up: now, gps: true, duty: true, acc: 12 }, fields);
+  onLive('/unit1'); schedule();
+}, fields);
+/* These tests deliver the reports themselves, so stop the fixture's fixed positions being read back over them. */
+const stopReadingLive = page => page.evaluate(() => { const s = STREAMS.find(x => x.path === 'live'); clearInterval(s.timer); clearTimeout(s.retry); });
+const openMapOnUnit1 = async page => {
+  await openControlRoom(page);
+  await stopReadingLive(page);
+  await page.getByRole('button', { name: 'Open full map' }).click();
+  await page.evaluate(() => { MAP.setView([16.98, 82.24], 16, { animate: false }); });
+  await expect(page.locator('#map .vm').first()).toBeVisible();
+};
+/* Every position the marker is drawn at for a while, frame by frame. */
+const watchMarker = (page, ms) => page.evaluate(ms => new Promise(done => {
+  const seen = [], t0 = performance.now();
+  const frame = now => { const p = MK.unit1.getLatLng(); seen.push([now, p.lat, p.lng]); if (now - t0 < ms) requestAnimationFrame(frame); else done(seen); };
+  requestAnimationFrame(frame);
+}), ms);
+const metres = (a, b) => Math.hypot((a[1] - b[1]) * 111320, (a[2] - b[2]) * 111320 * Math.cos(a[1] * Math.PI / 180));
+
+test("a moving phone's marker keeps travelling between reports and eases onto the next one", async ({ page }) => {
+  await openMapOnUnit1(page);
+  // Heading east at 36 km/h, which is 10 metres a second.
+  await report(page, { lat: 16.981, lng: 82.24, spd: 36, hdg: 90 });
+  const path = await watchMarker(page, 6000);
+  const last = path[path.length - 1];
+  expect(last[1]).toBeCloseTo(16.981, 5);
+  const east = (last[2] - 82.24) * 111320 * Math.cos(16.981 * Math.PI / 180);
+  expect(east).toBeGreaterThan(40);
+  expect(east).toBeLessThan(62);
+  // Never stands still and then jumps: always eastward, and no faster than a quick catch-up.
+  for (let i = 1; i < path.length; i++) {
+    expect(path[i][2]).toBeGreaterThanOrEqual(path[i - 1][2]);
+    if (path[i][0] > path[i - 1][0]) expect(metres(path[i], path[i - 1]) / ((path[i][0] - path[i - 1][0]) / 1000)).toBeLessThan(80);
+  }
+  // Once on course, it moves at about the phone's real speed.
+  const tail = path.filter(p => p[0] > last[0] - 2000);
+  const speed = metres(last, tail[0]) / ((last[0] - tail[0][0]) / 1000);
+  expect(speed).toBeGreaterThan(7);
+  expect(speed).toBeLessThan(11);
+
+  // The next report is a little ahead of the estimate, so the marker carries on forward onto it.
+  await report(page, { lat: 16.981, lng: last[2] + 0.0002, spd: 36, hdg: 90 });
+  const next = await watchMarker(page, 1500);
+  for (let i = 1; i < next.length; i++) expect(next[i][2]).toBeGreaterThanOrEqual(next[i - 1][2]);
+});
+
+for (const [name, fields, sos] of [
+  ['parked', { spd: 0, hdg: 90 }],
+  ['with no direction', { spd: 36, hdg: 0 }],
+  ['with poor GPS accuracy', { spd: 36, hdg: 90, acc: 200 }],
+  ['with GPS off', { spd: 36, hdg: 90, gps: false }],
+  ['in SOS', { spd: 36, hdg: 90 }, true],
+]) test(`a phone ${name} shows exactly its reported position, with no estimate`, async ({ page }) => {
+  await openMapOnUnit1(page);
+  if (sos) await page.evaluate(() => { EVT.sos1 = { type: 'sos', uid: 'unit1', t: Date.now(), lat: 16.98, lng: 82.24 }; });
+  await report(page, { lat: 16.981, lng: 82.24, ...fields });
+  await expect.poll(() => page.evaluate(() => MK.unit1.getLatLng().lat), { timeout: 3000 }).toBeCloseTo(16.981, 5);
+  await page.waitForTimeout(1500);
+  expect(await page.evaluate(() => { const p = MK.unit1.getLatLng(); return [p.lat, p.lng]; })).toEqual([16.981, 82.24]);
+});
+
+for (const [name, reportAge, sets] of [['recent report sets off straight away', 0, true], ['old report stays where it is', 60000, false]]) test(`a marker first drawn from a ${name}`, async ({ page }) => {
+  await openMapOnUnit1(page);
+  await page.evaluate(reportAge => {
+    const t = Date.now() - reportAge;
+    LAYER_V.removeLayer(MK.unit1); delete MK.unit1;
+    Object.assign(LIVE.unit1, { lat: 16.98, lng: 82.24, t, up: t, gps: true, duty: true, acc: 12, spd: 36, hdg: 90 });
+    render(); render();
+  }, reportAge);
+  await page.waitForTimeout(1500);
+  const lng = await page.evaluate(() => MK.unit1.getLatLng().lng);
+  if (sets) expect(lng).toBeGreaterThan(82.24004);
+  else expect(lng).toBe(82.24);
+});
+
+test('a phone that goes quiet returns to its last reported position', async ({ page }) => {
+  await page.clock.install();
+  await openMapOnUnit1(page);
+  await report(page, { lat: 16.981, lng: 82.24, spd: 36, hdg: 90 });
+  await expect.poll(() => page.evaluate(() => MK.unit1.getLatLng().lng)).toBeGreaterThan(82.2401);
+  await page.clock.fastForward(36000);
+  await expect.poll(() => page.evaluate(() => { const p = MK.unit1.getLatLng(); return [p.lat, p.lng]; }), { timeout: 8000 }).toEqual([16.981, 82.24]);
+  expect(await page.evaluate(() => Object.keys(GL))).toEqual([]);
+});
+
+test('190 moving phones can all glide without tying up the browser', async ({ page }) => {
+  await openControlRoom(page);
+  await stopReadingLive(page);
+  const result = await page.evaluate(async () => {
+    const now = Date.now();
+    for (let i = 0; i < 190; i++) {
+      const u = 'load' + i;
+      DEV[u] = { ps: 'PS ' + (i % 29), route: 'Route ' + i, sd: 'SD ' + (i % 4), officer: 'Officer', mobile: '1', force: 'route' };
+      LIVE[u] = { lat: 17 + (i % 14) * 0.01, lng: 81.8 + Math.floor(i / 14) * 0.01, t: now - 30000, up: now - 30000, gps: true, bat: 80, sig: 4, spd: 40, hdg: 45, acc: 12 };
+    }
+    MAP.setView([17.06, 81.86], 13, { animate: false });
+    render();
+    for (let i = 0; i < 190; i++) { const L_ = LIVE['load' + i]; L_.t = L_.up = Date.now(); L_.lat += 0.002; }
+    render();
+    const moving = Object.keys(GL).length;
+    let busy = 0, frames = 0;
+    const original = glideFrame;
+    glideFrame = function (time) { const started = performance.now(); original(time); busy += performance.now() - started; frames++; };
+    const before = MK.load0.getLatLng().lng, started = performance.now();
+    await new Promise(done => setTimeout(done, 4000));
+    const share = busy / (performance.now() - started);
+    glideFrame = original;
+    return { moving, frames, share, moved: MK.load0.getLatLng().lng > before };
+  });
+  expect(result.moving).toBe(190);
+  expect(result.moved).toBe(true);
+  expect(result.frames).toBeGreaterThanOrEqual(10);
+  // Limit allows for slower test machines.
+  expect(result.share).toBeLessThan(0.5);
+});
+
 test('redraws stay quick and few while 190 phones report', async ({ page }) => {
   await openControlRoom(page);
   const result = await page.evaluate(async () => {
@@ -1170,6 +1290,104 @@ test('a computer left on slow polling by an older version goes back to live stre
   const state = await page.evaluate(() => [localStorage.getItem('rm_poll'), pollForced(), pollUntil() > Date.now()]);
   expect(state).toEqual([null, false, true]);
   await expect.poll(() => page.evaluate(() => pollUntil() > Date.now()), { timeout: 3000 }).toBe(false);
+});
+
+/* Streams the test controls, so one can go quiet with no error at all, as a frozen connection does. */
+async function streamingControlRoom(page) {
+  const reads = [];
+  await page.clock.install();
+  await page.addInitScript(() => {
+    localStorage.setItem('rm_cfg', JSON.stringify({ k: 'test-key', d: 'https://trace-demo.firebaseio.test', p: 'trace-demo' }));
+    localStorage.setItem('rm_au', JSON.stringify({ rt: 'test-refresh', uid: 'admin-1', email: 'admin@example.test' }));
+    window.OPENED = [];
+    window.EventSource = class {
+      constructor(address) { this.branch = new URL(address).pathname.slice(1, -5); this.readyState = 1; this.on = {}; OPENED.push(this); setTimeout(() => this.onopen?.()); }
+      addEventListener(name, listener) { this.on[name] = listener; }
+      emit(name, data) { if (this.readyState === 1) this.on[name]?.({ data: JSON.stringify(data) }); }
+      close() { this.readyState = 2; }
+    };
+    window.openCount = branch => OPENED.filter(s => s.branch === branch).length;
+    window.putTo = (branch, data) => OPENED.filter(s => s.branch === branch).forEach(s => s.emit('put', { path: '/', data }));
+  });
+  await page.route('https://securetoken.googleapis.com/**', route => route.fulfill({ json: { id_token: 'test-id', expires_in: '3600', refresh_token: 'test-refresh', user_id: 'admin-1' } }));
+  await page.route('https://trace-demo.firebaseio.test/**', route => {
+    const pathname = new URL(route.request().url()).pathname;
+    reads.push(pathname);
+    route.fulfill({ json: pathname === '/roles/admin-1.json' ? 'admin' : {} });
+  });
+  await page.route(/arcgisonline|openstreetmap/, route => route.abort());
+  await page.goto(url);
+  await expect(page.locator('#app')).toBeVisible();
+  await expect.poll(() => page.evaluate(() => openCount('live'))).toBe(1);
+  await expect(page.locator('#conn')).toHaveText('Live');
+  return reads;
+}
+
+test('a frozen stream reconnects by itself and nothing on screen shows it happening', async ({ page }) => {
+  const reads = await streamingControlRoom(page);
+  await page.evaluate(() => {
+    putTo('config', { routes: { r1: { ps: 'Central', route: 'Route 1', sd: 'North', force: 'route' } }, stations: {}, settings: { election: '', autoSos: false } });
+    putTo('devices', { unit1: { ps: 'Central', route: 'Route 1', sd: 'North', officer: 'Officer A', mobile: '1000000000', force: 'route' } });
+    putTo('live', { unit1: { lat: 16.98, lng: 82.24, t: Date.now(), up: Date.now(), gps: true, bat: 81, sig: 4, spd: 28, acc: 12 } });
+  });
+  await page.getByRole('button', { name: 'Open full map' }).click();
+  await page.evaluate(() => { MAP.setView([16.98, 82.24], 15, { animate: false }); });
+  await expect.poll(() => page.evaluate(() => MK.unit1?.getLatLng().lat)).toBeCloseTo(16.98, 5);
+  await page.evaluate(() => {
+    window.NOT_RELOADED = true; window.CONN_SEEN = new Set(); window.TOASTS = 0;
+    new MutationObserver(() => CONN_SEEN.add($('#conn').textContent)).observe($('#conn'), { childList: true, characterData: true, subtree: true });
+    new MutationObserver(list => list.forEach(x => x.addedNodes.forEach(n => { if (n.classList?.contains('toast')) TOASTS++; }))).observe(document.body, { childList: true });
+  });
+
+  await page.clock.fastForward(46000);
+  await expect.poll(() => page.evaluate(() => openCount('live'))).toBe(2);
+  await page.evaluate(() => putTo('live', { unit1: { lat: 16.99, lng: 82.24, t: Date.now(), up: Date.now(), gps: true, bat: 81, sig: 4, spd: 28, acc: 12 } }));
+  await expect.poll(() => page.evaluate(() => MK.unit1.getLatLng().lat), { timeout: 3000 }).toBeCloseTo(16.99, 5);
+
+  const seen = await page.evaluate(() => ({ reloaded: !window.NOT_RELOADED, labels: [...CONN_SEEN], toasts: TOASTS, firstClosed: OPENED.find(s => s.branch === 'live').readyState === 2, stillFullMap: document.body.classList.contains('map-full') }));
+  expect(seen).toEqual({ reloaded: false, labels: ['Live'], toasts: 0, firstClosed: true, stillFullMap: true });
+  expect(reads).not.toContain('/live.json');
+});
+
+test('a healthy stream is left alone and costs no extra reads', async ({ page }) => {
+  const reads = await streamingControlRoom(page);
+  const opened = await page.evaluate(() => OPENED.length);
+  for (let i = 0; i < 6; i++) {
+    await page.clock.fastForward(30000);
+    await page.evaluate(() => OPENED.forEach(s => s.branch === 'live' ? s.emit('patch', { path: '/', data: {} }) : s.emit('keep-alive', null)));
+  }
+  expect(await page.evaluate(() => OPENED.length)).toBe(opened);
+  expect(reads).not.toContain('/live.json');
+});
+
+test('only the stream that went silent is reopened, so a frozen SOS feed is caught too', async ({ page }) => {
+  await streamingControlRoom(page);
+  for (let i = 0; i < 2; i++) {
+    await page.clock.fastForward(30000);
+    await page.evaluate(() => OPENED.forEach(s => { if (s.branch !== 'events') s.emit('keep-alive', null); }));
+  }
+  await expect.poll(() => page.evaluate(() => openCount('events'))).toBe(2);
+  expect(await page.evaluate(() => openCount('live'))).toBe(1);
+});
+
+test('a network where reopening achieves nothing falls back to reading at intervals', async ({ page }) => {
+  const reads = await streamingControlRoom(page);
+  for (let opened = 2; opened <= 4; opened++) {
+    await page.clock.fastForward(46000);
+    await expect.poll(() => page.evaluate(() => openCount('live'))).toBe(opened);
+  }
+  expect(reads).not.toContain('/live.json');
+  await page.clock.fastForward(46000);
+  await expect.poll(() => page.evaluate(() => STREAMS.find(s => s.path === 'live').mode)).toBe('poll');
+  await expect.poll(() => reads.includes('/live.json')).toBe(true);
+  await expect(page.locator('#conn')).toHaveText('Live · auto-refresh');
+});
+
+test('coming back to the page after the computer slept reconnects at once', async ({ page }) => {
+  await streamingControlRoom(page);
+  await page.clock.setSystemTime(await page.evaluate(() => Date.now()) + 50000);
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  await expect.poll(() => page.evaluate(() => openCount('live'))).toBe(2);
 });
 
 const viewerFixture = now => ({
@@ -1234,5 +1452,47 @@ test('viewer portal on the main site has a full map too', async ({ page }) => {
   await page.keyboard.press('Escape');
   await expect(page.locator('#viewerFullMap')).toHaveText(/Full map/);
   await expect.poll(async () => (await page.locator('#viewerMap').boundingBox()).width).toBeLessThan(1440);
+});
+
+for (const [name, address, table, seed] of [
+  ['standalone viewer', siUrl, '#routes', () => sessionStorage.setItem('rm_si_au', JSON.stringify({ rt: 'si-refresh', uid: 'si-1', email: 'si919876543210@members.track.invalid' }))],
+  ['viewer portal', url, '#viewerRoutes', () => localStorage.setItem('rm_au', JSON.stringify({ rt: 'si-refresh', uid: 'si-1', email: 'si919876543210@members.track.invalid' }))],
+]) test(`${name} catches up as soon as someone comes back to its tab`, async ({ page }) => {
+  const reads = [], data = viewerFixture(Date.now());
+  await page.addInitScript(seed);
+  await page.route('https://securetoken.googleapis.com/**', route => route.fulfill({ json: { id_token: 'si-token', expires_in: '3600', refresh_token: 'si-refresh', user_id: 'si-1' } }));
+  await page.route('https://officer-8eb52-default-rtdb.asia-southeast1.firebasedatabase.app/**', route => {
+    const pathname = new URL(route.request().url()).pathname;
+    reads.push(pathname);
+    route.fulfill({ json: data[pathname] ?? null });
+  });
+  await page.route('https://*.tile.openstreetmap.org/**', route => route.abort());
+  await page.goto(address);
+  await expect(page.locator(table)).toContainText('HC Example');
+  reads.length = 0;
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  // The regular read is at least 10 seconds away, so a read this soon can only be the catch-up.
+  await expect.poll(() => reads.includes('/live/unit-1.json'), { timeout: 3000 }).toBe(true);
+});
+
+for (const [name, address, table, seed, refreshNow, marker] of [
+  ['standalone viewer', siUrl, '#routes', () => sessionStorage.setItem('rm_si_au', JSON.stringify({ rt: 'si-refresh', uid: 'si-1', email: 'si919876543210@members.track.invalid' })), () => refresh(), () => { const p = markers['unit-1'].getLatLng(); return [p.lat, p.lng]; }],
+  ['viewer portal', url, '#viewerRoutes', () => localStorage.setItem('rm_au', JSON.stringify({ rt: 'si-refresh', uid: 'si-1', email: 'si919876543210@members.track.invalid' })), () => refreshViewer(), () => { const p = VIEWER_MARKERS['unit-1'].getLatLng(); return [p.lat, p.lng]; }],
+]) test(`${name} map moves smoothly instead of jumping`, async ({ page }) => {
+  const data = viewerFixture(Date.now());
+  await page.addInitScript(seed);
+  await page.route('https://securetoken.googleapis.com/**', route => route.fulfill({ json: { id_token: 'si-token', expires_in: '3600', refresh_token: 'si-refresh', user_id: 'si-1' } }));
+  await page.route('https://officer-8eb52-default-rtdb.asia-southeast1.firebasedatabase.app/**', route => route.fulfill({ json: data[new URL(route.request().url()).pathname] ?? null }));
+  await page.route('https://*.tile.openstreetmap.org/**', route => route.abort());
+  await page.goto(address);
+  await expect(page.locator(table)).toContainText('HC Example');
+  expect(await page.evaluate(marker)).toEqual([16.95, 81.9]);
+  // A new report about 110 metres north, still heading east at 36 km/h.
+  const now = Date.now();
+  data['/live/unit-1.json'] = { lat: 16.951, lng: 81.9, up: now, t: now, gps: true, duty: true, acc: 10, spd: 36, hdg: 90 };
+  await page.evaluate(refreshNow);
+  expect((await page.evaluate(marker))[0]).toBeLessThan(16.9505);
+  await expect.poll(async () => (await page.evaluate(marker))[0], { timeout: 5000 }).toBeCloseTo(16.951, 5);
+  await expect.poll(async () => (await page.evaluate(marker))[1], { timeout: 5000 }).toBeGreaterThan(81.9002);
 });
 

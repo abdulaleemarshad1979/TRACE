@@ -4719,14 +4719,19 @@ function setAt(root, path, data, patch) {
 const STREAMS = [];
 let CONN_OK = true;
 const POLL_RETRY_MS = 30 * 60000;
-const pollForced = () => { try { return localStorage.getItem('rm_poll_force') === '1'; } catch (e) { return false; } };
+/* A stream can freeze without reporting an error (computer asleep, Wi-Fi change), leaving markers stuck while the header still says Live.
+   Firebase sends a keep-alive every 30 seconds even when nothing changes, so each stream is checked every 15 seconds and one silent for 45 seconds is reopened.
+   A healthy stream costs no extra reads this way; re-reading every position each 15 seconds would use about 9 MB an hour for each open page. */
+const STREAM_CHECK_MS = 15000, STREAM_SILENT_MS = 45000, STREAM_REOPENS = 3;
+const pollForced =() => { try { return localStorage.getItem('rm_poll_force') === '1'; } catch (e) { return false; } };
 try { localStorage.removeItem('rm_poll'); } catch (e) { }   // earlier versions stayed on slower polling for good after any network blip
 const pollUntil = () => { try { return +localStorage.getItem('rm_poll_until') || 0; } catch (e) { return 0; } };
 /* Live updates by streaming; if streaming fails on this network, falls back to reading every 10 seconds. */
 function stream(path, query, target, onChange, opt) {
   opt = opt || {};
-  const s = { path, query: query || '', every: opt.every || 15000, inc: opt.inc, last: 0, lastOk: 0, es: null, ok: false, mode: pollForced() || pollUntil() > Date.now() ? 'poll' : 'stream', fails: 0, opened: false, err: '', timer: null, retry: null };
+  const s = { path, query: query || '', every: opt.every || 15000, inc: opt.inc, last: 0, lastOk: 0, es: null, ok: false, mode: pollForced() || pollUntil() > Date.now() ? 'poll' : 'stream', fails: 0, opened: false, err: '', timer: null, retry: null, heard: 0, reopens: 0 };
   const apply = (p, d, patch) => { setAt(target, p, d, patch); onChange(p); };
+  const alive = () => { s.heard = Date.now(); s.reopens = 0; };
   s.poll = async () => {
     try {
       if (s.inc && s.last) {
@@ -4752,11 +4757,14 @@ function stream(path, query, target, onChange, opt) {
   };
   s.open = async () => {
     if (s.mode === 'poll') { s.startPoll(); return; }
+    s.heard = Date.now();
     let t; try { t = await token(); } catch (e) { if (e.auth) { signOut(); return; } s.err = e.message; s.ok = false; setConn(); setTimeout(s.open, 15000); return; }
+    if (s.es) s.es.close();
     s.es = new EventSource(`${CFG.d}/${path}.json?auth=${t}${s.query}`);
-    const h = patch => ev => { try { const m = JSON.parse(ev.data); apply(m.path, m.data, patch); s.ok = true; s.opened = true; s.fails = 0; s.err = ''; setConn(); } catch (e) { } };
+    const h = patch => ev => { try { const m = JSON.parse(ev.data); alive(); apply(m.path, m.data, patch); s.ok = true; s.opened = true; s.fails = 0; s.err = ''; setConn(); } catch (e) { } };
     s.es.addEventListener('put', h(false));
     s.es.addEventListener('patch', h(true));
+    s.es.addEventListener('keep-alive', alive);
     s.es.addEventListener('auth_revoked', () => { s.es.close(); ID_TOKEN = null; s.open(); });
     s.es.addEventListener('cancel', () => { s.es.close(); s.ok = false; s.err = 'Permission denied'; setConn(); showError(`Permission denied for "${path}". Check the database rules (Setup tab) and that you signed in with an email listed there.`); });
     s.es.onopen = () => { s.ok = true; s.opened = true; s.lastOk = Date.now(); setConn(); };
@@ -4768,6 +4776,12 @@ function stream(path, query, target, onChange, opt) {
     };
   };
   s.restart = () => { if (s.mode === 'poll') { s.poll(); return; } if (s.es) s.es.close(); s.open(); };
+  // the header stays as it is while reopening; if reopening keeps achieving nothing, this network needs reading at intervals
+  s.check = () => {
+    if (s.mode !== 'stream' || !navigator.onLine || Date.now() - s.heard < STREAM_SILENT_MS) return;
+    if (++s.reopens > STREAM_REOPENS) { s.err = 'Streaming not stable on this network; reading at intervals'; s.startPoll(); return; }
+    s.restart();
+  };
   STREAMS.push(s); setConn(); s.open();
   return s;
 }
@@ -4796,6 +4810,9 @@ async function diagnose() {
 }
 /* renew the token before it expires and reopen the streams with it */
 setInterval(async () => { if (!AU || !STREAMS.length) return; if (ID_EXP - Date.now() < 10 * 60000) { ID_TOKEN = null; try { await token(); STREAMS.forEach(s => s.restart()); } catch (e) { if (e.auth) signOut(); } } }, 60000);
+const checkStreams = () => { if (AU) STREAMS.forEach(s => s.check()); };
+setInterval(checkStreams, STREAM_CHECK_MS);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) checkStreams(); });
 window.addEventListener('online', () => STREAMS.forEach(s => s.restart()));
 window.addEventListener('offline', setConn);
 
@@ -5021,10 +5038,11 @@ async function refreshViewer() {
     if (!x.uid || !viewerHasLocation(x.live)) continue;
     seen.add(x.uid); const ll = [+x.live.lat, +x.live.lng]; points.push(ll);
     const s = viewerStatus(x.live, x.sos);
-    if (!VIEWER_MARKERS[x.uid]) VIEWER_MARKERS[x.uid] = L.circleMarker(ll, { radius: 9, color: x.sos ? '#b02424' : '#1f5fa8', fillOpacity: .8 }).addTo(VIEWER_MAP);
-    VIEWER_MARKERS[x.uid].setLatLng(ll).setStyle({ color: x.sos ? '#b02424' : '#1f5fa8' }).bindPopup(`<b>${esc(x.route.ps || '')} · ${esc(x.route.route || '')}</b><br>${esc(x.dev.officer || x.route.officer || 'Assigned member')} · ${esc(s.label)}<br>${Number.isFinite(+x.live.spd) ? `${Math.round(+x.live.spd)} km/h<br>` : ''}Last update: ${esc(viewerTime(x.live.up))}`);
+    if (!VIEWER_MARKERS[x.uid]) { VIEWER_MARKERS[x.uid] = L.circleMarker(ll, { radius: 9, color: x.sos ? '#b02424' : '#1f5fa8', fillOpacity: .8 }).addTo(VIEWER_MAP); glideSeen(VIEWER_MARKERS[x.uid], x.live); }
+    glideMarker(x.uid, VIEWER_MARKERS[x.uid], x.live, x.sos);
+    VIEWER_MARKERS[x.uid].setStyle({ color: x.sos ? '#b02424' : '#1f5fa8' }).bindPopup(`<b>${esc(x.route.ps || '')} · ${esc(x.route.route || '')}</b><br>${esc(x.dev.officer || x.route.officer || 'Assigned member')} · ${esc(s.label)}<br>${Number.isFinite(+x.live.spd) ? `${Math.round(+x.live.spd)} km/h<br>` : ''}Last update: ${esc(viewerTime(x.live.up))}`);
   }
-  for (const [uid, marker] of Object.entries(VIEWER_MARKERS)) if (!seen.has(uid)) { VIEWER_MAP.removeLayer(marker); delete VIEWER_MARKERS[uid]; }
+  for (const [uid, marker] of Object.entries(VIEWER_MARKERS)) if (!seen.has(uid)) { VIEWER_MAP.removeLayer(marker); delete VIEWER_MARKERS[uid]; stopGlide(uid); }
   if ((boothPoints.length || points.length) && (!VIEWER_MAP._trackFitted || points.some(point => !VIEWER_MAP.getBounds().contains(point)))) { VIEWER_MAP.fitBounds([...boothPoints, ...points], { padding: [35, 35], maxZoom: 14, animate: false }); VIEWER_MAP._trackFitted = true; }
   const waiting = rows.filter(x => x.uid && x.live?.up && Date.now() - x.live.up <= 300000 && !viewerHasLocation(x.live)).length;
   $('#viewerMapNote').textContent = `${boothPoints.length} polling booths · ${points.length} phone location${points.length === 1 ? '' : 's'}${waiting ? ` · ${waiting} phone${waiting === 1 ? '' : 's'} waiting for GPS fix` : ''}`;
@@ -5045,12 +5063,17 @@ async function startViewer() {
   await refreshViewer();
   clearTimeout(VIEWER_TIMER);
   const nextWait = () => (document.hidden ? 60000 : 10000) + Math.floor(Math.random() * 2000);
+  let reading = false;
   const tick = async () => {
+    reading = true;
     try { if (Date.now() - VIEWER_SCOPE_AT >= VIEWER_SCOPE_MS) await loadViewerScope(); await refreshViewer(); }
     catch (error) { if (/No mandal routes|Permission denied|Sign in again/i.test(error.message)) { signOut(); return; } $('#viewerUpdated').textContent = 'Refresh failed: ' + error.message; }
+    reading = false;
     if (AU) VIEWER_TIMER = setTimeout(tick, nextWait());
   };
   VIEWER_TIMER = setTimeout(tick, nextWait());
+  // a tab in the background reads only once a minute, so catch up as soon as someone comes back to it
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && !reading && AU) { clearTimeout(VIEWER_TIMER); tick(); } });
 }
 function boot() {
   if (!CFG) { $('#login').hidden = false; $('#projForm').hidden = false; return; }
@@ -5323,7 +5346,7 @@ function renderMap() {
     keep.add(u);
     const st = status(u), sos = sosOpen(u), hd = typeof heading === 'function' ? heading(u) : null;
     const force = forceOf(u); const ring = sos ? '' : st.k === 'stop' ? '#e0a800' : st.k === 'nosig' ? '#c0392b' : (st.k === 'gpsoff' || st.k === 'weak') ? '#7f8c8d' : ''; const html = `<div class="vm ${sos ? 'sos' : ''}"><div class="pin car" style="background:${sos ? C.sos : fcol(force)}${ring ? `;box-shadow:0 0 0 2px #fff,0 0 0 4px ${ring}` : ''}">${hd != null && st.k === 'move' ? `<svg viewBox="0 0 24 24" style="transform:rotate(${Math.round(hd)}deg)"><path d="M12 3l6 16-6-4-6 4z" fill="#fff"/></svg>` : '<i></i>'}</div><div class="lab">${esc(dshort(u))}</div></div>`;
-    if (!MK[u]) { MK[u] = L.marker([Lv.lat, Lv.lng], { icon: L.divIcon({ html, className: '', iconSize: [22, 22], iconAnchor: [11, 11] }) }).addTo(LAYER_V); MK[u].bindTooltip(() => unitTip(u), { direction: 'right', offset: [14, 0], className: 'vtip' }); MK[u].on('click', () => selectDev(u)); MK[u].on('mouseover', () => hoverUnit(u, true)); MK[u].on('mouseout', () => hoverUnit(u, false)); MK[u]._h = html; MK[u]._t = Lv.t; }
+    if (!MK[u]) { MK[u] = L.marker([Lv.lat, Lv.lng], { icon: L.divIcon({ html, className: '', iconSize: [22, 22], iconAnchor: [11, 11] }) }).addTo(LAYER_V); MK[u].bindTooltip(() => unitTip(u), { direction: 'right', offset: [14, 0], className: 'vtip' }); MK[u].on('click', () => selectDev(u)); MK[u].on('mouseover', () => hoverUnit(u, true)); MK[u].on('mouseout', () => hoverUnit(u, false)); MK[u]._h = html; glideSeen(MK[u], Lv); }
     else { if (typeof moveMarker === 'function') moveMarker(u, MK[u], Lv); else MK[u].setLatLng([Lv.lat, Lv.lng]); if (MK[u]._h !== html) { MK[u].setIcon(L.divIcon({ html, className: '', iconSize: [22, 22], iconAnchor: [11, 11] })); MK[u]._h = html; } }
     const z = sos ? 1000 : st.k === 'nosig' ? 500 : 0; if (MK[u]._z !== z) { MK[u].setZIndexOffset(z); MK[u]._z = z; }
     if (HOVER_U === u) { MK[u].setTooltipContent(unitTip(u)); MK[u].openTooltip(); }
@@ -6403,41 +6426,69 @@ document.addEventListener('change', e => {
 setTimeout(pushNotePrefs, 1500);
 
 'use strict';
-/* ===== Smooth vehicle movement: markers glide between GPS fixes instead of jumping ===== */
+/* ===== Smooth vehicle movement =====
+   Phones report about every 30 seconds. Between reports a moving phone's marker carries on at the reported speed and direction, so it travels as the vehicle
+   does instead of waiting and jumping, then eases onto each new report. That in-between position is an estimate: it slows a little as it ages, so corrections
+   are mostly forward, and after 35 seconds with no new report the marker returns to the last reported position. Parked phones and SOS show the report exactly. */
 const GL = {};
-let glideRaf = 0;
+let glideRaf = 0, glideDrawn = 0;
 const glideOn = () => { try { return localStorage.getItem('rm_glide') !== '0'; } catch (e) { return true; } };
-function setGlide(on) { try { localStorage.setItem('rm_glide', on ? '1' : '0'); } catch (e) { } if (!on) Object.keys(GL).forEach(u => { const g = GL[u]; stopGlide(u); if (MK[u]) MK[u].setLatLng(g.to); }); }
+function setGlide(on) { try { localStorage.setItem('rm_glide', on ? '1' : '0'); } catch (e) { } if (!on) Object.keys(GL).forEach(u => { const g = GL[u]; stopGlide(u); g.m.setLatLng(g.to); }); }
 function stopGlide(u) { delete GL[u]; }
-const GLIDE_MS = 800;
-function moveMarker(u, m, Lv) {
-  const to = L.latLng(Lv.lat, Lv.lng), g = GL[u];
-  if (g && g.to.equals(to)) return;                     // already on its way there
-  const cur = m.getLatLng(), d = cur.distanceTo(to), prevT = g ? g.toT : (m._t || 0);
-  m._t = Lv.t;
-  // jump straight away: animation off, tab hidden, tiny or very long moves (bad fix / phone switched on elsewhere), SOS
-  if (!glideOn() || document.hidden || d < 3 || d > 5000 || sosOpen(u)) { stopGlide(u); m.setLatLng(to); return; }
-  // follow the points recorded in between, so the car keeps to the road it took
-  const mid = (TRAIL[u] || []).filter(p => p[0] > prevT && p[0] < Lv.t && p[3] <= 150).map(p => L.latLng(p[1], p[2]));
-  const pts = [cur].concat(mid, [to]), cum = [0];
+const GLIDE_MS = 800, GLIDE_MAX_MS = 4000, GLIDE_M_PER_MS = 0.04, GLIDE_BUSY = 40, GLIDE_BUSY_FRAME_MS = 50;
+const EST_MIN_KMH = 5, EST_MAX_KMH = 140, EST_MAX_ACC_M = 60, EST_MAX_FIX_AGE_MS = 20000, EST_MAX_MS = 35000, EST_SLOW_S = 90;
+/* degrees a second the phone is travelling, or null when its report cannot support an estimate */
+function glideEstimate(Lv) {
+  const kmh = +Lv.spd, hdg = +Lv.hdg;                   // a bearing of exactly 0 means the phone has none
+  if (!(kmh >= EST_MIN_KMH && kmh <= EST_MAX_KMH) || !hdg || Lv.gps === false || Lv.duty === false || !(+Lv.acc <= EST_MAX_ACC_M) || !(Math.abs(Lv.up - Lv.t) <= EST_MAX_FIX_AGE_MS)) return null;
+  const perS = kmh / 3.6 / 111320, rad = hdg * Math.PI / 180;
+  return { lat: Math.cos(rad) * perS, lng: Math.sin(rad) * perS / Math.cos(Lv.lat * Math.PI / 180) };
+}
+/* a new marker on the map: if its report is recent the next draw treats it as new, so a moving phone sets off at once; an old report just stays where it is */
+function glideSeen(m, Lv) { if (!(Math.abs(Date.now() - Lv.up) <= EST_MAX_MS)) m._t = Lv.t; }
+function startGlide(u, m, to, mid, est, gentle) {
+  const pts = [m.getLatLng()].concat(mid, [to]), cum = [0];
   for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + pts[i - 1].distanceTo(pts[i]));
-  // a short slide keeps movement readable while the marker stays on the phone's latest position
-  GL[u] = { to, toT: Lv.t, pts, cum, len: cum[cum.length - 1] || 1, t0: performance.now(), dur: GLIDE_MS };
+  const len = cum[cum.length - 1] || 1;
+  GL[u] = { m, to, pts, cum, len, est, t0: performance.now(), dur: gentle ? Math.min(GLIDE_MAX_MS, Math.max(GLIDE_MS, len / GLIDE_M_PER_MS)) : GLIDE_MS };
   if (!glideRaf) glideRaf = requestAnimationFrame(glideFrame);
+}
+function glideMarker(u, m, Lv, urgent, roadSince) {
+  const to = L.latLng(Lv.lat, Lv.lng), g = GL[u], cur = m.getLatLng(), prevT = m._t || 0;
+  if (prevT === Lv.t && (g ? g.to : cur).equals(to)) {  // the report already being shown
+    if (g && urgent) { stopGlide(u); m.setLatLng(to); }
+    else if (g && g.est && !glideEstimate(Lv)) startGlide(u, m, to, [], null, true);
+    return;
+  }
+  m._t = Lv.t;
+  const est = glideOn() ? glideEstimate(Lv) : null, d = cur.distanceTo(to);
+  // jump straight away: animation off, tab hidden, very long moves (bad fix / phone switched on elsewhere), SOS, or a parked phone's tiny drift
+  if (!glideOn() || document.hidden || d > 5000 || urgent || (d < 3 && !est)) { stopGlide(u); m.setLatLng(to); return; }
+  // follow the points recorded in between, so the car keeps to the road it took; correcting an estimate is unhurried so it does not look like a jump
+  startGlide(u, m, to, roadSince ? roadSince(prevT) : [], est, !!(est || (g && g.est)));
 }
 function glideFrame(now) {
   glideRaf = 0;
-  Object.keys(GL).forEach(u => {
-    const g = GL[u], m = MK[u]; if (!m) return stopGlide(u);
-    const f = Math.min(1, (now - g.t0) / g.dur);
-    if (f >= 1) { m.setLatLng(g.to); return stopGlide(u); }
-    const s = f * g.len; let i = 1; while (i < g.cum.length - 1 && g.cum[i] < s) i++;
-    const a = g.pts[i - 1], b = g.pts[i], seg = g.cum[i] - g.cum[i - 1], k = seg ? (s - g.cum[i - 1]) / seg : 1;
-    m.setLatLng([a.lat + (b.lat - a.lat) * k, a.lng + (b.lng - a.lng) * k]);
-  });
-  if (Object.keys(GL).length) glideRaf = requestAnimationFrame(glideFrame);
+  const ids = Object.keys(GL);
+  if (ids.length <= GLIDE_BUSY || now - glideDrawn >= GLIDE_BUSY_FRAME_MS) {
+    glideDrawn = now;
+    ids.forEach(u => {
+      const g = GL[u], age = Math.max(0, now - g.t0), f = Math.min(1, age / g.dur);
+      if (g.est && age >= EST_MAX_MS) return startGlide(u, g.m, g.to, [], null, true);
+      if (f >= 1 && !g.est) { g.m.setLatLng(g.to); return stopGlide(u); }
+      const eased = f * f * (3 - 2 * f), s = eased * g.len; let i = 1; while (i < g.cum.length - 1 && g.cum[i] < s) i++;
+      const a = g.pts[i - 1], b = g.pts[i], seg = g.cum[i] - g.cum[i - 1], k = seg ? (s - g.cum[i - 1]) / seg : 1;
+      const travelled = g.est ? EST_SLOW_S * (1 - Math.exp(-age / 1000 / EST_SLOW_S)) * eased : 0;
+      g.m.setLatLng([a.lat + (b.lat - a.lat) * k + (g.est ? g.est.lat * travelled : 0), a.lng + (b.lng - a.lng) * k + (g.est ? g.est.lng * travelled : 0)]);
+    });
+  }
+  if (Object.keys(GL).length && !glideRaf) glideRaf = requestAnimationFrame(glideFrame);
 }
-document.addEventListener('visibilitychange', () => { if (document.hidden) Object.keys(GL).forEach(u => { if (MK[u]) MK[u].setLatLng(GL[u].to); stopGlide(u); }); });
+document.addEventListener('visibilitychange', () => { if (document.hidden) Object.keys(GL).forEach(u => { GL[u].m.setLatLng(GL[u].to); stopGlide(u); }); });
+/* ===== end of smooth vehicle movement ===== */
+function moveMarker(u, m, Lv) {
+  glideMarker(u, m, Lv, sosOpen(u), since => (TRAIL[u] || []).filter(p => p[0] > since && p[0] < Lv.t && p[3] <= 150).map(p => L.latLng(p[1], p[2])));
+}
 
 'use strict';
 /* ===== Poll-day features: coverage of polling locations, location status, incidents, broadcast, summary, situation report, photos ===== */
