@@ -183,3 +183,36 @@ body.map-full .trace-trip{left:12px;bottom:28px}
 .viewer-full-btn{flex:none;padding:7px 12px;border:1px solid #cfd8e3;border-radius:8px;background:#fff;color:#15233a;font-weight:700;font-size:13px;cursor:pointer}
 body.viewer-map-full #viewerMap{position:fixed!important;inset:0;width:100%!important;height:100%!important;min-height:0!important;max-height:none!important;z-index:1000;border-radius:0}
 body.viewer-map-full .viewer-full-btn{position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:1200;border:0;border-radius:999px;background:#0f1b2e;color:#fff;box-shadow:0 4px 14px rgba(0,0,0,.35)}
+
+/* Reports from the phones: Alerts section and the Polling Stations Status card. */
+.alert.urgent{background:#fff4e5;border-color:#efc48a}
+body.wall .alert.urgent{background:#3a2a14}
+.ps-turnout{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;align-items:center;width:100%;margin:10px 0 0;padding:9px 12px;font:inherit;color:inherit;text-align:left;cursor:pointer;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px}
+.ps-turnout:hover{background:#dbeafe}
+.ps-turnout span{font-size:12.5px;font-weight:600;color:#334155}
+.ps-turnout b{font-size:22px;line-height:1.1;color:#1f5fa8;font-variant-numeric:tabular-nums}
+.ps-turnout em{grid-column:1/-1;font-style:normal;font-size:12px;color:#475569;overflow-wrap:anywhere}
+body.wall .ps-turnout{background:#17243b;border-color:#26354f}
+body.wall .ps-turnout span,body.wall .ps-turnout em{color:#c8d3e3}
+body.wall .ps-turnout b{color:#5aa2ff}
+.ps-empty{margin:10px 0 0}
+.ps-reports{list-style:none;margin:8px 0 0;padding:0;font-size:12.5px}
+.ps-reports li{display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:5px 0;border-top:1px solid #f0f3f7}
+.ps-reports li span{min-width:0;overflow-wrap:anywhere}
+.ps-reports li.urgent span{color:#b45309;font-weight:600}
+.ps-reports time{flex:none;color:#64748b;font-size:12px}
+.ps-all{margin-top:2px}
+
+/* Change all passwords */
+.member-modal.pw-modal .card{width:min(1080px,100%);max-width:none}
+.pw-fill{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 14px}
+.pw-fill .row{grid-column:1/-1;flex-wrap:wrap;margin-top:10px}
+.pw-table input[type=password],.pw-table input[type=text]{width:100%;min-width:120px;box-sizing:border-box}
+.pw-table td{vertical-align:middle}
+.pw-table small{display:block;color:#64748b}
+.pw-duty{color:#b45309;font-weight:600}
+.pw-ok{color:#1e7b45;font-weight:600}
+.pw-bad{color:#c0392b;font-weight:600}
+.pw-list{max-height:min(46dvh,460px);overflow:auto;margin-top:12px}
+.pw-change{display:flex;gap:8px;align-items:center;margin-top:12px;font-weight:600}
+@media (max-width:640px){.pw-fill{grid-template-columns:minmax(0,1fr)}}

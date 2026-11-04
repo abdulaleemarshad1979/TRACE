@@ -374,7 +374,11 @@ async function controlRoom(page, overrides = {}) {
   await page.route('https://securetoken.googleapis.com/**', route => route.fulfill({ json: { id_token: 'test-id', expires_in: '3600', refresh_token: 'test-refresh', user_id: 'admin-1' } }));
   await page.route('https://trace-demo.firebaseio.test/**', route => {
     const request = route.request(), pathname = new URL(request.url()).pathname;
-    if (request.method() === 'PATCH') writes.push({ pathname, body: request.postDataJSON() });
+    if (request.method() === 'PATCH') {
+      writes.push({ pathname, body: request.postDataJSON() });
+      const event = /^\/events\/([^/]+)\.json$/.exec(pathname);
+      if (event && data['/events.json']?.[event[1]]) Object.assign(data['/events.json'][event[1]], request.postDataJSON());
+    }
     return route.fulfill({ json: data[pathname] ?? null });
   });
   await page.route(/https:\/\/.*(?:tile\.openstreetmap\.org|arcgisonline\.com)\//, route => route.abort());
@@ -1496,3 +1500,400 @@ for (const [name, address, table, seed, refreshNow, marker] of [
   await expect.poll(async () => (await page.evaluate(marker))[1], { timeout: 5000 }).toBeGreaterThan(81.9002);
 });
 
+const reportingUnit = { unit1: { sd: 'Rural', ps: 'Example Rural Police Station', route: 'Route 12', officer: 'HC Example', mobile: '9000000000', force: 'route' } };
+const reportingConfig = {
+  routes: { r1: { ps: 'Example Rural Police Station', route: 'Route 12', sd: 'Rural', force: 'route' } },
+  stations: { s1: { name: 'ZP School Booth 12', ps: 'Example Rural Police Station', route: 'Route 12', lat: 17, lng: 81.8, voters: 1000 } },
+  settings: { election: '', autoSos: false }
+};
+// the records the Route app writes from its Polling and SOS pages
+const phoneReports = now => ({
+  votes1: { type: 'votes', uid: 'unit1', t: now - 60000, ps: 'Example Rural Police Station', sid: 's1', sname: 'ZP School Booth 12', note: '', n: 250, lat: 17, lng: 81.8 },
+  report1: { type: 'loc', status: 'loc', uid: 'unit1', t: now - 50000, ps: 'Example Rural Police Station', sid: 's1', sname: 'ZP School Booth 12', note: 'Crowd building at the gate' },
+  tension1: { type: 'loc', status: 'tension', uid: 'unit1', t: now - 40000, ps: 'Example Rural Police Station', sid: '', sname: '', note: 'Argument between agents' }
+});
+
+test('a voice message from a phone does not stop Alerts showing SOS and reports', async ({ page }) => {
+  const now = Date.now(), errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await controlRoom(page, { '/devices.json': reportingUnit, '/events.json': {
+    voice1: { type: 'msg', uid: 'unit1', t: now - 5000, voice: 'clip1', text: 'Voice message from patrol' },
+    sos1: { type: 'sos', uid: 'unit1', t: now - 2000, lat: 17, lng: 81.8 }
+  } });
+  await page.locator('#tabs [data-tab="alerts"]').click();
+  await expect(page.locator('#pane')).toContainText('pressed NEED HELP');
+  await expect(page.locator('#pane')).toContainText('Example Rural Police Station – Route 12 sent a voice message');
+  await expect(page.locator('#pane [data-act="voicePlay"]')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Mark attended' })).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test('a section that fails to draw says so instead of leaving the last screen showing', async ({ page }) => {
+  await controlRoom(page);
+  await page.evaluate(() => { const original = paneInc; paneInc = () => { throw new Error('broken record'); }; UI.tab = 'inc'; renderPane(); paneInc = original; });
+  await expect(page.locator('#pane')).toContainText('This section could not be drawn');
+  await expect(page.locator('#pane')).toContainText('broken record');
+});
+
+test('Polling page reports show on the home card, in Alerts and in Locations', async ({ page }) => {
+  const now = Date.now();
+  await controlRoom(page, { '/config.json': reportingConfig, '/devices.json': reportingUnit, '/events.json': phoneReports(now) });
+  const home = page.locator('#dPs');
+  await expect(home).toContainText('25.0%');
+  await expect(home).toContainText('250 votes of 1,000 voters');
+  await expect(home).toContainText('1 of 1 locations reported');
+  await expect(home).toContainText('Situation report at ZP School Booth 12 – Crowd building at the gate');
+  await expect(home.locator('.ps-reports li.urgent')).toContainText('Argument between agents');
+  await page.locator('#tabs [data-tab="alerts"]').click();
+  const pane = page.locator('#pane');
+  await expect(pane).toContainText('Reports from officers (3)');
+  await expect(pane).toContainText('250 votes polled at ZP School Booth 12 (25.0% of 1,000 voters)');
+  await expect(pane).not.toContainText('LOC');
+  await expect(pane.locator('.alert.urgent')).toContainText('Tension – Argument between agents');
+  await page.locator('#tabs [data-tab="loc"]').click();
+  await pane.locator('.ps-turnout').click();
+  await expect(pane).toContainText('250 votes polled of 1,000 voters');
+  await expect(pane).toContainText('SITUATION REPORT – Crowd building at the gate');
+});
+
+test('the home polling card links to the turnout and to every report', async ({ page }) => {
+  const now = Date.now();
+  await controlRoom(page, { '/config.json': reportingConfig, '/devices.json': reportingUnit, '/events.json': phoneReports(now) });
+  await page.locator('#dPs .ps-all').click();
+  await expect(page.locator('#pane')).toContainText('Reports from officers (3)');
+  await page.locator('#tabs [data-tab="sum"]').click();
+  await page.locator('#dPs .ps-turnout').click();
+  await expect(page.locator('#tabs [data-tab="loc"]')).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('#pane')).toContainText('Poll percentage');
+});
+
+test('a phone report with no polling location still counts as an open alert until attended', async ({ page }) => {
+  const now = Date.now();
+  const writes = await controlRoom(page, { '/devices.json': reportingUnit, '/events.json': { tension1: phoneReports(now).tension1 } });
+  expect(await page.evaluate(() => alertCount())).toBe(1);
+  await page.locator('#tabs [data-tab="alerts"]').click();
+  await page.locator('#pane .alert.urgent').getByRole('button', { name: 'Mark attended' }).click();
+  await expect(page.locator('#pane .alert.urgent')).toHaveCount(0);
+  await expect(page.locator('#pane')).toContainText('attended by admin@example.test');
+  expect(writes).toEqual([expect.objectContaining({ pathname: '/events/tension1.json', body: expect.objectContaining({ ackBy: 'admin@example.test' }) })]);
+  await expect.poll(() => page.evaluate(() => alertCount())).toBe(0);
+});
+
+test('a route with no polling location the phone can list is pointed out', async ({ page }) => {
+  await controlRoom(page, { '/config.json': {
+    routes: { r1: { ps: 'Kadiyam PS', route: 'Route 1', sd: 'Rural', memberUid: 'unit1' } },
+    stations: { s1: { name: 'Booth', ps: 'Kadiyam PS', route: 'R1', lat: 17, lng: 81.8 } },
+    settings: { election: '' }
+  } });
+  await page.locator('#tabs [data-tab="loc"]').click();
+  await expect(page.locator('#pane')).toContainText('1 assigned route has no polling locations on the phone');
+  await expect(page.locator('#pane')).toContainText('Kadiyam PS · Route 1');
+});
+
+test('a phone update while Mark attended is held down does not lose the click', async ({ page }) => {
+  const now = Date.now();
+  const writes = await controlRoom(page, { '/devices.json': reportingUnit, '/events.json': { sos1: { type: 'sos', uid: 'unit1', t: now - 2000, lat: 17, lng: 81.8 } } });
+  await page.locator('#tabs [data-tab="alerts"]').click();
+  const button = page.locator('#pane').getByRole('button', { name: 'Mark attended' });
+  const box = await button.boundingBox();
+  await page.evaluate(() => { document.querySelector('[data-act="ack"]').dataset.before = '1'; });
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.evaluate(() => schedule(true));
+  await page.waitForTimeout(700);
+  expect(await page.evaluate(() => document.querySelector('[data-act="ack"]').dataset.before)).toBe('1');
+  await page.mouse.up();
+  await expect.poll(() => writes.length).toBe(1);
+  await expect(page.locator('#pane')).toContainText('Attended by admin@example.test');
+  // and the redraw that waited still happens
+  await page.evaluate(() => { LIVE.unit1 = { lat: 17, lng: 81.8, t: Date.now(), up: Date.now(), gps: true, duty: true, bat: 15 }; schedule(true); });
+  await expect(page.locator('#pane')).toContainText('battery 15%');
+});
+
+test('Mark attended clears every press of SOS from that unit', async ({ page }) => {
+  const now = Date.now();
+  const writes = await controlRoom(page, { '/devices.json': reportingUnit, '/events.json': {
+    sos1: { type: 'sos', uid: 'unit1', t: now - 30000 }, sos2: { type: 'sos', uid: 'unit1', t: now - 20000 }, sos3: { type: 'sos', uid: 'unit1', t: now - 10000 }
+  } });
+  await page.locator('#tabs [data-tab="alerts"]').click();
+  await expect(page.locator('#pane .alert.sos')).toHaveCount(1);
+  await expect(page.locator('#pane')).toContainText('pressed NEED HELP 3 times');
+  await page.locator('#pane').getByRole('button', { name: 'Mark attended' }).click();
+  await expect(page.locator('#pane .alert.sos.done')).toHaveCount(1);
+  expect(writes.map(x => x.pathname).sort()).toEqual(['/events/sos1.json', '/events/sos2.json', '/events/sos3.json']);
+  expect(await page.evaluate(() => sosOpen('unit1'))).toBe(false);
+  await page.locator('#pane').getByRole('button', { name: 'Remove from list' }).click();
+  await expect(page.locator('#pane .alert.sos')).toHaveCount(0);
+  expect(writes.filter(x => x.body.cleared)).toHaveLength(3);
+});
+
+test('an SOS can be attended from its Vehicles card', async ({ page }) => {
+  const now = Date.now();
+  const writes = await controlRoom(page, { '/devices.json': reportingUnit, '/events.json': { sos1: { type: 'sos', uid: 'unit1', t: now - 2000 } } });
+  await page.locator('#tabs [data-tab="veh"]').click();
+  await page.locator('#pane').getByRole('button', { name: 'Mark SOS attended' }).click();
+  await expect.poll(() => writes.length).toBe(1);
+  await expect(page.locator('#pane').getByRole('button', { name: 'Mark SOS attended' })).toHaveCount(0);
+});
+
+test('the SOS popup can mark it attended, and skips popups for presses already attended', async ({ page }) => {
+  const writes = await controlRoom(page, { '/devices.json': reportingUnit });
+  await page.waitForTimeout(3500);   // the first pass only records what is already there
+  await page.evaluate(() => { const t = Date.now(); EVT.sos1 = { type: 'sos', uid: 'unit1', t, lat: 17, lng: 81.8 }; EVT.sos2 = { type: 'sos', uid: 'unit1', t: t + 1, lat: 17, lng: 81.8 }; });
+  const popup = page.locator('.bigalert');
+  await expect(popup).toContainText('SOS – NEED HELP', { timeout: 8000 });
+  await popup.getByRole('button', { name: 'Mark attended' }).click();
+  await expect(popup).toHaveCount(0);
+  expect(writes.map(x => x.pathname).sort()).toEqual(['/events/sos1.json', '/events/sos2.json']);
+  await page.waitForTimeout(600);
+  await expect(popup).toHaveCount(0);
+});
+
+test('closing an incident made from an SOS popup attends the SOS', async ({ page }) => {
+  const now = Date.now();
+  const writes = await controlRoom(page, { '/devices.json': reportingUnit, '/events.json': { sos1: { type: 'sos', uid: 'unit1', t: now - 2000, lat: 17, lng: 81.8 } } });
+  await page.evaluate(() => { INC.i1 = { no: 1, t: Date.now(), lat: 17, lng: 81.8, place: 'SOS place', status: 'open', sourceEventId: 'sos1' }; closeIncidentDialog('i1'); });
+  await page.getByRole('button', { name: 'Close incident' }).click();
+  await expect.poll(() => writes.some(x => x.pathname === '/events/sos1.json')).toBe(true);
+  await expect.poll(() => page.evaluate(() => sosOpen('unit1'))).toBe(false);
+});
+
+test('an account without administrator rights is told why it cannot attend an SOS', async ({ page }) => {
+  const now = Date.now();
+  const writes = await controlRoom(page, { '/roles/admin-1.json': 'monitor', '/devices.json': reportingUnit, '/events.json': { sos1: { type: 'sos', uid: 'unit1', t: now - 2000 } } });
+  await page.locator('#tabs [data-tab="alerts"]').click();
+  await page.locator('#pane').getByRole('button', { name: 'Mark attended' }).click();
+  await expect(page.locator('.toast')).toContainText('An administrator account is required');
+  expect(writes).toEqual([]);
+});
+
+test('reading at intervals still shows late reports, wrong phone clocks and an SOS attended elsewhere', async ({ page }) => {
+  const now = Date.now(), events = { start1: { type: 'start', uid: 'unit1', t: now - 1000 }, sos1: { type: 'sos', uid: 'unit1', t: now - 500 } };
+  await controlRoom(page, { '/devices.json': reportingUnit, '/events.json': events });
+  await expect.poll(() => page.evaluate(() => sosOpen('unit1'))).toBe(true);
+  const read = () => page.evaluate(() => STREAMS.find(x => x.path === 'events').poll());
+  events.late = { type: 'votes', uid: 'unit1', t: now - 45 * 60000, sid: 's1', sname: 'Booth', n: 10 };   // queued offline
+  await read();
+  expect(await page.evaluate(() => !!EVT.late)).toBe(true);
+  events.fastClock = { type: 'start', uid: 'unit1', t: now + 3600000 };
+  await read();
+  events.afterFastClock = { type: 'sos', uid: 'unit1', t: now };
+  await read();
+  expect(await page.evaluate(() => !!EVT.afterFastClock)).toBe(true);
+  events.sos1.ackBy = events.afterFastClock.ackBy = 'other-operator';
+  await read();
+  expect(await page.evaluate(() => sosOpen('unit1'))).toBe(false);
+});
+
+/* a stand-in for Firebase Authentication: an old password really stops working */
+async function fakeAuth(page, accounts, limit) {
+  const calls = [];
+  await page.route('https://identitytoolkit.googleapis.com/**', route => {
+    const action = /accounts:(\w+)/.exec(route.request().url())[1], body = route.request().postDataJSON();
+    calls.push({ action, email: body.email, hasToken: !!body.idToken });
+    if (action === 'signInWithPassword') {
+      if (limit && limit()) return route.fulfill({ status: 400, json: { error: { message: 'TOO_MANY_ATTEMPTS_TRY_LATER : Too many failed attempts.' } } });
+      const account = accounts[body.email];
+      if (!account) return route.fulfill({ status: 400, json: { error: { message: 'EMAIL_NOT_FOUND' } } });
+      if (account.password !== body.password) return route.fulfill({ status: 400, json: { error: { message: 'INVALID_LOGIN_CREDENTIALS' } } });
+      return route.fulfill({ json: { localId: account.uid, idToken: 'token-' + account.uid, refreshToken: 'refresh' } });
+    }
+    if (action === 'signUp') return route.fulfill({ status: 400, json: { error: { message: 'EMAIL_EXISTS' } } });
+    if (action === 'update') {
+      const account = Object.values(accounts).find(x => 'token-' + x.uid === body.idToken);
+      if (!account) return route.fulfill({ status: 400, json: { error: { message: 'INVALID_ID_TOKEN' } } });
+      account.password = body.password;
+      return route.fulfill({ json: { localId: account.uid, idToken: 'new', refreshToken: 'new' } });
+    }
+    return route.fulfill({ status: 400, json: { error: { message: 'UNEXPECTED' } } });
+  });
+  return calls;
+}
+const passwordData = {
+  '/assignments.json': {
+    a1: { officer: 'Officer One', ps: 'Kadiyam PS', route: 'Route 1', mobile: '9000000001' },
+    a2: { officer: 'Officer Two', ps: 'Kadiyam PS', route: 'Route 2', mobile: '9000000002' },
+    noPhone: { officer: 'Officer Three', ps: 'Kadiyam PS', route: 'Route 3', mobile: '' }
+  },
+  '/siScopes.json': { v1: { officer: 'Viewer One', mandal: 'Kadiyam', mobile: '+919000000003' } },
+  '/live.json': { a1: { duty: true, up: Date.now(), lat: 17, lng: 81.8, t: Date.now() } },
+  '/devices.json': { a1: { ps: 'Kadiyam PS', route: 'Route 1' } }
+};
+const passwordAccounts = () => ({
+  'phone919000000001@members.track.invalid': { uid: 'a1', password: 'Old-password-1' },
+  'phone919000000002@members.track.invalid': { uid: 'a2', password: 'Different-old-2' },
+  'si919000000003@members.track.invalid': { uid: 'v1', password: 'Old-password-1' }
+});
+async function openChangeAll(page) {
+  await page.locator('#tabs [data-tab="setup"]').click();
+  await page.getByRole('button', { name: 'Change all passwords' }).click();
+  await expect(page.locator('.pw-modal')).toBeVisible();
+  return page.locator('.pw-modal');
+}
+const pwRow = (modal, mobile) => modal.locator('tbody tr', { hasText: mobile });
+
+test('change all passwords replaces each password and reports only the wrong ones', async ({ page }) => {
+  const accounts = passwordAccounts();
+  const writes = await controlRoom(page, passwordData);
+  const calls = await fakeAuth(page, accounts);
+  const dialogs = [];
+  page.on('dialog', dialog => { dialogs.push(dialog.message()); dialog.accept(); });
+  const modal = await openChangeAll(page);
+  await expect(modal).toContainText('1 phone is on duty now');
+  await expect(pwRow(modal, '9000000001')).toContainText('On duty now');
+  await expect(pwRow(modal, 'Officer Three')).toContainText('No valid mobile number');
+  await expect(pwRow(modal, 'Officer Three').locator('[data-pick]')).toBeDisabled();
+  await modal.locator('[data-fill-current]').fill('Old-password-1');
+  await modal.locator('[data-fill-new]').fill('New-password-9');
+  await modal.getByRole('button', { name: 'Change passwords', exact: true }).click();
+  await expect(modal.locator('[data-progress]')).toContainText('2 changed, 1 not changed');
+  expect(dialogs[0]).toContain('Change the password of 3 people');
+  expect(dialogs[0]).toContain('1 phone is on duty');
+  await expect(pwRow(modal, '9000000001')).toContainText('Changed');
+  await expect(pwRow(modal, '9000000003')).toContainText('Changed');
+  await expect(pwRow(modal, '9000000002')).toContainText('Current password is wrong');
+  expect(accounts['phone919000000001@members.track.invalid'].password).toBe('New-password-9');
+  expect(accounts['si919000000003@members.track.invalid'].password).toBe('New-password-9');
+  expect(accounts['phone919000000002@members.track.invalid'].password).toBe('Different-old-2');
+  // retrying touches only the one that failed
+  calls.length = 0;
+  await pwRow(modal, '9000000002').locator('[data-current]').fill('Different-old-2');
+  await modal.getByRole('button', { name: 'Change passwords', exact: true }).click();
+  await expect(pwRow(modal, '9000000002')).toContainText('Changed');
+  expect(calls.map(x => x.email).filter(Boolean)).toEqual(['phone919000000002@members.track.invalid']);
+  expect(accounts['phone919000000002@members.track.invalid'].password).toBe('New-password-9');
+  // the database never receives a password, and the administrator stays signed in
+  expect(writes).toEqual([]);
+  expect(await page.evaluate(() => AU.uid)).toBe('admin-1');
+  expect(await page.evaluate(() => localStorage.getItem('rm_au'))).not.toContain('New-password');
+  await expect(modal.getByRole('button', { name: 'Download new passwords' })).toBeVisible();
+  const download = page.waitForEvent('download');
+  await modal.getByRole('button', { name: 'Download new passwords' }).click();
+  expect((await download).suggestedFilename()).toBe('TRACK-new-passwords.xlsx');
+  dialogs.length = 0;
+  await modal.getByRole('button', { name: 'Close' }).click();
+  expect(dialogs).toEqual([]);
+  await expect(modal).toHaveCount(0);
+});
+
+test('change all passwords stops when Firebase pauses sign-ins', async ({ page }) => {
+  let tries = 0;
+  const accounts = passwordAccounts();
+  await controlRoom(page, passwordData);
+  await fakeAuth(page, accounts, () => ++tries > 1);
+  page.on('dialog', dialog => dialog.accept());
+  const modal = await openChangeAll(page);
+  await modal.locator('[data-fill-current]').fill('Old-password-1');
+  await modal.locator('[data-fill-new]').fill('New-password-9');
+  await modal.getByRole('button', { name: 'Change passwords', exact: true }).click();
+  await expect(modal.locator('.err')).toContainText('paused sign-ins');
+  await expect(modal.locator('tbody')).toContainText('Not tried');
+  expect(tries).toBe(2);
+});
+
+test('change all passwords checks its entries and asks before closing unsaved results', async ({ page }) => {
+  const accounts = passwordAccounts();
+  await controlRoom(page, passwordData);
+  const calls = await fakeAuth(page, accounts);
+  const modal = await openChangeAll(page);
+  await modal.locator('[data-fill-new]').fill('New-password-9');
+  await modal.getByRole('button', { name: 'Change passwords', exact: true }).click();
+  await expect(modal.locator('.err')).toContainText('Enter both passwords for 3 more people');
+  expect(calls).toEqual([]);
+  await modal.locator('[data-fill-current]').fill('Old-password-1');
+  await modal.locator('[data-fill-new]').fill('short');
+  page.once('dialog', dialog => dialog.accept());
+  await modal.getByRole('button', { name: 'Change passwords', exact: true }).click();
+  await expect(pwRow(modal, '9000000001')).toContainText('at least 8 characters');
+  expect(calls).toEqual([]);
+  // the same password again is not a change
+  await modal.locator('[data-fill-new]').fill('Old-password-1');
+  page.once('dialog', dialog => dialog.accept());
+  await modal.getByRole('button', { name: 'Change passwords', exact: true }).click();
+  await expect(pwRow(modal, '9000000001')).toContainText('must be different');
+  expect(calls).toEqual([]);
+  // cancelling the question changes nothing
+  await modal.locator('[data-fill-new]').fill('New-password-9');
+  page.once('dialog', dialog => dialog.dismiss());
+  await modal.getByRole('button', { name: 'Change passwords', exact: true }).click();
+  expect(calls).toEqual([]);
+  await pwRow(modal, '9000000002').locator('[data-pick]').uncheck();
+  await pwRow(modal, '9000000003').locator('[data-pick]').uncheck();
+  page.once('dialog', dialog => dialog.accept());
+  await modal.getByRole('button', { name: 'Change passwords', exact: true }).click();
+  await expect(pwRow(modal, '9000000001')).toContainText('Changed');
+  await expect(modal.locator('[data-progress]')).toContainText('1 changed');
+  expect(accounts['phone919000000002@members.track.invalid'].password).toBe('Different-old-2');
+  let asked = '';
+  page.once('dialog', dialog => { asked = dialog.message(); dialog.dismiss(); });
+  await modal.getByRole('button', { name: 'Close' }).click();
+  expect(asked).toContain('without downloading the new passwords');
+  await expect(modal).toBeVisible();
+});
+
+test('change all passwords can make a different password for each person and fill from Excel', async ({ page }) => {
+  await controlRoom(page, passwordData);
+  await fakeAuth(page, passwordAccounts());
+  const modal = await openChangeAll(page);
+  await modal.getByRole('button', { name: 'Make a different new password for each person' }).click();
+  const made = await modal.locator('[data-new]').evaluateAll(inputs => inputs.map(x => x.value).filter(Boolean));
+  expect(made).toHaveLength(3);
+  expect(new Set(made).size).toBe(3);
+  made.forEach(password => expect(password).toMatch(/^[A-HJ-NP-Z2-9]{10}$/));
+  const download = page.waitForEvent('download');
+  await modal.getByRole('button', { name: 'Download list as Excel' }).click();
+  expect((await download).suggestedFilename()).toBe('TRACK-passwords.xlsx');
+  const sheet = await page.evaluate(() => { const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Login', 'Mobile', 'Current password', 'New password'], ['Route app', 9000000001, 12345678, 'Excel-new-1'], ['Viewer', '+91 90000 00003', 'Excel-old-3', 'Excel-new-3'], ['', '9999999999', 'x', 'y']]), 'Sheet1'); return XLSX.write(wb, { type: 'base64', bookType: 'xlsx' }); });
+  const chooser = page.waitForEvent('filechooser');
+  await modal.getByRole('button', { name: 'Fill from Excel' }).click();
+  await (await chooser).setFiles({ name: 'passwords.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: Buffer.from(sheet, 'base64') });
+  await expect(modal.locator('[data-progress]')).toContainText('Filled 2 from Excel; 1 mobile number was not found');
+  await expect(pwRow(modal, '9000000001').locator('[data-current]')).toHaveValue('12345678');
+  await expect(pwRow(modal, '9000000001').locator('[data-new]')).toHaveValue('Excel-new-1');
+  await expect(pwRow(modal, '9000000003').locator('[data-new]')).toHaveValue('Excel-new-3');
+});
+
+test('Assign member can replace this person\'s password', async ({ page }) => {
+  const accounts = { 'phone919876543210@members.track.invalid': { uid: 'officer-1', password: 'Current-password' } };
+  const writes = await controlRoom(page);
+  await fakeAuth(page, accounts);
+  await page.locator('#tabs [data-tab="setup"]').click();
+  await page.getByRole('button', { name: 'Assign member' }).click();
+  const modal = page.locator('.member-modal');
+  await modal.locator('[name=officer]').fill('Officer One');
+  await modal.locator('[name=mobile]').fill('9876543210');
+  await modal.locator('[name=password]').fill('Current-password');
+  await expect(modal.locator('[name=newPassword]')).toBeHidden();
+  await modal.getByLabel("Change this person's password").check();
+  await modal.locator('[name=newPassword]').fill('Replacement-1');
+  await modal.locator('[name=confirmPassword]').fill('Replacement-2');
+  await modal.getByRole('button', { name: 'Save assignment' }).click();
+  await expect(modal.locator('.err')).toContainText('do not match');
+  expect(writes).toEqual([]);
+  expect(accounts['phone919876543210@members.track.invalid'].password).toBe('Current-password');
+  await modal.locator('[name=confirmPassword]').fill('Replacement-1');
+  await modal.getByRole('button', { name: 'Save assignment' }).click();
+  await expect(modal).toHaveCount(0);
+  expect(accounts['phone919876543210@members.track.invalid'].password).toBe('Replacement-1');
+  expect(writes).toHaveLength(1);
+  expect(JSON.stringify(writes)).not.toContain('Replacement-1');
+  expect(await page.evaluate(() => AU.uid)).toBe('admin-1');
+  await expect(page.locator('.toast')).toContainText('password changed');
+});
+
+test('Assign member leads to Change all passwords, and only administrators are offered it', async ({ page }) => {
+  await controlRoom(page, passwordData);
+  await page.locator('#tabs [data-tab="setup"]').click();
+  await page.getByRole('button', { name: 'Assign member' }).click();
+  await page.locator('.member-modal').getByRole('button', { name: 'Change all passwords…' }).click();
+  await expect(page.locator('.pw-modal #pwTitle')).toHaveText('Change all passwords');
+  await expect(page.locator('.member-modal')).toHaveCount(1);
+});
+
+test('a monitor is not offered Change all passwords', async ({ page }) => {
+  await controlRoom(page, { '/roles/admin-1.json': 'monitor' });
+  await page.locator('#tabs [data-tab="setup"]').click();
+  await expect(page.locator('[data-act="routeAdd"]')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Change all passwords' })).toHaveCount(0);
+  await expect(page.evaluate(() => changeAllPasswordsModal())).rejects.toThrow('Only a control-room administrator');
+});

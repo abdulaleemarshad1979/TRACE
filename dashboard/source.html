@@ -4536,25 +4536,25 @@ const POLL_RETRY_MS = 30 * 60000;
    Firebase sends a keep-alive every 30 seconds even when nothing changes, so each stream is checked every 15 seconds and one silent for 45 seconds is reopened.
    A healthy stream costs no extra reads this way; re-reading every position each 15 seconds would use about 9 MB an hour for each open page. */
 const STREAM_CHECK_MS = 15000, STREAM_SILENT_MS = 45000, STREAM_REOPENS = 3;
+const INC_RECENT = 100, INC_FULL_MS = 5 * 60000;
 const pollForced =() => { try { return localStorage.getItem('rm_poll_force') === '1'; } catch (e) { return false; } };
 try { localStorage.removeItem('rm_poll'); } catch (e) { }   // earlier versions stayed on slower polling for good after any network blip
 const pollUntil = () => { try { return +localStorage.getItem('rm_poll_until') || 0; } catch (e) { return 0; } };
 /* Live updates by streaming; if streaming fails on this network, falls back to reading every 10 seconds. */
 function stream(path, query, target, onChange, opt) {
   opt = opt || {};
-  const s = { path, query: query || '', every: opt.every || 15000, inc: opt.inc, last: 0, lastOk: 0, es: null, ok: false, mode: pollForced() || pollUntil() > Date.now() ? 'poll' : 'stream', fails: 0, opened: false, err: '', timer: null, retry: null, heard: 0, reopens: 0 };
+  const s = { path, query: query || '', every: opt.every || 15000, inc: opt.inc, fullAt: 0, sig: '', lastOk: 0, es: null, ok: false, mode: pollForced() || pollUntil() > Date.now() ? 'poll' : 'stream', fails: 0, opened: false, err: '', timer: null, retry: null, heard: 0, reopens: 0 };
   const apply = (p, d, patch) => { setAt(target, p, d, patch); onChange(p); };
   const alive = () => { s.heard = Date.now(); s.reopens = 0; };
   s.poll = async () => {
     try {
-      if (s.inc && s.last) {
-        // only what is new since the last read
-        const d = await dbGet(path, `&orderBy="${s.inc}"&startAt=${s.last + 1}`);
-        if (d && Object.keys(d).length) { Object.values(d).forEach(v => { if (v && v[s.inc] > s.last) s.last = v[s.inc]; }); apply('/', d, true); }
+      if (s.inc && Date.now() - s.fullAt < INC_FULL_MS) {
+        // The latest records, not "newer than the last one seen": phones stamp their own clock, so a report sent late from the
+        // offline queue would be older than that and one fast clock would hide everything after it. This also shows an SOS another operator attended.
+        const d = await dbGet(path, `&orderBy="${s.inc}"&limitToLast=${INC_RECENT}`), sig = JSON.stringify(d);
+        if (d && sig !== s.sig) { s.sig = sig; apply('/', d, true); }
       } else {
-        const d = await dbGet(path, s.query); apply('/', d, false);
-        if (s.inc && d) Object.values(d).forEach(v => { if (v && v[s.inc] > s.last) s.last = v[s.inc]; });
-        if (s.inc && !s.last) s.last = Date.now() - 60000;
+        const d = await dbGet(path, s.query); s.fullAt = Date.now(); s.sig = ''; apply('/', d, false);
       }
       s.ok = true; s.lastOk = Date.now(); s.err = '';
     }
@@ -4698,8 +4698,8 @@ function stationGeoIssue(p) {
 const mappableStation = p => !stationGeoIssue(p);
 
 /* ---------- names and status ---------- */
-function dname(u) { const d = DEV[u] || {}; return [d.ps, d.route].filter(Boolean).join(' – ') || ('Phone ' + u.slice(0, 5)); }
-function dshort(u) { const d = DEV[u] || {}; return [d.ps, (d.route || '').replace(/^route\s*/i, 'R')].filter(Boolean).join(' ') || u.slice(0, 5); }
+function dname(u) { const d = DEV[u] || {}; return [d.ps, d.route].filter(Boolean).join(' – ') || (u ? 'Phone ' + u.slice(0, 5) : 'Unknown phone'); }
+function dshort(u) { const d = DEV[u] || {}; return [d.ps, (d.route || '').replace(/^route\s*/i, 'R')].filter(Boolean).join(' ') || (u || '').slice(0, 5); }
 const STOP_MEMO = {};
 function stoppedMins(u) {
   const tr = TRAIL[u]; if (!tr || !tr.length) return 0;
@@ -5027,8 +5027,15 @@ function schedule(pane, soon) {
   }, wait);
 }
 document.addEventListener('visibilitychange', () => { if (!document.hidden && renderSkipped) { renderSkipped = false; schedule(true); } });
+/* A redraw between pressing and releasing a button replaces that button, and the browser then drops the click.
+   Phones report all the time, so wait while the pointer is down; limited because a release on a scrollbar may never be reported. */
+let pressedAt = 0;
+const PRESS_HOLD_MS = 2000;
+document.addEventListener('pointerdown', e => { if (e.target.closest && e.target.closest('#pane,#tabs,#dash,main.body > .bar')) pressedAt = Date.now(); }, true);
+['pointerup', 'pointercancel'].forEach(ev => document.addEventListener(ev, () => { if (pressedAt) { pressedAt = 0; schedule(true); } }, true));
 function render() {
   if (document.body.classList.contains('map-full')) { renderMap(); paneDirty = false; return; }
+  if (Date.now() - pressedAt < PRESS_HOLD_MS) { renderMap(); return; }
   renderFilters(); renderCounts(); renderMap();
   const editing = document.activeElement && $('#pane').contains(document.activeElement) && /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);
   if (!editing || paneDirty === 'force') renderPane();
@@ -5222,9 +5229,11 @@ function renderTabs() {
 function renderPane() {
   const f = { sum: paneSum, active: paneActive, veh: paneVeh, alerts: paneAlerts, loc: paneLoc, inc: paneInc, replay: paneReplay, report: paneReport, setup: paneSetup }[UI.tab] || paneSum;
   let html;
+  try {
   if (UI.tab === 'sum' && !+LS.get('sumOpen', 1)) html = `<div class="sumbar"><span>Summary hidden</span><button type="button" class="btn small" data-act="sumToggle">Show summary +</button></div>`;
   else if (UI.tab === 'sum') html = `<div class="sumbar sumtop"><span></span><button type="button" class="btn small" data-act="sumToggle" title="Hide the summary to give the Vehicles and Locations lists more room">Hide summary −</button></div>` + f();
   else html = f();
+  } catch (error) { console.error(error); html = `<div class="banner bad"><b>This section could not be drawn.</b> ${esc(error.message)}. Reload the page, and report this message if it comes back.</div>`; }
   const st = $('#pane').scrollTop; $('#pane').innerHTML = html; $('#pane').scrollTop = st;
   if (UI.tab === 'setup') afterSetup();
 }
@@ -5259,6 +5268,7 @@ function activeUnitCard(u) {
       ${d.mobile ? `<a class="btn small" href="tel:${esc(d.mobile)}">Call</a>` : ''}
       <button class="btn small" data-act="msg" data-u="${u}">Message</button>
       <button class="btn small" data-act="replayDev" data-u="${u}">Replay</button>
+      ${sos ? `<button class="btn small red" data-act="ack" data-u="${u}">Mark SOS attended</button>` : ''}
     </div>
   </div>`;
 }
@@ -5409,7 +5419,7 @@ function vehCard(u, extra) {
     <div class="l1"><span>${esc(dname(u))}${fo !== 'route' ? ` <span class="ftag" style="background:${fcol(fo)}">${esc(FORCE[fo].s)}</span>` : ''}</span><span class="st" style="color:${sos ? C.sos : st.c}">${sos ? 'SOS · ' : ''}${esc(st.txt)}</span></div>
     <div class="l2"><span>${esc(d.officer || 'Officer not entered')}${d.mobile ? ' · ' + esc(d.mobile) : ''}</span><span>${Lv.up ? 'updated ' + ago(Lv.up) : ''}</span></div>
     <div class="l2"><span>${esc(d.sd || '')}${Lv.bat >= 0 ? ` · battery ${Lv.bat}%${Lv.chg ? ' ⚡' : Lv.bat < 25 ? ' ⚠' : ''}` : ''}${off ? ` · <b style="color:${C.nosig}">${fKm(off)} off route</b>` : ''}</span><span>${extra || ''}</span></div>
-    ${UI.sel === u ? `<div class="acts">${d.mobile ? `<a class="btn small" href="tel:${esc(d.mobile)}">Call</a>` : ''}<button class="btn small" data-act="msg" data-u="${u}">Message</button><button class="btn small" data-act="replayDev" data-u="${u}">Replay today</button><button class="btn small" data-act="editDev" data-u="${u}">Edit</button></div>` : ''}
+    ${UI.sel === u ? `<div class="acts">${d.mobile ? `<a class="btn small" href="tel:${esc(d.mobile)}">Call</a>` : ''}<button class="btn small" data-act="msg" data-u="${u}">Message</button><button class="btn small" data-act="replayDev" data-u="${u}">Replay today</button><button class="btn small" data-act="editDev" data-u="${u}">Edit</button>${sos ? `<button class="btn small red" data-act="ack" data-u="${u}">Mark SOS attended</button>` : ''}</div>` : sos ? `<div class="acts"><button class="btn small red" data-act="ack" data-u="${u}">Mark SOS attended</button></div>` : ''}
   </div>`;
 }
 function paneVeh() {
@@ -5424,19 +5434,83 @@ function paneVeh() {
 }
 const visible2 = r => (!UI.fSd || r.sd === UI.fSd) && (!UI.fPs || r.ps === UI.fPs);
 
+/* Reports a phone sends from its Polling and SOS pages. Submit Situation Report sends the status "loc". */
+const REPORT_TXT = { normal: 'Normal', crowd: 'Crowd', tension: 'Tension', problem: 'Problem', loc: 'Situation report' };
+const reportTxt = status => REPORT_TXT[status] || String(status || 'Report');
+const urgentReport = e => e.type === 'loc' && (e.status === 'tension' || e.status === 'problem');
+// a voice message from a phone names no target unit, unlike one the control room sent
+const phoneVoice = e => e.type === 'msg' && !!e.voice && !e.dev;
+const isReport = e => ['loc', 'votes', 'reached', 'photo'].includes(e.type) || phoneVoice(e);
+function reportList() {
+  const open = e => urgentReport(e) && !e.ackBy;
+  return Object.entries(EVT).filter(([, e]) => isReport(e) && visible(e.uid) && (open(e) ? Date.now() - e.t < 12 * HOUR : dayKey(e.t) === TODAY && e.t > alertClearTime()))
+    .sort((a, b) => open(b[1]) - open(a[1]) || b[1].t - a[1].t);
+}
+function reportLine(e) {
+  const place = e.sname ? ` at ${e.sname}` : '', note = e.note ? ` – ${e.note}` : '';
+  if (e.type === 'votes') { const voters = +((CONF.stations || {})[e.sid] || {}).voters; return `${fmtN(e.n)} votes polled${place}${voters ? ` (${pctTxt(e.n * 100 / voters)} of ${fmtN(voters)} voters)` : ''}${note}`; }
+  if (e.type === 'reached') return `reached the spot${note}`;
+  if (e.type === 'photo') return `sent a photo${note}`;
+  if (e.type === 'msg') return 'sent a voice message';
+  return `${reportTxt(e.status)}${place}${note}`;
+}
+const REPORT_ICON = { votes: '🗳', reached: '📍', photo: '📷', msg: '🎤' };
+function reportCard([id, e]) {
+  const d = DEV[e.uid] || {}, open = urgentReport(e) && !e.ackBy, attendable = e.type === 'loc' && e.status !== 'normal';
+  return `<div class="alert ${open ? 'urgent' : ''}"><div class="ic">${REPORT_ICON[e.type] || (open ? '⚠️' : e.status === 'normal' ? '✅' : '📝')}</div><div class="tx"><b>${esc(dname(e.uid))}</b> ${esc(reportLine(e))}<br><span class="note">${esc(d.officer || '')} ${esc(d.mobile || '')}${e.ackBy ? ` · attended by ${esc(e.ackBy)}${e.ackAt ? ' at ' + fT(e.ackAt) : ''}` : ''}</span>
+    <div class="row">${d.mobile ? `<a class="btn small" href="tel:${esc(d.mobile)}">Call</a>` : ''}${e.lat ? `<button class="btn small" data-act="goto" data-lat="${+e.lat}" data-lng="${+e.lng}">Show place</button>` : ''}${e.type === 'photo' && e.pid ? `<button class="btn small" data-act="photo" data-pid="${esc(e.pid)}">View</button>` : ''}${e.voice ? `<button class="btn small" data-act="voicePlay" data-id="${esc(e.voice)}">▶ Play</button>` : ''}${attendable && !e.ackBy ? `<button class="btn small ${open ? 'red' : ''}" data-act="locAck" data-eid="${esc(id)}">Mark attended</button>` : ''}</div></div><div class="tm">${fT(e.t)}</div></div>`;
+}
+const ALERTS_SHOWN = { reports: 30, prob: 10 };
+function alertsMore(k, list) {
+  const all = (UI.alertsMore || {})[k];
+  return { shown: all ? list : list.slice(0, ALERTS_SHOWN[k]), more: list.length > ALERTS_SHOWN[k] ? `<div class="row"><button class="btn small" data-act="alertsMore" data-k="${k}">${all ? 'Show fewer' : `Show all ${list.length}`}</button></div>` : '' };
+}
+function sosCard(list) {
+  const e = list[0], d = DEV[e.uid] || {};
+  return `<div class="alert sos ${e.ackBy ? 'done' : ''}"><div class="ic">🆘</div><div class="tx"><b>${esc(dname(e.uid))}</b> pressed NEED HELP${list.length > 1 ? ` ${list.length} times` : ''}<br>${esc(d.officer || '')} ${esc(d.mobile || '')}${e.ackBy ? `<br><span class="note">Attended by ${esc(e.ackBy)} at ${fT(e.ackAt)}</span>` : e.dispUid ? `<br><span class="note">🚓 Nearest unit <b>${esc(dname(e.dispUid))}</b> (${fKm(e.dispKm || 0)} away) auto-alerted at ${fT(e.dispAt)}</span>` : ''}
+    <div class="row">${d.mobile ? `<a class="btn small" href="tel:${esc(d.mobile)}">Call</a>` : ''}${e.lat ? `<button class="btn small" data-act="goto" data-lat="${+e.lat}" data-lng="${+e.lng}">Show place</button><button class="btn small" data-act="incHere" data-lat="${+e.lat}" data-lng="${+e.lng}" data-name="SOS of ${esc(dname(e.uid))}">Send another unit</button>` : ''}${e.dispUid && !e.ackBy ? `<button class="btn small" data-act="sel" data-u="${e.dispUid}">Show sent unit</button>` : ''}${e.ackBy ? `<button class="btn small" data-act="sosClear" data-u="${esc(e.uid)}">Remove from list</button>` : `<button class="btn small red" data-act="ack" data-u="${esc(e.uid)}">Mark attended</button>`}</div></div><div class="tm">${fT(e.t)}</div></div>`;
+}
+const needAdmin = what => { if (USER_ROLE === 'admin') return true; toast(`An administrator account is required to ${what}.`, 6000); return false; };
+/* Each press of SOS makes another record and the unit stays in SOS until all are attended, so they are attended together. */
+async function attendSos(u) {
+  if (!needAdmin('mark an SOS attended')) return;
+  const open = Object.entries(EVT).filter(([, e]) => e.type === 'sos' && e.uid === u && !e.ackBy), at = Date.now();
+  await Promise.all(open.map(([id]) => dbPatch(`events/${id}`, { ackBy: AU.email, ackAt: at })));
+  open.forEach(([, e]) => { e.ackBy = AU.email; e.ackAt = at; });
+  toast('SOS marked attended. The alert is cleared.'); schedule('force');
+}
+async function removeAttendedSos(u) {
+  if (!needAdmin('remove an SOS from the list')) return;
+  const done = Object.entries(EVT).filter(([, e]) => e.type === 'sos' && e.uid === u && e.ackBy && !e.cleared), at = Date.now();
+  await Promise.all(done.map(([id]) => dbPatch(`events/${id}`, { cleared: true, clearedBy: AU.email, clearedAt: at })));
+  done.forEach(([, e]) => { e.cleared = true; });
+  toast('SOS removed from the list.'); schedule('force');
+}
+async function attendReport(id) {
+  if (!needAdmin('mark a report attended')) return;
+  const at = Date.now();
+  await dbPatch(`events/${id}`, { ackBy: AU.email, ackAt: at });
+  if (EVT[id]) { EVT[id].ackBy = AU.email; EVT[id].ackAt = at; }
+  schedule('force');
+}
 function paneAlerts() {
   const ids = devIds();
   const sos = Object.entries(EVT).filter(([, e]) => e.type === 'sos' && !e.cleared && visible(e.uid) && Date.now() - e.t < 12 * HOUR).sort((a, b) => b[1].t - a[1].t);
-  let h = '<h3>Help requests (SOS)</h3>' + (sos.length ? sos.map(([id, e]) => `<div class="alert sos ${e.ackBy ? 'done' : ''}"><div class="ic">🆘</div><div class="tx"><b>${esc(dname(e.uid))}</b> pressed NEED HELP<br>${esc((DEV[e.uid] || {}).officer || '')} ${esc((DEV[e.uid] || {}).mobile || '')}${e.ackBy ? `<br><span class="note">Attended by ${esc(e.ackBy)} at ${fT(e.ackAt)}</span>` : e.dispUid ? `<br><span class="note">\uD83D\uDE93 Nearest unit <b>${esc(dname(e.dispUid))}</b> (${fKm(e.dispKm || 0)} away) auto-alerted at ${fT(e.dispAt)}</span>` : `<br><span class="note">Finding the nearest unit to send\u2026</span>`}
-    <div class="row">${(DEV[e.uid] || {}).mobile ? `<a class="btn small" href="tel:${esc(DEV[e.uid].mobile)}">Call</a>` : ''}${e.lat ? `<button class="btn small" data-act="goto" data-lat="${e.lat}" data-lng="${e.lng}">Show place</button><button class="btn small" data-act="incHere" data-lat="${e.lat}" data-lng="${e.lng}" data-name="SOS of ${esc(dname(e.uid))}">Send another unit</button>` : ''}${e.dispUid && !e.ackBy ? `<button class="btn small" data-act="sel" data-u="${e.dispUid}">Show sent unit</button>` : ''}${e.ackBy ? `<button class="btn small" data-act="sosClear" data-id="${id}">Remove from list</button>` : `<button class="btn small red" data-act="ack" data-id="${id}">Mark attended</button>`}</div></div><div class="tm">${fT(e.t)}</div></div>`).join('') : '<p class="note">None today.</p>');
+  // one card for a unit's open presses, and one for each time it was attended
+  const sosCards = new Map();
+  sos.forEach(([id, e]) => { const k = e.uid + '|' + (e.ackBy ? e.ackAt || id : ''); if (!sosCards.has(k)) sosCards.set(k, []); sosCards.get(k).push(e); });
+  let h = '<h3>Help requests (SOS)</h3>' + (sosCards.size ? [...sosCards.values()].map(sosCard).join('') : '<p class="note">None today.</p>');
+  const reports = reportList(), R = alertsMore('reports', reports);
+  h += `<h3>Reports from officers (${reports.length})</h3>` + (reports.length ? R.shown.map(reportCard).join('') + R.more : '<p class="note">Nothing yet. Turnout counts, situation reports, photos and voice messages sent from the app appear here.</p>');
   const prob = ids.map(u => ({ u, st: status(u), off: offRoute(u), L: LIVE[u] || {} })).filter(x => ['nosig', 'gpsoff', 'weak', 'stop'].includes(x.st.k) || x.off || (x.L.bat >= 0 && x.L.bat < 20 && !x.L.chg));
   const order = { nosig: 0, gpsoff: 1, weak: 3, stop: 2 };
   prob.sort((a, b) => (order[a.st.k] ?? 4) - (order[b.st.k] ?? 4));
-  h += `<h3>Needs attention now (${prob.length})</h3>` + (prob.length ? prob.map(x => `<div class="alert"><div class="ic" style="color:${x.st.c}">●</div><div class="tx"><b>${esc(dname(x.u))}</b> — ${esc(['move'].includes(x.st.k) ? '' : x.st.txt)}${x.off ? ` ${fKm(x.off)} away from its route's polling locations` : ''}${x.L.bat >= 0 && x.L.bat < 20 && !x.L.chg ? ` · battery ${x.L.bat}%, not charging` : ''}<br><span class="note">${esc(DEV[x.u].officer || '')} ${esc(DEV[x.u].mobile || '')} · last update ${ago(x.L.up)}</span>
-    <div class="row">${DEV[x.u].mobile ? `<a class="btn small" href="tel:${esc(DEV[x.u].mobile)}">Call</a>` : ''}<button class="btn small" data-act="sel" data-u="${x.u}">Show</button></div></div></div>`).join('') : '<p class="note">All phones are reporting normally.</p>');
-  const feed = Object.entries(EVT).filter(([, e]) => e.type !== 'sos' && e.t > alertClearTime() && (e.type === 'msg' ? (e.dev === '*' || visible(e.dev)) : visible(e.uid))).sort((a, b) => b[1].t - a[1].t).slice(0, 60);
-  const lbl = e => ({ votes: `votes polled at ${e.sname || ''}: ${e.n}`, start: 'started duty', blocked: `second phone BLOCKED (${e.mobile || ''} ${e.model || ''}) – route already active on ${e.holderMobile || 'another phone'}`, stop: 'stopped duty (PIN)', reached: 'reached the spot', ack: 'received the message', msg: (e.dev === '*' ? `broadcast to ${e.n || ''} vehicles: “` : 'message sent: “') + (e.text || '') + '”', loc: `reported ${e.sname || 'a polling location'}: ${String(e.status || '').toUpperCase()}${e.note ? ' – ' + e.note : ''}`, photo: 'sent a photo' + (e.note ? ': ' + e.note : '') }[e.type] || e.type);
-  h += '<h3>Activity today</h3>' + (feed.length ? `<div class="tw"><table class="t"><tbody>${feed.map(([, e]) => `<tr><td>${fT(e.t)}</td><td>${esc(e.dev === '*' ? (e.scope || 'All vehicles') : dname(e.type === 'msg' ? e.dev : e.uid))}</td><td>${esc(lbl(e))}${e.type === 'photo' && e.pid ? ` <button class="btn small" data-act="photo" data-pid="${esc(e.pid)}">View</button>` : ''}${e.type === 'msg' && e.voice ? ` <button class="btn small" data-act="voicePlay" data-id="${esc(e.voice)}">▶ Play</button>` : ''}</td></tr>`).join('')}</tbody></table></div>` : '<p class="note">Nothing yet.</p>');
+  const P = alertsMore('prob', prob);
+  h += `<h3>Needs attention now (${prob.length})</h3>` + (prob.length ? P.shown.map(x => `<div class="alert"><div class="ic" style="color:${x.st.c}">●</div><div class="tx"><b>${esc(dname(x.u))}</b> — ${esc(['move'].includes(x.st.k) ? '' : x.st.txt)}${x.off ? ` ${fKm(x.off)} away from its route's polling locations` : ''}${x.L.bat >= 0 && x.L.bat < 20 && !x.L.chg ? ` · battery ${x.L.bat}%, not charging` : ''}<br><span class="note">${esc(DEV[x.u].officer || '')} ${esc(DEV[x.u].mobile || '')} · last update ${ago(x.L.up)}</span>
+    <div class="row">${DEV[x.u].mobile ? `<a class="btn small" href="tel:${esc(DEV[x.u].mobile)}">Call</a>` : ''}<button class="btn small" data-act="sel" data-u="${x.u}">Show</button></div></div></div>`).join('') + P.more : '<p class="note">All phones are reporting normally.</p>');
+  const feed = Object.entries(EVT).filter(([, e]) => e.type !== 'sos' && !isReport(e) && e.t > alertClearTime() && (e.type === 'msg' ? (e.dev === '*' || visible(e.dev)) : visible(e.uid))).sort((a, b) => b[1].t - a[1].t).slice(0, 60);
+  const lbl = e => ({ start: 'started duty', blocked: `second phone BLOCKED (${e.mobile || ''} ${e.model || ''}) – route already active on ${e.holderMobile || 'another phone'}`, stop: 'stopped duty (PIN)', ack: 'received the message', msg: (e.dev === '*' ? `broadcast to ${e.n || ''} vehicles: “` : 'message sent: “') + (e.text || '') + '”' }[e.type] || e.type);
+  h += '<h3>Activity today</h3>' + (feed.length ? `<div class="tw"><table class="t"><tbody>${feed.map(([, e]) => `<tr><td>${fT(e.t)}</td><td>${esc(e.dev === '*' ? (e.scope || 'All vehicles') : dname(e.type === 'msg' ? e.dev : e.uid))}</td><td>${esc(lbl(e))}${e.type === 'msg' && e.voice ? ` <button class="btn small" data-act="voicePlay" data-id="${esc(e.voice)}">▶ Play</button>` : ''}</td></tr>`).join('')}</tbody></table></div>` : '<p class="note">Nothing yet.</p>');
   return h;
 }
 
@@ -5602,7 +5676,7 @@ function paneSetup() {
   const elSel = id => `<select id="${id}"><option value="">All elections (${allRoutes().length} routes)</option>${els.map(e => `<option value="${esc(e)}" ${e === ELEC() ? 'selected' : ''}>${esc(e)} (${allRoutes().filter(r => (r.election || '').trim() === e).length} routes)</option>`).join('')}</select>`;
   let h = sec('routes', `Routes (${R.length}${ELEC() ? ' — ' + esc(ELEC()) : ''})`, `<p class="note">Use Assign member to set the officer name, mobile number and password. The APK loads their assigned route after login. Routes marked Review coverage have proposed merges or splits; check their polling locations before assigning.</p>
     <div class="row"><label class="f" style="flex:1">Election <span class="u">(choose one: the list below and the phones show only that election's routes)</span>${elSel('setElec')}</label></div>
-    <div class="row"><button class="btn small" data-act="newElection">+ New election</button><button class="btn small" data-act="routeAdd">Add a route</button><button class="btn small" data-act="routeImport">Import from Excel</button><button class="btn small" data-act="trackTemplate">Download Excel format</button>${USER_ROLE === 'admin' ? '<button class="btn small primary" data-act="siMonitor">Create viewer login</button><button class="btn small" data-act="siManage">Manage viewer logins</button>' : ''}<button class="btn small red" data-act="routeClearAll">Remove shown routes</button>${ELEC() ? `<button class="btn small red" data-act="delElec">Delete election "${esc(ELEC())}"</button>` : ''}</div>
+    <div class="row"><button class="btn small" data-act="newElection">+ New election</button><button class="btn small" data-act="routeAdd">Add a route</button><button class="btn small" data-act="routeImport">Import from Excel</button><button class="btn small" data-act="trackTemplate">Download Excel format</button>${USER_ROLE === 'admin' ? '<button class="btn small primary" data-act="siMonitor">Create viewer login</button><button class="btn small" data-act="siManage">Manage viewer logins</button><button class="btn small" data-act="passwordsAll">Change all passwords</button>' : ''}<button class="btn small red" data-act="routeClearAll">Remove shown routes</button>${ELEC() ? `<button class="btn small red" data-act="delElec">Delete election "${esc(ELEC())}"</button>` : ''}</div>
     <div class="tw"><table class="t"><thead><tr><th>Election</th><th>Sub-division</th><th>PS</th><th>Route</th><th>Villages</th><th>Officer</th><th></th></tr></thead><tbody>${R.map(r => `<tr><td>${esc(r.election || '')}</td><td>${esc(r.sd)}</td><td>${esc(r.ps)}</td><td><b>${esc(r.route)}</b>${r.coverageStatus === 'proposed' ? '<br><span class="note" style="color:#a16207">Review coverage</span>' : ''}</td><td>${esc(r.villages || '')}</td><td>${esc(r.officer || '')} ${esc(r.mobile || '')}${r.vehicle ? '<br><span class="note">' + esc(r.vehicle) + '</span>' : ''}</td><td style="white-space:nowrap"><button class="btn small" data-act="routeQr" data-id="${r.id}">QR</button><button class="btn small" data-act="routeEdit" data-id="${r.id}">Edit</button>${USER_ROLE === 'admin' ? `<button class="btn small primary" data-act="memberAssign" data-id="${r.id}">Assign member</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="7" class="note">No routes yet.</td></tr>'}</tbody></table></div>`);
   h += sec('ps', `Polling locations (${stations().length})`, `<p class="note">Shown on the map, used for the incident search, the off-route alert and the "visited" check. Columns: Polling location, Latitude, Longitude, Sensitivity, Police station, Route No. One row per location, even if it has several booths.</p>
     <div class="row"><label class="f" style="flex:1">Election for these locations <span class="u">(the map shows the locations of the election chosen here)</span>${elSel('setElec2')}</label></div>
@@ -5762,6 +5836,12 @@ async function provisionMember(routeId, member) {
   if (!officer) throw new Error('Enter the officer name and rank.');
   if (!password || password.length < 8) throw new Error('Use a password with at least 8 characters.');
   if (route.memberUid && memberPhone(route.mobile) !== mobile) throw new Error('This route already has a member. Review that assignment before replacing it.');
+  const changing = member.changePassword === 'on', newPassword = member.newPassword || '';
+  if (changing) {
+    if (newPassword.length < 8) throw new Error('Use a new password with at least 8 characters.');
+    if (newPassword !== member.confirmPassword) throw new Error('The two new passwords do not match.');
+    if (newPassword === password) throw new Error('The new password must be different from the current one.');
+  }
   const email = 'phone' + mobile.slice(1) + '@members.track.invalid';
   let account;
   try { account = await memberAuth('signUp', { email, password, returnSecureToken: true }); }
@@ -5773,6 +5853,128 @@ async function provisionMember(routeId, member) {
   // Do not replace the administrator session with the member credentials.
   // On an uncertain save response, retain the account so retrying is safe.
   await saveMemberAssignment(routeId, { uid: account.localId, officer, mobile, coverageReviewed: member.coverageReviewed });
+  if (changing) {
+    try { await memberAuth('update', { idToken: account.idToken, password: newPassword, returnSecureToken: true }); }
+    catch (error) { throw new Error('The assignment was saved, but the password was not changed. ' + passwordFailure(error).message); }
+  }
+}
+/* ---------- changing passwords ----------
+   Firebase replaces a password only for someone signed in with the current one, or from a server with an administrator key, which this
+   site does not have. The old password stops working at once; the new one is held by Firebase and never saved in the database or this page.
+   A phone signed in with the old password stops sending within about an hour, until the officer signs out and signs in with the new one. */
+function passwordFailure(error) {
+  const code = String(error.code || error.message || '');
+  if (/^(INVALID_LOGIN_CREDENTIALS|INVALID_PASSWORD)/.test(code)) return new Error('Current password is wrong.');
+  if (/^EMAIL_NOT_FOUND/.test(code)) return new Error('No sign-in exists for this mobile number.');
+  if (/^USER_DISABLED/.test(code)) return new Error('This sign-in is disabled.');
+  if (/^WEAK_PASSWORD/.test(code)) return new Error('The new password does not meet the account password policy.');
+  if (/^TOO_MANY_ATTEMPTS/.test(code)) return Object.assign(new Error('Firebase has paused sign-ins after too many attempts. Wait a few minutes and try again.'), { stop: true });
+  return new Error(error.message || 'Could not change this password. Try again.');
+}
+async function changeMemberPassword(login, currentPassword, newPassword) {
+  if (newPassword.length < 8) throw new Error('Use a new password with at least 8 characters.');
+  if (newPassword === currentPassword) throw new Error('The new password must be different from the current one.');
+  try {
+    const session = await memberAuth('signInWithPassword', { email: login.email, password: currentPassword, returnSecureToken: true });
+    if (session.localId !== login.uid) throw new Error('This password belongs to a different account.');
+    await memberAuth('update', { idToken: session.idToken, password: newPassword, returnSecureToken: true });
+  } catch (error) { throw passwordFailure(error); }
+}
+const memberDigits = value => String(value || '').replace(/\D/g, '').slice(-10);
+async function passwordLogins() {
+  const [assignments, scopes] = await Promise.all([dbGet('assignments'), dbGet('siScopes')]);
+  const rows = [];
+  const add = (kind, uid, officer, where, mobile) => {
+    let email = '';
+    try { email = (kind === 'viewer' ? 'si' : 'phone') + memberPhone(mobile).slice(1) + '@members.track.invalid'; } catch (_) { }
+    const Lv = LIVE[uid] || {};
+    rows.push({ kind, uid, officer: officer || '', where: where || '', mobile: mobile || '', email, onDuty: kind === 'route' && Lv.duty === true && !!Lv.up && Date.now() - Lv.up < S().nosig * MIN });
+  };
+  Object.entries(assignments || {}).forEach(([uid, a]) => add('route', uid, a.officer, [a.ps, a.route].filter(Boolean).join(' · '), a.mobile));
+  Object.values(CONF.routes || {}).filter(r => r.memberUid && !(assignments || {})[r.memberUid]).forEach(r => add('route', r.memberUid, r.officer, [r.ps, r.route].filter(Boolean).join(' · '), r.mobile));
+  Object.entries(scopes || {}).forEach(([uid, x]) => add('viewer', uid, x.officer, x.mandal, x.mobile));
+  return rows.sort((a, b) => a.kind.localeCompare(b.kind) || NUM_COLLATOR.compare(a.where, b.where));
+}
+function randomPassword() {
+  const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';   // none that read alike, such as O and 0
+  return Array.from(crypto.getRandomValues(new Uint8Array(10)), n => letters[n % letters.length]).join('');
+}
+const PW_LOGIN = { route: 'Route app', viewer: 'Viewer' };
+async function changeAllPasswordsModal() {
+  if (await dbGet('roles/' + AU.uid) !== 'admin') throw new Error('Only a control-room administrator can change passwords.');
+  const rows = await passwordLogins(), onDuty = rows.filter(r => r.onDuty).length;
+  const modal = document.createElement('div'); modal.className = 'modal member-modal pw-modal';
+  modal.setAttribute('role', 'dialog'); modal.setAttribute('aria-modal', 'true'); modal.setAttribute('aria-labelledby', 'pwTitle');
+  modal.innerHTML = `<form class="card" novalidate><h2 id="pwTitle">Change all passwords</h2>
+    <p class="note">Each person's old password stops working at once and only the new one is kept. Firebase needs each person's current password to do this. If you no longer have someone's current password, that person cannot be changed here.</p>
+    <div class="banner warn"><b>Tell the officers first.</b> A phone signed in with the old password stops sending its location within about an hour, until the officer signs out of the app and signs in with the new password.${onDuty ? ` <b>${onDuty} phone${onDuty === 1 ? ' is' : 's are'} on duty now.</b>` : ''}</div>
+    <div class="pw-fill">
+      <label class="f">Current password <span class="u">(if everyone has the same one)</span><input type="password" data-fill-current autocomplete="off"></label>
+      <label class="f">New password <span class="u">(the same for everyone)</span><input type="text" data-fill-new autocomplete="off" placeholder="At least 8 characters"></label>
+      <div class="row"><button type="button" class="btn small" data-generate>Make a different new password for each person</button><button type="button" class="btn small" data-xl-out>Download list as Excel</button><button type="button" class="btn small" data-xl-in>Fill from Excel</button></div>
+    </div>
+    <div class="tw pw-list"><table class="t pw-table"><thead><tr><th><input type="checkbox" data-all checked aria-label="Select everyone"></th><th>Person</th><th>Mobile</th><th>Current password</th><th>New password</th><th>Result</th></tr></thead><tbody>${rows.map((r, i) => `<tr data-i="${i}"><td><input type="checkbox" data-pick ${r.email ? 'checked' : 'disabled'} aria-label="Change ${esc(r.officer || r.mobile)}"></td><td>${esc(r.officer || 'Name not entered')}<small>${esc(PW_LOGIN[r.kind])} · ${esc(r.where)}</small>${r.onDuty ? '<small class="pw-duty">On duty now</small>' : ''}</td><td>${esc(r.mobile)}</td><td><input type="password" data-current autocomplete="off" aria-label="Current password"></td><td><input type="text" data-new autocomplete="off" aria-label="New password"></td><td data-result>${r.email ? '' : '<span class="pw-bad">No valid mobile number</span>'}</td></tr>`).join('') || '<tr><td colspan="6" class="note">No member or viewer logins yet.</td></tr>'}</tbody></table></div>
+    <p class="note" data-progress role="status"></p><div class="err" role="alert"></div>
+    <div class="row" style="justify-content:flex-end"><button type="button" class="btn" data-download hidden>Download new passwords</button><button type="button" class="btn" data-close>Close</button><button type="submit" class="btn primary">Change passwords</button></div></form>`;
+  document.body.appendChild(modal);
+  const $m = q => modal.querySelector(q), trOf = i => $m(`tr[data-i="${i}"]`), err = $m('.err'), progress = $m('[data-progress]');
+  const open = () => rows.map((r, i) => ({ r, i, tr: trOf(i) })).filter(x => x.r.email && !x.r.done);
+  const picked = () => open().filter(x => x.tr.querySelector('[data-pick]').checked);
+  const fill = (sel, value) => picked().forEach(x => { x.tr.querySelector(sel).value = value; });
+  let running = false, downloaded = false;
+  $m('[data-fill-current]').oninput = e => fill('[data-current]', e.target.value);
+  $m('[data-fill-new]').oninput = e => fill('[data-new]', e.target.value);
+  $m('[data-all]').onchange = e => open().forEach(x => { x.tr.querySelector('[data-pick]').checked = e.target.checked; });
+  $m('[data-generate]').onclick = () => { $m('[data-fill-new]').value = ''; picked().forEach(x => { x.tr.querySelector('[data-new]').value = randomPassword(); }); };
+  $m('[data-xl-out]').onclick = () => xlsTemplate('TRACK-passwords.xlsx', ['Login', 'Name', 'Where', 'Mobile', 'Current password', 'New password'], rows.map(r => [PW_LOGIN[r.kind], r.officer, r.where, r.mobile, '', '']));
+  $m('[data-xl-in]').onclick = () => pickFile(async sheets => {
+    const sheet = sheets[0] || [], head = (sheet[0] || []).map(c => String(c).trim().toLowerCase()), col = name => head.indexOf(name);
+    if (col('mobile') < 0 || col('current password') < 0 || col('new password') < 0) throw new Error('The Excel needs the columns Mobile, Current password and New password.');
+    let filled = 0, unknown = 0;
+    sheet.slice(1).forEach(line => {
+      const mobile = memberDigits(line[col('mobile')]), login = col('login') < 0 ? '' : String(line[col('login')] || '').trim().toLowerCase();
+      if (!mobile) return;
+      const found = open().filter(x => memberDigits(x.r.mobile) === mobile && (!login || PW_LOGIN[x.r.kind].toLowerCase() === login));
+      if (!found.length) { unknown++; return; }
+      found.forEach(x => { x.tr.querySelector('[data-current]').value = String(line[col('current password')] ?? ''); x.tr.querySelector('[data-new]').value = String(line[col('new password')] ?? ''); });
+      filled++;
+    });
+    progress.textContent = `Filled ${filled} from Excel${unknown ? `; ${unknown} mobile number${unknown === 1 ? ' was' : 's were'} not found in this list` : ''}. Delete that Excel when you finish, because it holds passwords.`;
+  });
+  $m('[data-download]').onclick = () => { xlsTemplate('TRACK-new-passwords.xlsx', ['Login', 'Name', 'Where', 'Mobile', 'New password'], rows.filter(r => r.done).map(r => [PW_LOGIN[r.kind], r.officer, r.where, r.mobile, r.newPassword])); downloaded = true; };
+  $m('[data-close]').onclick = () => {
+    if (running) return;
+    if (rows.some(r => r.done) && !downloaded && !confirm('Close without downloading the new passwords? They cannot be shown again.')) return;
+    modal.remove();
+  };
+  $m('form').onsubmit = async e => {
+    e.preventDefault(); if (running) return;
+    err.textContent = ''; progress.textContent = '';
+    const todo = picked().map(x => ({ ...x, current: x.tr.querySelector('[data-current]').value, next: x.tr.querySelector('[data-new]').value.trim() }));
+    if (!todo.length) { err.textContent = 'Choose at least one person.'; return; }
+    const missing = todo.filter(x => !x.current || !x.next).length;
+    if (missing) { err.textContent = `Enter both passwords for ${missing} more ${missing === 1 ? 'person' : 'people'}, or untick them.`; return; }
+    const dutyNow = todo.filter(x => x.r.onDuty).length;
+    if (!confirm(`Change the password of ${todo.length} ${todo.length === 1 ? 'person' : 'people'}? The old passwords stop working at once.${dutyNow ? `\n\n${dutyNow} phone${dutyNow === 1 ? ' is' : 's are'} on duty and will stop sending location until signed in again.` : ''}`)) return;
+    running = true; const button = $m('[type=submit]'); button.disabled = true;
+    let changed = 0, failed = 0, stopped = '';
+    for (const [n, x] of todo.entries()) {
+      const cell = x.tr.querySelector('[data-result]');
+      if (stopped) { cell.innerHTML = '<span class="pw-bad">Not tried</span>'; continue; }
+      progress.textContent = `Changing ${n + 1} of ${todo.length}…`;
+      try {
+        await changeMemberPassword(x.r, x.current, x.next);
+        Object.assign(x.r, { done: true, newPassword: x.next }); changed++;
+        cell.innerHTML = '<span class="pw-ok">Changed</span>';
+        x.tr.querySelectorAll('input').forEach(input => { input.disabled = true; if (input.dataset.current !== undefined) input.value = ''; });
+      } catch (error) { failed++; cell.innerHTML = `<span class="pw-bad">${esc(error.message)}</span>`; if (error.stop) stopped = error.message; }
+    }
+    running = false; button.disabled = false;
+    progress.textContent = `${changed} changed${failed ? `, ${failed} not changed` : ''}.` + (changed ? ' Download the new passwords before closing; they cannot be shown again.' : '');
+    if (stopped) err.textContent = stopped;
+    $m('[data-download]').hidden = !rows.some(r => r.done);
+  };
+  $m('[data-fill-current]').focus();
 }
 async function memberModal(routeId) {
   if (await dbGet('roles/' + AU.uid) !== 'admin') throw new Error('Only a control-room administrator can assign members.');
@@ -5785,18 +5987,24 @@ async function memberModal(routeId) {
     <p class="note">Create the member’s login and assign this route. Give the member their mobile number and password; signing in on the APK shows their assigned route. Use one account per phone.</p>
     <label class="f">Officer name and rank<input name="officer" required value="${esc(r.officer || '')}"></label>
     <label class="f">Mobile number<input name="mobile" type="tel" required autocomplete="off" placeholder="10-digit mobile number" value="${esc(r.mobile || '')}"></label>
-    <label class="f">Password<input name="password" type="password" required minlength="8" autocomplete="new-password" placeholder="At least 8 characters"></label>
-    <p class="note">For an existing mobile login, enter its current password. Passwords are never displayed in the route list. Saving again does not change an existing password.</p>
+    <label class="f"><span data-password-label>${r.memberUid ? 'Current password' : 'Password'}</span><input name="password" type="password" required minlength="8" autocomplete="new-password" placeholder="At least 8 characters"></label>
+    <p class="note">For an existing mobile login, enter its current password. Passwords are never displayed in the route list.</p>
+    <label class="pw-change"><input type="checkbox" name="changePassword"> Change this person's password</label>
+    <div data-new-password hidden><label class="f">New password<input name="newPassword" type="password" minlength="8" autocomplete="new-password" placeholder="At least 8 characters"></label><label class="f">New password again<input name="confirmPassword" type="password" autocomplete="new-password"></label><p class="note">The old password stops working at once. Tell the officer to sign out of the app and sign in with the new password; until then the phone stops sending its location.</p></div>
+    <div class="row"><button class="btn small" type="button" data-all-passwords>Change all passwords…</button></div>
     <div class="err" role="alert"></div><div class="row" style="justify-content:space-between">${r.memberUid || r.officer || r.mobile ? '<button class="btn red" type="button" data-remove-person>Remove person</button>' : '<span></span>'}<span><button class="btn" type="button" data-close>Cancel</button><button class="btn primary" type="submit">Save assignment</button></span></div></form>`;
   document.body.appendChild(modal);
   modal.querySelector('[data-close]').onclick = () => modal.remove();
+  const changeBox = modal.querySelector('[name=changePassword]');
+  changeBox.onchange = () => { modal.querySelector('[data-new-password]').hidden = !changeBox.checked; if (changeBox.checked) modal.querySelector('[data-password-label]').textContent = 'Current password'; };
+  modal.querySelector('[data-all-passwords]').onclick = () => { modal.remove(); changeAllPasswordsModal().catch(showError); };
   if (r.memberUid || r.officer || r.mobile) modal.querySelector('[data-remove-person]').onclick = () => deletePersonModal(routeId, () => modal.remove()).catch(showError);
   modal.addEventListener('keydown', e => { if (e.key === 'Escape' && !modal.querySelector('[type=submit]').disabled) modal.remove(); });
   modal.querySelector('form').onsubmit = async e => {
     e.preventDefault(); const button = modal.querySelector('[type=submit]'); if (button.disabled) return;
     button.disabled = true; button.textContent = 'Saving…'; modal.querySelector('.err').textContent = '';
     const data = Object.fromEntries(new FormData(e.target));
-    try { await provisionMember(routeId, data); modal.remove(); toast('Member assigned. Use the mobile number and password on the APK.', 6000); }
+    try { await provisionMember(routeId, data); modal.remove(); toast(data.changePassword === 'on' ? 'Member assigned and password changed. The old password no longer works; the officer must sign in again on the APK.' : 'Member assigned. Use the mobile number and password on the APK.', 6000); }
     catch (error) { modal.querySelector('.err').textContent = error.message; }
     finally { button.disabled = false; button.textContent = 'Save assignment'; }
   };
@@ -6048,8 +6256,9 @@ document.addEventListener('click', async e => {
     else if (act === 'msg') msgModal(a.dataset.u);
     else if (act === 'editDev') devModal(a.dataset.u);
     else if (act === 'goto') { UI.tab = 'veh'; MAP.setView([+a.dataset.lat, +a.dataset.lng], 16); renderTabs(); renderPane(); }
-    else if (act === 'ack') { const id = a.dataset.id; await dbPatch(`events/${id}`, { ackBy: AU.email, ackAt: Date.now() }); const ev = EVT[id]; if (ev) { ev.ackBy = AU.email; ev.ackAt = Date.now(); } toast('SOS marked attended. The alert is cleared.'); schedule('force'); }
-    else if (act === 'sosClear') { const id = a.dataset.id; const ev = EVT[id]; if (!ev) return; if (!ev.ackBy) { if (!confirm('This SOS has not been marked attended. Remove it anyway?')) return; await dbPatch(`events/${id}`, { ackBy: AU.email, ackAt: Date.now() }); ev.ackBy = AU.email; ev.ackAt = Date.now(); } await dbPatch(`events/${id}`, { cleared: true, clearedBy: AU.email, clearedAt: Date.now() }); ev.cleared = true; toast('SOS removed from the list.'); schedule('force'); }
+    else if (act === 'ack') await attendSos(a.dataset.u);
+    else if (act === 'sosClear') await removeAttendedSos(a.dataset.u);
+    else if (act === 'alertsMore') { UI.alertsMore = UI.alertsMore || {}; UI.alertsMore[a.dataset.k] = !UI.alertsMore[a.dataset.k]; renderPane(); }
     else if (act === 'incHere') setIncident(+a.dataset.lat, +a.dataset.lng, a.dataset.name);
     else if (act === 'incMode') { UI.incMode = !UI.incMode; MAP.getContainer().style.cursor = UI.incMode ? 'crosshair' : ''; if (UI.incMode) { UI.tab = 'loc'; renderTabs(); toast('Click the incident place on the map'); } renderPane(); }
     else if (act === 'incClear') { UI.inc = null; LAYER_I.clearLayers(); renderPane(); }
@@ -6065,6 +6274,7 @@ document.addEventListener('click', async e => {
     else if (act === 'memberAssign') await memberModal(a.dataset.id);
     else if (act === 'siMonitor') await siMonitorModal();
     else if (act === 'siManage') await siManageModal();
+    else if (act === 'passwordsAll') await changeAllPasswordsModal();
     else if (act === 'delElec') {
       const name = ELEC(); if (!name) return;
       const R = allRoutes().filter(r => (r.election || '').trim().toLowerCase() === name.toLowerCase()), P = Object.entries(CONF.stations || {}).filter(([, x]) => (x.el || '').trim().toLowerCase() === name.toLowerCase());
@@ -6356,7 +6566,7 @@ function cover(id) {
   return { k: 'r', txt: `No visit for ${Math.floor(m / 60)} h ${Math.round(m % 60)} min`, c: '#c0392b' };
 }
 const sensRank = c => /hyper|critical/i.test(c || '') ? 2 : /sens|vulner/i.test(c || '') ? 1 : 0;
-const STAT_C = { normal: '#1e7b45', crowd: '#e0a800', tension: '#d35400', problem: '#c0392b' };
+const STAT_C = { normal: '#1e7b45', crowd: '#e0a800', tension: '#d35400', problem: '#c0392b', loc: '#1f5fa8' };
 /* latest report from a route mobile for each polling location (today) */
 function locStatus() {
   const out = {};
@@ -6386,7 +6596,7 @@ function drawStations() {
     const size = 28;
     const html = `<img class="polling-pin" src="assets/ballot.png" alt="" style="--visit-color:${cv.c}">${hot(r) ? `<span class="psw">⚠</span>` : ''}`;
     L.marker([+p.lat, +p.lng], { icon: L.divIcon({ html, className: 'polling-marker', iconSize: [size, size], iconAnchor: [size / 2, size / 2] }), zIndexOffset: hot(r) ? 500 : 0 })
-      .bindTooltip(`<b>${esc(p.name)}</b><br>${esc(p.cat || 'Normal')}${p.ps ? ' · ' + esc(p.ps) : ''}${p.route ? ' · ' + esc(p.route) : ''}${p.coordinateNote ? `<br><b>${esc(p.coordinateNote)}</b>` : ''}<br><span style="color:${cv.c}">●</span> ${esc(cv.txt)}${v && v.by ? ' by ' + esc(dshort(v.by)) : ''}${v ? ` · ${v.n} visit${v.n === 1 ? '' : 's'} today` : ''}${r ? `<br><b style="color:${STAT_C[r.status] || '#333'}">${esc(String(r.status).toUpperCase())}</b> at ${fT(r.t)}${r.note ? ' – ' + esc(r.note) : ''}` : ''}${typeof voteTip === 'function' ? voteTip(p) : ''}`)
+      .bindTooltip(`<b>${esc(p.name)}</b><br>${esc(p.cat || 'Normal')}${p.ps ? ' · ' + esc(p.ps) : ''}${p.route ? ' · ' + esc(p.route) : ''}${p.coordinateNote ? `<br><b>${esc(p.coordinateNote)}</b>` : ''}<br><span style="color:${cv.c}">●</span> ${esc(cv.txt)}${v && v.by ? ' by ' + esc(dshort(v.by)) : ''}${v ? ` · ${v.n} visit${v.n === 1 ? '' : 's'} today` : ''}${r ? `<br><b style="color:${STAT_C[r.status] || '#333'}">${esc(reportTxt(r.status).toUpperCase())}</b> at ${fT(r.t)}${r.note ? ' – ' + esc(r.note) : ''}` : ''}${typeof voteTip === 'function' ? voteTip(p) : ''}`)
       .on('click', () => { UI.tab = 'loc'; UI.locSel = p.id; renderTabs(); renderPane(); })
       .addTo(LAYER_S);
   });
@@ -6415,6 +6625,10 @@ function paneLoc() {
   const btn = (k, t) => `<button class="btn small ${f === k ? 'primary' : ''}" data-act="locF" data-f="${k}">${t}</button>`;
   let h = `<div class="tally3"><div style="background:#e6f4ea"><b>${n.g}</b><span>visited in ${S().green} min</span></div><div style="background:#fff6dd"><b>${n.y}</b><span>${S().green}–${S().red} min</span></div><div style="background:#fdecea"><b>${n.r}</b><span>no visit ${S().red}+ min</span></div></div>
     <div class="row">${btn('r', 'Red only')}${btn('y', 'Red + yellow')}${btn('hot', `Reported problems (${reports.length})`)}${btn('all', 'All')}${btn('geo', 'Verify coordinates')}${btn('votes', '🗳 Poll %')}<button class="btn small" data-act="turnoutPdf" title="Download the poll percentage for each polling location">Download PDF</button></div>`;
+  const Tall = turnout(all, VV);
+  if (f !== 'votes' && Tall.rep) h += turnoutButton(Tall, 'data-act="locF" data-f="votes"');
+  const noBooths = routesWithoutBooths();
+  if (noBooths.length) h += `<div class="banner warn"><b>${noBooths.length} assigned route${noBooths.length === 1 ? ' has' : 's have'} no polling locations on the phone,</b> so the app's Polling page cannot send turnout for ${noBooths.length === 1 ? 'it' : 'them'}. A polling location's police station and route names must match the route exactly, and the officer must sign in again after a change: ${esc(noBooths.slice(0, 8).map(r => r.ps + ' · ' + r.route).join(', '))}${noBooths.length > 8 ? ` and ${noBooths.length - 8} more` : ''}.</div>`;
   const needsVerification = all.filter(p => !mappableStation(p));
   if (needsVerification.length) h += `<div class="banner warn"><b>${needsVerification.length} polling locations need coordinate verification.</b> They remain in this list and are not placed at uncertain positions on the map.</div>`;
   if (f === 'votes' && typeof turnout === 'function') {
@@ -6428,7 +6642,7 @@ function paneLoc() {
     return `<div class="veh ${UI.locSel === x.p.id ? 'sel' : ''}" style="border-left-color:${x.cv.c}" ${mappableStation(x.p) ? `data-act="locGo" data-id="${x.p.id}"` : ''}>
       <div class="l1"><span>${x.rk === 2 ? '◆ ' : ''}${esc(x.p.name)}</span><span class="st" style="color:${mappableStation(x.p) ? x.cv.c : '#b9770e'}">${mappableStation(x.p) ? esc(x.cv.txt) : 'Verify coordinates'}</span></div>
       <div class="l2"><span>${esc(x.p.cat || 'Normal')} · ${esc(x.p.ps || '')} ${esc(x.p.route || '')}</span><span>${x.v ? x.v.n + (x.v.n === 1 ? ' visit' : ' visits') : ''}</span></div>
-      ${x.r ? `<div class="l2"><span style="color:${STAT_C[x.r.status]};font-weight:700">${esc(x.r.status.toUpperCase())}${x.r.note ? ' – ' + esc(x.r.note) : ''}</span><span>${fT(x.r.t)} · ${esc(dshort(x.r.uid))}</span></div>` : ''}
+      ${x.r ? `<div class="l2"><span style="color:${STAT_C[x.r.status]};font-weight:700">${esc(reportTxt(x.r.status).toUpperCase())}${x.r.note ? ' – ' + esc(x.r.note) : ''}</span><span>${fT(x.r.t)} · ${esc(dshort(x.r.uid))}</span></div>` : ''}
       ${typeof voteLine === 'function' ? voteLine(x.p) : ''}
       <div class="acts">${mappableStation(x.p) ? devs.map(u => `<button class="btn small" data-act="locSend" data-u="${u}" data-id="${x.p.id}">Ask ${esc(dshort(u))} to visit</button>`).join('') + `<button class="btn small" data-act="locInc" data-id="${x.p.id}">Make incident</button>` : `<button class="btn small" data-act="psEdit" data-id="${x.p.id}">✏ Verify coordinates</button>`}${hot(x.r) ? `<button class="btn small" data-act="locAck" data-eid="${x.r.id}">Mark attended</button>` : ''}</div></div>`;
   }).join('') || '<p class="note">None.</p>';
@@ -6466,7 +6680,10 @@ function closeIncidentDialog(id) {
       await dbPatch(`incidents/${id}`, p);
       Object.assign(current, p);
       const linked = linkedReportForIncident(current);
-      if (linked && EVT[linked] && hot(EVT[linked])) {
+      if (linked && EVT[linked] && EVT[linked].type === 'sos') {
+        try { await attendSos(EVT[linked].uid); }
+        catch (err) { toast('Incident closed, but the SOS still needs attendance: ' + err.message, 7000); }
+      } else if (linked && EVT[linked] && hot(EVT[linked])) {
         try { await dbPatch(`events/${linked}`, { ackBy: AU.email, ackAt: p.closedAt }); EVT[linked].ackBy = AU.email; }
         catch (err) { toast('Incident closed, but the polling alert still needs attendance: ' + err.message, 7000); }
       }
@@ -6665,13 +6882,14 @@ function pollAlerts() {
   Object.entries(EVT).forEach(([id, e]) => {
     if (SEEN_POLL.has(id)) return; SEEN_POLL.add(id);
     if (pollFirst || Date.now() - e.t > 15 * MIN) return;
-    if (e.type === 'loc' && (e.status === 'tension' || e.status === 'problem') && wantNote('report')) { beep(4); notify(`${e.status.toUpperCase()} – ${e.sname || ''}`, `${dname(e.uid)}${e.note ? ': ' + e.note : ''}`, 'report'); toast(`${e.status.toUpperCase()} reported at ${e.sname} by ${dname(e.uid)}`, 8000); }
+    if (e.type === 'loc' && (e.status === 'tension' || e.status === 'problem') && wantNote('report')) { beep(4); notify(`${e.status.toUpperCase()} – ${e.sname || dname(e.uid)}`, `${dname(e.uid)}${e.note ? ': ' + e.note : ''}`, 'report'); toast(`${e.status.toUpperCase()} reported${e.sname ? ' at ' + e.sname : ''} by ${dname(e.uid)}`, 8000); }
+    else if (isReport(e) && !urgentReport(e) && e.type !== 'photo' && e.type !== 'reached' && e.status !== 'normal') toast(`${dname(e.uid)}: ${reportLine(e)}`, 6000);
     if (e.type === 'photo') { if (typeof photoToast === 'function') { if (wantNote('photo')) { beep(2); notify('Photo received', dname(e.uid), 'photo'); } photoToast(e); } else toast(`Photo received from ${dname(e.uid)}`); }
   });
   pollFirst = false;
 }
 const _alertCount = alertCount;
-alertCount = function () { const LS_ = locStatus(); return _alertCount() + stations().filter(p => hot(LS_[p.id])).length; };
+alertCount = function () { const LS_ = locStatus(); return _alertCount() + stations().filter(p => hot(LS_[p.id])).length + Object.values(EVT).filter(e => urgentReport(e) && !e.sid && hot(e) && visible(e.uid)).length; };
 const _paneVeh = paneVeh;
 paneVeh = function () { return (Object.keys(DEV).length ? `<div class="row"><button class="btn small primary" data-act="bcast">Message to all${UI.fPs ? ' in ' + esc(UI.fPs) : UI.fSd ? ' in ' + esc(UI.fSd) : ''}</button></div>` : '') + _paneVeh(); };
 
@@ -6681,8 +6899,8 @@ document.addEventListener('click', async e => {
     if (act === 'locF') { UI.locF = a.dataset.f; renderPane(); }
     else if (act === 'locGo') { if (e.target.closest('button') && e.target.closest('button') !== a) return; const p = stations().find(x => x.id === a.dataset.id); if (mappableStation(p)) { UI.locSel = p.id; MAP.setView([+p.lat, +p.lng], Math.max(MAP.getZoom(), 16)); if (UI.tab !== 'loc') { UI.tab = 'loc'; renderTabs(); } renderPane(); } else toast('Verify coordinates before opening this location on the map.'); }
     else if (act === 'locSend') { e.stopPropagation(); const p = stations().find(x => x.id === a.dataset.id); if (!mappableStation(p)) { toast('Verify coordinates before sending a map link.'); return; } msgModal(a.dataset.u, `Visit ${p.name} now and report its status (REPORT AT POLLING LOCATION). Map: https://maps.google.com/?q=${(+p.lat).toFixed(5)},${(+p.lng).toFixed(5)}`); }
-    else if (act === 'locInc') { e.stopPropagation(); const p = stations().find(x => x.id === a.dataset.id); if (!mappableStation(p)) { toast('Verify coordinates before making an incident here.'); return; } const r = locStatus()[p.id]; await createIncident(+p.lat, +p.lng, p.name, r && r.status !== 'normal' ? `${r.status.toUpperCase()} reported by ${dname(r.uid)}${r.note ? ': ' + r.note : ''}` : '', r && r.status !== 'normal' ? r.id : ''); }
-    else if (act === 'locAck') { e.stopPropagation(); await dbPatch(`events/${a.dataset.eid}`, { ackBy: AU.email, ackAt: Date.now() }); const ev = EVT[a.dataset.eid]; if (ev) { ev.ackBy = AU.email; } schedule('force'); }
+    else if (act === 'locInc') { e.stopPropagation(); const p = stations().find(x => x.id === a.dataset.id); if (!mappableStation(p)) { toast('Verify coordinates before making an incident here.'); return; } const r = locStatus()[p.id]; await createIncident(+p.lat, +p.lng, p.name, r && r.status !== 'normal' ? `${reportTxt(r.status).toUpperCase()} reported by ${dname(r.uid)}${r.note ? ': ' + r.note : ''}` : '', r && r.status !== 'normal' ? r.id : ''); }
+    else if (act === 'locAck') { e.stopPropagation(); await attendReport(a.dataset.eid); }
     else if (act === 'incCreate') { const d = ($('#incDesc') || {}).value || ''; await createIncident(UI.inc.lat, UI.inc.lng, UI.inc.name, d.trim()); }
     else if (act === 'incPick') { UI.incSel = a.dataset.id; UI.incVehiclesVisible = 3; renderPane(); const x = INC[a.dataset.id]; if (x) MAP.setView([x.lat, x.lng], Math.max(MAP.getZoom(), 14)); }
     else if (act === 'incDeselect') { UI.incSel = null; renderPane(); }
@@ -6754,7 +6972,7 @@ function drawGroups(ids) {
 }
 function timeline() {
   const ev = [];
-  Object.values(EVT).forEach(e => { if (dayKey(e.t) !== TODAY || !visible(e.uid)) return; if (e.type === 'sos') ev.push([e.t, 0, '#c0392b', 'SOS ' + dname(e.uid)]); else if (e.type === 'loc' && e.status !== 'normal' && !e.ackBy) ev.push([e.t, 1, STAT_C[e.status] || '#d35400', `${e.status} – ${e.sname}`]); });
+  Object.values(EVT).forEach(e => { if (dayKey(e.t) !== TODAY || !visible(e.uid)) return; if (e.type === 'sos') ev.push([e.t, 0, '#c0392b', 'SOS ' + dname(e.uid)]); else if (e.type === 'loc' && e.status !== 'normal' && !e.ackBy) ev.push([e.t, 1, STAT_C[e.status] || '#d35400', `${reportTxt(e.status)} – ${e.sname || dname(e.uid)}`]); });
   Object.values(INC).forEach(x => { if (dayKey(x.t) === TODAY && x.status !== 'closed') ev.push([x.t, 2, '#1f5fa8', `Incident ${x.no} – ${x.place}`]); });
   if (!ev.length) return '';
   const d0 = dayStart(Date.now()), h0 = Math.min(6, ...ev.map(e => new Date(e[0]).getHours())), h1 = Math.max(19, new Date().getHours() + 1);
@@ -6775,7 +6993,7 @@ function ticker() {
   Object.values(EVT).forEach(e => {
     if (dayKey(e.t) !== TODAY || !visible(e.uid)) return;
     if (e.type === 'sos') items.push([e.t, `🆘 SOS – ${dname(e.uid)}`]);
-    else if (e.type === 'loc' && !e.ackBy) items.push([e.t, `${e.status === 'normal' ? '✅' : '⚠'} ${e.sname}: ${String(e.status).toUpperCase()}${e.note ? ' – ' + e.note : ''} (${dshort(e.uid)})`]);
+    else if (e.type === 'loc' && !e.ackBy) items.push([e.t, `${e.status === 'normal' ? '✅' : '⚠'} ${e.sname || dshort(e.uid)}: ${reportTxt(e.status).toUpperCase()}${e.note ? ' – ' + e.note : ''} (${dshort(e.uid)})`]);
     else if (e.type === 'reached') items.push([e.t, `🚓 ${dname(e.uid)} reached the spot`]);
     else if (e.type === 'votes') items.push([e.t, `🗳 ${e.sname}: ${fmtN(e.n)} votes polled`]);
     else if (e.type === 'photo') items.push([e.t, `📷 Photo from ${dname(e.uid)}`]);
@@ -6843,9 +7061,18 @@ function voteTip(p) {
 function votesSig() { const V = votes(); return Object.keys(V.last).map(k => k + V.last[k].n).join(); }
 function psTurn(list) { const T = turnout(list, votes()); return T.pct != null ? ' · ' + pctTxt(T.pct) : ''; }
 
-/* turnout card on the Summary: big %, hourly line, fast-rise list */
+function turnoutButton(T, attrs) {
+  return `<button type="button" class="ps-turnout" ${attrs}><span>🗳 ${T.pct == null ? 'Votes polled' : 'Poll percentage'}</span><b>${T.pct == null ? fmtN(T.n) : pctTxt(T.pct)}</b><em>${fmtN(T.n)} votes${T.tot ? ` of ${fmtN(T.tot)} voters` : ''} · ${T.rep} of ${T.all} locations reported${T.latest ? ` · latest ${fT(T.latest)}` : ''}</em></button>`;
+}
+/* The phone lists a polling location only when its police station and route names match the route's exactly. */
+function routesWithoutBooths() {
+  const sites = Object.values(CONF.stations || {});
+  return routes().filter(r => r.memberUid && visible2(r) && !sites.some(p => p.ps === r.ps && p.route === r.route));
+}
+/* turnout card on the big screen Summary */
 function turnoutCard() {
-  return '';
+  const T = turnout(stations().filter(p => !UI.fPs || p.ps === UI.fPs), votes());
+  return T.rep ? turnoutButton(T, 'data-act="pollOpts"') : '';
 }
 const _paneSumV = paneSum;
 paneSum = function () { const h = _paneSumV(); const c = turnoutCard(); return c ? h.replace('<div class="tiles">', c + '<div class="tiles">') : h; };
@@ -7031,10 +7258,10 @@ function photoStrip() {
     const p = PHC[e.pid];
     const img = typeof p === 'object' ? `<img src="data:image/jpeg;base64,${p.img}" alt="">` : `<div class="phph">${p === 'error' ? 'Slow network – tap to open' : 'Loading…'}</div>`;
     return `<button type="button" class="phcard" data-act="photo" data-pid="${esc(e.pid)}" title="Open photo">${img}<b>${esc(dname(e.uid))}</b><span>${fT(e.t)}${e.note ? ' · ' + esc(e.note) : ''}</span></button>`;
-  }).join('')}</div>${all.length > list.length ? `<p class="note">Showing the latest 12. Older photos are in "Activity today" below.</p>` : ''}`;
+  }).join('')}</div>${all.length > list.length ? `<p class="note">Showing the latest 12. Older photos are in "Reports from officers" above.</p>` : ''}`;
 }
 const _paneAlertsPh = paneAlerts;
-paneAlerts = function () { return `<div class="alerts-toolbar"><div><h2>Alerts</h2><p>Current issues and activity</p></div><button type="button" class="btn small" data-act="alertsClearAll">Clear all</button></div>` + photoStrip() + _paneAlertsPh(); };
+paneAlerts = function () { return `<div class="alerts-toolbar"><div><h2>Alerts</h2><p>Current issues and activity</p></div><button type="button" class="btn small" data-act="alertsClearAll">Clear all</button></div>` + _paneAlertsPh().replace('<h3>Needs attention', () => photoStrip() + '<h3>Needs attention'); };
 document.addEventListener('click', async e => {
   const button = e.target.closest && e.target.closest('[data-act="alertsClearAll"]');
   if (!button) return;
@@ -7520,25 +7747,29 @@ function checkBigAlerts() {
   Object.entries(EVT).forEach(([id, e]) => {
     if (ALERT_SEEN.has(id)) return; ALERT_SEEN.add(id);
     if (alertFirst || Date.now() - e.t > 10 * MIN || !visible(e.uid)) return;
-    if (e.type === 'sos') ALERTQ.push({ id, kind: 'SOS – NEED HELP', icon: '🆘', col: '#c0392b', title: dname(e.uid), text: `${esc((DEV[e.uid] || {}).officer || '')} ${esc((DEV[e.uid] || {}).mobile || '')}`, lat: e.lat, lng: e.lng, mob: (DEV[e.uid] || {}).mobile, t: e.t });
+    if (e.type === 'sos') ALERTQ.push({ id, uid: e.uid, kind: 'SOS – NEED HELP', icon: '🆘', col: '#c0392b', title: dname(e.uid), text: `${esc((DEV[e.uid] || {}).officer || '')} ${esc((DEV[e.uid] || {}).mobile || '')}`, lat: e.lat, lng: e.lng, mob: (DEV[e.uid] || {}).mobile, t: e.t });
     if (e.type === 'loc' && (e.status === 'tension' || e.status === 'problem')) ALERTQ.push({ id, kind: e.status === 'problem' ? 'PROBLEM AT POLLING LOCATION' : 'TENSION AT POLLING LOCATION', icon: '⚠️', col: e.status === 'problem' ? '#c0392b' : '#d35400', title: e.sname || 'Polling location', text: `${esc(e.note || '')}<br><span class="note">Reported by ${esc(dname(e.uid))}</span>`, lat: e.lat, lng: e.lng, mob: (DEV[e.uid] || {}).mobile, t: e.t, sid: e.sid });
   });
   alertFirst = false;
-  if (ALERTQ.length && !$('.bigalert')) showBigAlert(ALERTQ.shift());
+  if (!$('.bigalert')) nextBigAlert();
+}
+function nextBigAlert() {
+  while (ALERTQ.length) { const a = ALERTQ.shift(); if (!(EVT[a.id] || {}).ackBy) { showBigAlert(a); return; } }
 }
 function showBigAlert(a) {
   siren(3);
   const m = document.createElement('div'); m.className = 'bigalert';
   m.innerHTML = `<div class="ba-card" style="--c:${a.col}"><div class="ba-top"><span>${a.icon}</span>${esc(a.kind)}<em>${fT(a.t)}</em></div>
     <div class="ba-body"><b>${esc(a.title)}</b><div>${a.text}</div></div>
-    <div class="ba-acts">${a.lat ? '<button class="btn primary" data-ba="show">Show on map</button>' : ''}${a.mob ? `<a class="btn" href="tel:${esc(a.mob)}">Call officer</a>` : ''}${a.lat ? '<button class="btn" data-ba="inc">Make incident</button>' : ''}<button class="btn" data-ba="close">Close</button></div>
+    <div class="ba-acts">${a.lat ? '<button class="btn primary" data-ba="show">Show on map</button>' : ''}${a.mob ? `<a class="btn" href="tel:${esc(a.mob)}">Call officer</a>` : ''}${a.lat ? '<button class="btn" data-ba="inc">Make incident</button>' : ''}<button class="btn red" data-ba="ack">Mark attended</button><button class="btn" data-ba="close">Close</button></div>
     ${ALERTQ.length ? `<div class="note" style="text-align:center;margin-top:6px">${ALERTQ.length} more alert${ALERTQ.length > 1 ? 's' : ''} waiting</div>` : ''}</div>`;
   document.body.appendChild(m);
   m.addEventListener('click', async e => {
     const b = e.target.closest('[data-ba]'); if (!b) return;
     if (b.dataset.ba === 'show') MAP.setView([a.lat, a.lng], 16);
-    if (b.dataset.ba === 'inc') { try { await createIncident(a.lat, a.lng, a.title, a.kind + (a.text ? ': ' + a.text.replace(/<[^>]+>/g, ' ').trim() : '')); } catch (er) { toast(er.message, 6000); } }
-    m.remove(); if (ALERTQ.length) setTimeout(() => showBigAlert(ALERTQ.shift()), 400);
+    if (b.dataset.ba === 'inc') { try { await createIncident(a.lat, a.lng, a.title, a.kind + (a.text ? ': ' + a.text.replace(/<[^>]+>/g, ' ').trim() : ''), a.id); } catch (er) { toast(er.message, 6000); } }
+    if (b.dataset.ba === 'ack') { try { await (a.uid ? attendSos(a.uid) : attendReport(a.id)); } catch (er) { toast(er.message, 6000); return; } if (USER_ROLE !== 'admin') return; }
+    m.remove(); if (ALERTQ.length) setTimeout(nextBigAlert, 400);
   });
 }
 
@@ -7744,7 +7975,12 @@ const tile = (lbl, v, c, ic) => `<div class="mt" style="--c:${c}"><span>${lbl}</
 function dashPs() {
   const all = stations().filter(p => (!UI.fPs || p.ps === UI.fPs) && (!UI.fSd || !routes().length || routes().some(r => r.ps === p.ps && r.sd === UI.fSd)));
   let hy = 0, se = 0; all.forEach(p => { const c = String(p.cat || '').toLowerCase(); if (/hyper/.test(c)) hy++; else if (/sensit|critical/.test(c)) se++; });
-  return `<div class="mts">${tile('Total', all.length, '#1f6fd1', '🏫')}${tile('Normal', all.length - hy - se, '#1e9e57', '✔')}${tile('Sensitive', se, '#f0a500', '!')}${tile('Hyper sensitive', hy, '#e0413a', '⚠')}</div>`;
+  return `<div class="mts">${tile('Total', all.length, '#1f6fd1', '🏫')}${tile('Normal', all.length - hy - se, '#1e9e57', '✔')}${tile('Sensitive', se, '#f0a500', '!')}${tile('Hyper sensitive', hy, '#e0413a', '⚠')}</div>${dashPolling(all)}`;
+}
+function dashPolling(list) {
+  const T = turnout(list, votes()), latest = reportList().filter(([, e]) => e.type === 'votes' || e.type === 'loc').slice(0, 3);
+  return (T.rep ? turnoutButton(T, 'data-act="pollOpts"') : '<p class="note ps-empty">No turnout reported yet today.</p>')
+    + (latest.length ? `<ul class="ps-reports">${latest.map(([, e]) => `<li class="${urgentReport(e) && !e.ackBy ? 'urgent' : ''}"><span><b>${esc(dshort(e.uid))}</b> ${esc(reportLine(e))}</span><time>${fT(e.t)}</time></li>`).join('')}</ul><button type="button" class="lnk ps-all" data-tab="alerts">All reports ›</button>` : '');
 }
 function dashRoutes() {
   const R = routes().filter(r => visible2(r) && (!UI.fForce || (r.force || 'route') === UI.fForce));
