@@ -1836,9 +1836,9 @@ test('change passwords can search and select one police station', async ({ page 
   page.on('dialog', dialog => { dialogs.push(dialog.message()); dialog.accept(); });
   const modal = await openChangeAll(page);
   await modal.getByLabel('Search PS').fill('raja');
-  await expect(modal.locator('[data-ps-select] option')).toHaveText(['All police stations', 'Rajamahendravaram PS']);
+  await expect(modal.locator('[data-ps-select] option')).toHaveText(['All logins (including viewers)', 'All route officers (all PS)', 'Rajamahendravaram PS']);
   await modal.getByLabel('Select PS').selectOption('Rajamahendravaram PS');
-  await expect(modal.locator('[data-scope-count]')).toContainText('Only this PS is selected');
+  await expect(modal.locator('[data-scope-count]')).toContainText('Only eligible logins at this PS are selected');
   await expect(pwRow(modal, '9000000004')).toBeVisible();
   await expect(pwRow(modal, '9000000001')).toBeHidden();
   await expect(pwRow(modal, '9000000003')).toBeHidden();
@@ -1852,6 +1852,10 @@ test('change passwords can search and select one police station', async ({ page 
   expect(accounts['phone919000000001@members.track.invalid'].password).toBe('Old-password-1');
   await modal.getByLabel('Select PS').selectOption('');
   await expect(pwRow(modal, '9000000001')).toBeVisible();
+  await modal.getByLabel('Select PS').selectOption('__all_routes__');
+  await expect(modal.locator('[data-scope-count]')).toContainText('4 route officers');
+  await expect(pwRow(modal, '9000000003')).toBeHidden();
+  await expect(pwRow(modal, '9000000001').locator('[data-pick]')).toBeChecked();
 });
 
 test('change all passwords stops when Firebase pauses sign-ins', async ({ page }) => {

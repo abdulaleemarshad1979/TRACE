@@ -5916,10 +5916,12 @@ function randomPassword() {
   return Array.from(crypto.getRandomValues(new Uint8Array(10)), n => letters[n % letters.length]).join('');
 }
 const PW_LOGIN = { route: 'Route app', viewer: 'Viewer' };
+const PW_ALL_ROUTES = '__all_routes__';
 async function changeAllPasswordsModal() {
   if (await dbGet('roles/' + AU.uid) !== 'admin') throw new Error('Only a control-room administrator can change passwords.');
   const rows = await passwordLogins(), onDuty = rows.filter(r => r.onDuty).length;
   const stations = [...new Set(rows.filter(r => r.kind === 'route' && r.ps).map(r => r.ps))].sort(NUM_COLLATOR.compare);
+  const routeCount = rows.filter(r => r.kind === 'route').length;
   const modal = document.createElement('div'); modal.className = 'modal member-modal pw-modal';
   modal.setAttribute('role', 'dialog'); modal.setAttribute('aria-modal', 'true'); modal.setAttribute('aria-labelledby', 'pwTitle');
   modal.innerHTML = `<form class="card" novalidate><h2 id="pwTitle">Change all passwords</h2>
@@ -5927,7 +5929,7 @@ async function changeAllPasswordsModal() {
     <div class="banner warn"><b>Tell the officers first.</b> A phone signed in with the old password stops sending its location within about an hour, until the officer signs out of the app and signs in with the new password. <b data-duty-count>${onDuty ? `${onDuty} phone${onDuty === 1 ? ' is' : 's are'} on duty now.` : ''}</b></div>
     <div class="pw-scope">
       <label class="f">Search PS<input type="search" data-ps-search autocomplete="off" placeholder="Type a police station name"></label>
-      <label class="f">Select PS<select data-ps-select><option value="">All police stations</option>${stations.map(ps => `<option value="${esc(ps)}">${esc(ps)}</option>`).join('')}</select></label>
+      <label class="f">Select PS<select data-ps-select><option value="">All logins (including viewers)</option><option value="${PW_ALL_ROUTES}">All route officers (all PS)</option>${stations.map(ps => `<option value="${esc(ps)}">${esc(ps)}</option>`).join('')}</select></label>
       <p class="note" data-scope-count role="status"></p>
     </div>
     <div class="pw-fill">
@@ -5946,6 +5948,7 @@ async function changeAllPasswordsModal() {
   const fill = (sel, value) => picked().forEach(x => { x.tr.querySelector(sel).value = value; });
   let running = false, downloaded = false;
   let selectedPs = '';
+  const inScope = r => !selectedPs || (r.kind === 'route' && (selectedPs === PW_ALL_ROUTES || r.ps === selectedPs));
   const updateAll = () => {
     const shown = visible();
     $m('[data-all]').checked = shown.length > 0 && shown.every(x => x.tr.querySelector('[data-pick]').checked);
@@ -5953,12 +5956,12 @@ async function changeAllPasswordsModal() {
   };
   const applyStation = () => {
     rows.forEach((r, i) => {
-      const tr = trOf(i), shown = !selectedPs || (r.kind === 'route' && r.ps === selectedPs);
+      const tr = trOf(i), shown = inScope(r);
       tr.hidden = !shown;
       tr.querySelector('[data-pick]').checked = shown && !!r.email && !r.done;
     });
-    const shown = rows.filter(r => !selectedPs || (r.kind === 'route' && r.ps === selectedPs));
-    $m('[data-scope-count]').textContent = selectedPs ? `Showing ${shown.length} ${shown.length === 1 ? 'person' : 'people'} at ${selectedPs}. Only this PS is selected for password changes.` : `Showing all ${rows.length} logins.`;
+    const shown = rows.filter(inScope);
+    $m('[data-scope-count]').textContent = selectedPs === PW_ALL_ROUTES ? `Showing ${shown.length} route officers across ${stations.length} PS. Eligible route logins are selected.` : selectedPs ? `Showing ${shown.length} ${shown.length === 1 ? 'person' : 'people'} at ${selectedPs}. Only eligible logins at this PS are selected for password changes.` : `Showing all ${rows.length} logins: ${routeCount} route officers and ${rows.length - routeCount} viewers.`;
     const duty = shown.filter(r => r.onDuty).length;
     $m('[data-duty-count]').textContent = duty ? `${duty} phone${duty === 1 ? ' is' : 's are'} on duty now.` : '';
     updateAll();
@@ -5966,7 +5969,7 @@ async function changeAllPasswordsModal() {
   $m('[data-ps-search]').oninput = e => {
     const search = e.target.value.trim().toLocaleLowerCase();
     const select = $m('[data-ps-select]');
-    select.replaceChildren(new Option('All police stations', ''), ...stations.filter(ps => ps === selectedPs || ps.toLocaleLowerCase().includes(search)).map(ps => new Option(ps, ps)));
+    select.replaceChildren(new Option('All logins (including viewers)', ''), new Option('All route officers (all PS)', PW_ALL_ROUTES), ...stations.filter(ps => ps === selectedPs || ps.toLocaleLowerCase().includes(search)).map(ps => new Option(ps, ps)));
     select.value = selectedPs;
   };
   $m('[data-ps-select]').onchange = e => { selectedPs = e.target.value; applyStation(); };
