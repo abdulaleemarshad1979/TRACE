@@ -5712,22 +5712,34 @@ function formModal(title, fields, vals, onSave, onDelete, removeLabel = 'Remove'
     if (e.target.hasAttribute('data-save')) { const o = {}; m.querySelectorAll('[data-k]').forEach(i => { o[i.dataset.k] = i.value.trim(); }); try { await onSave(o); m.remove(); } catch (er) { toast(er.message, 6000); } }
     if (e.target.hasAttribute('data-del') && await confirmRemoval(title === 'Edit route' ? 'Delete route?' : 'Delete record?', title === 'Edit route' ? `Are you sure you want to delete ${vals.ps} · ${vals.route}? Its assignment and current phone data will be removed. Remove the person first if you also need their sign-in deleted.` : `Are you sure you want to remove ${title} from the database?`, title === 'Edit route' ? 'Yes, delete route' : 'Yes, remove')) { try { await onDelete(); m.remove(); } catch (er) { toast(er.message, 6000); } }
   });
+  return m;
 }
 const ROUTE_F = [['election', 'Election', 'e.g. Municipal 2026'], ['forceL', 'Type', null, ['Route mobile', 'Striking force', 'Special striking force']], ['sd', 'Sub-division'], ['ps', 'Police station'], ['route', 'Route', 'e.g. Route 3'], ['villages', 'Villages / wards covered', 'optional'], ['officer', 'Officer (rank and name)', 'optional; can also be entered on the phone'], ['mobile', 'Officer mobile']];
 function routeModal(id) {
   const base = id ? CONF.routes[id] : { election: ELEC(), sd: UI.fSd, ps: UI.fPs }; const r = Object.assign({}, base, { forceL: forceLabel(base.force || 'route') });
-  formModal(id ? 'Edit route' : 'Add a route', ROUTE_F, r, async o => {
+  const modal = formModal(id ? 'Edit route' : 'Add a route', ROUTE_F, r, async o => {
     if (!o.ps || !o.route) throw new Error('Police station and route are needed.');
     o.force = forceCode(o.forceL); delete o.forceL;
     const routeId = id || 'r' + uid8();
     if (id && base.memberUid && (o.ps !== base.ps || o.route !== base.route)) throw new Error('Remove the member assignment before changing the police station or route number.');
+    if (id && ((base.officer && !o.officer) || (base.mobile && !o.mobile))) throw new Error('Use Remove officer & mobile to confirm deletion of the person and their login.');
     if (id) await dbPatch(`config/routes/${routeId}`, o); else await dbPut(`config/routes/${routeId}`, o);
     CONF.routes = { ...CONF.routes, [routeId]: { ...(CONF.routes?.[routeId] || {}), ...o } };
     schedule('force'); renderPane(); toast('Saved');
   }, id ? async () => {
+    if (CONF.routes[id]?.memberUid) throw new Error('Remove officer & mobile first so their sign-in is deleted before the route.');
     await removeRoutesFromDatabase([Object.assign({ id }, CONF.routes[id])]);
     toast('Route and its member records removed from the database.');
-  } : null);
+  } : null, id ? 'Delete route' : 'Remove');
+  if (id) {
+    const remove = document.createElement('button'); remove.className = 'btn red'; remove.type = 'button';
+    remove.textContent = 'Remove officer & mobile';
+    modal.querySelector('[data-del]').before(remove);
+    remove.onclick = async () => {
+      try { await deletePersonModal(id, () => modal.remove()); }
+      catch (error) { toast(error.message, 6000); }
+    };
+  }
 }
 async function removeRoutesFromDatabase(selected, extraUpdates = {}) {
   if (await dbGet('roles/' + AU.uid) !== 'admin') throw new Error('Only a control-room administrator can remove routes.');
@@ -5884,14 +5896,18 @@ const memberDigits = value => String(value || '').replace(/\D/g, '').slice(-10);
 async function passwordLogins() {
   const [assignments, scopes] = await Promise.all([dbGet('assignments'), dbGet('siScopes')]);
   const rows = [];
-  const add = (kind, uid, officer, where, mobile) => {
+  const add = (kind, uid, officer, where, mobile, ps = '') => {
     let email = '';
     try { email = (kind === 'viewer' ? 'si' : 'phone') + memberPhone(mobile).slice(1) + '@members.track.invalid'; } catch (_) { }
     const Lv = LIVE[uid] || {};
-    rows.push({ kind, uid, officer: officer || '', where: where || '', mobile: mobile || '', email, onDuty: kind === 'route' && Lv.duty === true && !!Lv.up && Date.now() - Lv.up < S().nosig * MIN });
+    rows.push({ kind, uid, officer: officer || '', where: where || '', ps: ps.trim(), mobile: mobile || '', email, onDuty: kind === 'route' && Lv.duty === true && !!Lv.up && Date.now() - Lv.up < S().nosig * MIN });
   };
-  Object.entries(assignments || {}).forEach(([uid, a]) => add('route', uid, a.officer, [a.ps, a.route].filter(Boolean).join(' · '), a.mobile));
-  Object.values(CONF.routes || {}).filter(r => r.memberUid && !(assignments || {})[r.memberUid]).forEach(r => add('route', r.memberUid, r.officer, [r.ps, r.route].filter(Boolean).join(' · '), r.mobile));
+  const routeByMember = new Map(Object.values(CONF.routes || {}).filter(r => r.memberUid).map(r => [r.memberUid, r]));
+  Object.entries(assignments || {}).forEach(([uid, a]) => {
+    const ps = a.ps || routeByMember.get(uid)?.ps || '';
+    add('route', uid, a.officer, [ps, a.route].filter(Boolean).join(' · '), a.mobile, ps);
+  });
+  Object.values(CONF.routes || {}).filter(r => r.memberUid && !(assignments || {})[r.memberUid]).forEach(r => add('route', r.memberUid, r.officer, [r.ps, r.route].filter(Boolean).join(' · '), r.mobile, r.ps));
   Object.entries(scopes || {}).forEach(([uid, x]) => add('viewer', uid, x.officer, x.mandal, x.mobile));
   return rows.sort((a, b) => a.kind.localeCompare(b.kind) || NUM_COLLATOR.compare(a.where, b.where));
 }
@@ -5903,11 +5919,17 @@ const PW_LOGIN = { route: 'Route app', viewer: 'Viewer' };
 async function changeAllPasswordsModal() {
   if (await dbGet('roles/' + AU.uid) !== 'admin') throw new Error('Only a control-room administrator can change passwords.');
   const rows = await passwordLogins(), onDuty = rows.filter(r => r.onDuty).length;
+  const stations = [...new Set(rows.filter(r => r.kind === 'route' && r.ps).map(r => r.ps))].sort(NUM_COLLATOR.compare);
   const modal = document.createElement('div'); modal.className = 'modal member-modal pw-modal';
   modal.setAttribute('role', 'dialog'); modal.setAttribute('aria-modal', 'true'); modal.setAttribute('aria-labelledby', 'pwTitle');
   modal.innerHTML = `<form class="card" novalidate><h2 id="pwTitle">Change all passwords</h2>
     <p class="note">Each person's old password stops working at once and only the new one is kept. Firebase needs each person's current password to do this. If you no longer have someone's current password, that person cannot be changed here.</p>
-    <div class="banner warn"><b>Tell the officers first.</b> A phone signed in with the old password stops sending its location within about an hour, until the officer signs out of the app and signs in with the new password.${onDuty ? ` <b>${onDuty} phone${onDuty === 1 ? ' is' : 's are'} on duty now.</b>` : ''}</div>
+    <div class="banner warn"><b>Tell the officers first.</b> A phone signed in with the old password stops sending its location within about an hour, until the officer signs out of the app and signs in with the new password. <b data-duty-count>${onDuty ? `${onDuty} phone${onDuty === 1 ? ' is' : 's are'} on duty now.` : ''}</b></div>
+    <div class="pw-scope">
+      <label class="f">Search PS<input type="search" data-ps-search autocomplete="off" placeholder="Type a police station name"></label>
+      <label class="f">Select PS<select data-ps-select><option value="">All police stations</option>${stations.map(ps => `<option value="${esc(ps)}">${esc(ps)}</option>`).join('')}</select></label>
+      <p class="note" data-scope-count role="status"></p>
+    </div>
     <div class="pw-fill">
       <label class="f">Current password <span class="u">(if everyone has the same one)</span><input type="password" data-fill-current autocomplete="off"></label>
       <label class="f">New password <span class="u">(the same for everyone)</span><input type="text" data-fill-new autocomplete="off" placeholder="At least 8 characters"></label>
@@ -5919,14 +5941,42 @@ async function changeAllPasswordsModal() {
   document.body.appendChild(modal);
   const $m = q => modal.querySelector(q), trOf = i => $m(`tr[data-i="${i}"]`), err = $m('.err'), progress = $m('[data-progress]');
   const open = () => rows.map((r, i) => ({ r, i, tr: trOf(i) })).filter(x => x.r.email && !x.r.done);
-  const picked = () => open().filter(x => x.tr.querySelector('[data-pick]').checked);
+  const visible = () => open().filter(x => !x.tr.hidden);
+  const picked = () => visible().filter(x => x.tr.querySelector('[data-pick]').checked);
   const fill = (sel, value) => picked().forEach(x => { x.tr.querySelector(sel).value = value; });
   let running = false, downloaded = false;
+  let selectedPs = '';
+  const updateAll = () => {
+    const shown = visible();
+    $m('[data-all]').checked = shown.length > 0 && shown.every(x => x.tr.querySelector('[data-pick]').checked);
+    $m('[data-all]').disabled = shown.length === 0;
+  };
+  const applyStation = () => {
+    rows.forEach((r, i) => {
+      const tr = trOf(i), shown = !selectedPs || (r.kind === 'route' && r.ps === selectedPs);
+      tr.hidden = !shown;
+      tr.querySelector('[data-pick]').checked = shown && !!r.email && !r.done;
+    });
+    const shown = rows.filter(r => !selectedPs || (r.kind === 'route' && r.ps === selectedPs));
+    $m('[data-scope-count]').textContent = selectedPs ? `Showing ${shown.length} ${shown.length === 1 ? 'person' : 'people'} at ${selectedPs}. Only this PS is selected for password changes.` : `Showing all ${rows.length} logins.`;
+    const duty = shown.filter(r => r.onDuty).length;
+    $m('[data-duty-count]').textContent = duty ? `${duty} phone${duty === 1 ? ' is' : 's are'} on duty now.` : '';
+    updateAll();
+  };
+  $m('[data-ps-search]').oninput = e => {
+    const search = e.target.value.trim().toLocaleLowerCase();
+    const select = $m('[data-ps-select]');
+    select.replaceChildren(new Option('All police stations', ''), ...stations.filter(ps => ps === selectedPs || ps.toLocaleLowerCase().includes(search)).map(ps => new Option(ps, ps)));
+    select.value = selectedPs;
+  };
+  $m('[data-ps-select]').onchange = e => { selectedPs = e.target.value; applyStation(); };
+  $m('.pw-table tbody').onchange = e => { if (e.target.matches('[data-pick]')) updateAll(); };
+  applyStation();
   $m('[data-fill-current]').oninput = e => fill('[data-current]', e.target.value);
   $m('[data-fill-new]').oninput = e => fill('[data-new]', e.target.value);
-  $m('[data-all]').onchange = e => open().forEach(x => { x.tr.querySelector('[data-pick]').checked = e.target.checked; });
+  $m('[data-all]').onchange = e => visible().forEach(x => { x.tr.querySelector('[data-pick]').checked = e.target.checked; });
   $m('[data-generate]').onclick = () => { $m('[data-fill-new]').value = ''; picked().forEach(x => { x.tr.querySelector('[data-new]').value = randomPassword(); }); };
-  $m('[data-xl-out]').onclick = () => xlsTemplate('TRACK-passwords.xlsx', ['Login', 'Name', 'Where', 'Mobile', 'Current password', 'New password'], rows.map(r => [PW_LOGIN[r.kind], r.officer, r.where, r.mobile, '', '']));
+  $m('[data-xl-out]').onclick = () => xlsTemplate('TRACK-passwords.xlsx', ['Login', 'Name', 'Where', 'Mobile', 'Current password', 'New password'], rows.filter((r, i) => !trOf(i).hidden).map(r => [PW_LOGIN[r.kind], r.officer, r.where, r.mobile, '', '']));
   $m('[data-xl-in]').onclick = () => pickFile(async sheets => {
     const sheet = sheets[0] || [], head = (sheet[0] || []).map(c => String(c).trim().toLowerCase()), col = name => head.indexOf(name);
     if (col('mobile') < 0 || col('current password') < 0 || col('new password') < 0) throw new Error('The Excel needs the columns Mobile, Current password and New password.');
@@ -5934,7 +5984,7 @@ async function changeAllPasswordsModal() {
     sheet.slice(1).forEach(line => {
       const mobile = memberDigits(line[col('mobile')]), login = col('login') < 0 ? '' : String(line[col('login')] || '').trim().toLowerCase();
       if (!mobile) return;
-      const found = open().filter(x => memberDigits(x.r.mobile) === mobile && (!login || PW_LOGIN[x.r.kind].toLowerCase() === login));
+      const found = visible().filter(x => memberDigits(x.r.mobile) === mobile && (!login || PW_LOGIN[x.r.kind].toLowerCase() === login));
       if (!found.length) { unknown++; return; }
       found.forEach(x => { x.tr.querySelector('[data-current]').value = String(line[col('current password')] ?? ''); x.tr.querySelector('[data-new]').value = String(line[col('new password')] ?? ''); });
       filled++;

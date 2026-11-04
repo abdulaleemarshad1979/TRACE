@@ -255,15 +255,57 @@ test('removing a polling location deletes its database record and clears the das
 test('removing a route deletes its database record and clears the dashboard copy', async ({ page }) => {
   const writes = await controlRoom(page);
   await page.evaluate(() => routeModal('r1'));
-  await page.getByRole('button', { name: 'Remove', exact: true }).click();
+  await page.getByRole('button', { name: 'Delete route' }).click();
   const confirmation = page.getByRole('dialog', { name: 'Delete route?' });
   await expect(confirmation).toContainText('Are you sure');
   await confirmation.getByRole('button', { name: 'Cancel' }).click();
   expect(writes).toHaveLength(0);
-  await page.getByRole('button', { name: 'Remove', exact: true }).click();
+  await page.getByRole('button', { name: 'Delete route' }).click();
   await page.getByRole('dialog', { name: 'Delete route?' }).getByRole('button', { name: 'Yes, delete route' }).click();
   await expect.poll(() => writes.find(write => write.pathname === '/.json')?.body).toMatchObject({ 'config/routes/r1': null });
   await expect.poll(() => page.evaluate(() => CONF.routes.r1)).toBeUndefined();
+});
+
+test('Edit route removes the officer and mobile only after confirmation, keeping the route', async ({ page }) => {
+  const writes = await controlRoom(page, { '/config.json': {
+    routes: { r1: { ps: 'Example Rural Police Station', route: 'Route 12', sd: 'Example Sub-division', officer: 'Officer A', mobile: '+919876543210', election: 'Election 2026' } },
+    stations: {}, settings: { election: '' }
+  } });
+  await page.evaluate(() => routeModal('r1'));
+  await page.getByRole('button', { name: 'Remove officer & mobile' }).click();
+  const first = page.getByRole('dialog', { name: 'Remove person' });
+  await first.getByRole('button', { name: 'Cancel' }).click();
+  expect(writes).toHaveLength(0);
+  await page.getByRole('button', { name: 'Remove officer & mobile' }).click();
+  await page.getByRole('dialog', { name: 'Remove person' }).getByRole('button', { name: 'Yes, remove person' }).click();
+  await expect.poll(() => writes.find(w => w.pathname === '/config/routes/r1.json')?.body).toEqual({ officer: null, mobile: null });
+  expect(await page.evaluate(() => ({ exists: !!CONF.routes.r1, officer: CONF.routes.r1.officer, mobile: CONF.routes.r1.mobile }))).toEqual({ exists: true });
+  await expect(page.locator('.modal')).toHaveCount(0);
+});
+
+test('Edit route removes a linked officer login before allowing route deletion', async ({ page }) => {
+  const writes = await controlRoom(page, { '/config.json': {
+    routes: { r1: { ps: 'Bommuru PS', route: 'Route 1', sd: 'North', officer: 'Officer A', mobile: '+919876543210', memberUid: 'officer-1' } },
+    stations: {}, settings: { election: '' }
+  }, '/roles/officer-1.json': 'route', '/assignments/officer-1.json': { routeId: 'r1', ps: 'Bommuru PS', route: 'Route 1' } });
+  const authActions = [];
+  await page.route('https://identitytoolkit.googleapis.com/**', route => {
+    const action = new URL(route.request().url()).pathname.split(':').pop(); authActions.push(action);
+    route.fulfill({ json: action === 'signInWithPassword' ? { localId: 'officer-1', idToken: 'member-token' } : {} });
+  });
+  await page.evaluate(() => routeModal('r1'));
+  await page.getByRole('button', { name: 'Remove officer & mobile' }).click();
+  const confirmation = page.getByRole('dialog', { name: 'Remove person' });
+  await confirmation.getByLabel('Current person password').fill('Existing-password');
+  await confirmation.getByRole('button', { name: 'Yes, remove person' }).click();
+  await expect.poll(() => writes.find(w => w.pathname === '/.json')?.body?.['assignments/officer-1']).toBeNull();
+  expect(authActions).toEqual(['signInWithPassword', 'delete']);
+  expect(await page.evaluate(() => !!CONF.routes.r1)).toBe(true);
+  await page.evaluate(() => routeModal('r1'));
+  await page.getByRole('button', { name: 'Delete route' }).click();
+  await page.getByRole('dialog', { name: 'Delete route?' }).getByRole('button', { name: 'Yes, delete route' }).click();
+  await expect.poll(() => writes.some(w => w.pathname === '/.json' && w.body['config/routes/r1'] === null)).toBe(true);
+  expect(await page.evaluate(() => !!CONF.routes.r1)).toBe(false);
 });
 
 test('deleting an election removes its saved name, routes, and polling locations together', async ({ page }) => {
@@ -1774,6 +1816,42 @@ test('change all passwords replaces each password and reports only the wrong one
   await modal.getByRole('button', { name: 'Close' }).click();
   expect(dialogs).toEqual([]);
   await expect(modal).toHaveCount(0);
+});
+
+test('change passwords can search and select one police station', async ({ page }) => {
+  const data = {
+    ...passwordData,
+    '/assignments.json': {
+      ...passwordData['/assignments.json'],
+      a3: { officer: 'Officer Four', ps: 'Rajamahendravaram PS', route: 'Route 1', mobile: '9000000004' }
+    }
+  };
+  const accounts = {
+    ...passwordAccounts(),
+    'phone919000000004@members.track.invalid': { uid: 'a3', password: 'Old-password-4' }
+  };
+  await controlRoom(page, data);
+  const calls = await fakeAuth(page, accounts);
+  const dialogs = [];
+  page.on('dialog', dialog => { dialogs.push(dialog.message()); dialog.accept(); });
+  const modal = await openChangeAll(page);
+  await modal.getByLabel('Search PS').fill('raja');
+  await expect(modal.locator('[data-ps-select] option')).toHaveText(['All police stations', 'Rajamahendravaram PS']);
+  await modal.getByLabel('Select PS').selectOption('Rajamahendravaram PS');
+  await expect(modal.locator('[data-scope-count]')).toContainText('Only this PS is selected');
+  await expect(pwRow(modal, '9000000004')).toBeVisible();
+  await expect(pwRow(modal, '9000000001')).toBeHidden();
+  await expect(pwRow(modal, '9000000003')).toBeHidden();
+  await modal.locator('[data-fill-current]').fill('Old-password-4');
+  await modal.locator('[data-fill-new]').fill('New-password-4');
+  await modal.getByRole('button', { name: 'Change passwords', exact: true }).click();
+  await expect(pwRow(modal, '9000000004')).toContainText('Changed');
+  expect(dialogs[0]).toContain('Change the password of 1 person');
+  expect(calls.map(x => x.email).filter(Boolean)).toEqual(['phone919000000004@members.track.invalid']);
+  expect(accounts['phone919000000004@members.track.invalid'].password).toBe('New-password-4');
+  expect(accounts['phone919000000001@members.track.invalid'].password).toBe('Old-password-1');
+  await modal.getByLabel('Select PS').selectOption('');
+  await expect(pwRow(modal, '9000000001')).toBeVisible();
 });
 
 test('change all passwords stops when Firebase pauses sign-ins', async ({ page }) => {

@@ -205,6 +205,8 @@ body.wall .ps-turnout b{color:#5aa2ff}
 
 /* Change all passwords */
 .member-modal.pw-modal .card{width:min(1080px,100%);max-width:none}
+.pw-scope{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 14px;margin-top:12px}
+.pw-scope .note{grid-column:1/-1;margin:4px 0 0}
 .pw-fill{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 14px}
 .pw-fill .row{grid-column:1/-1;flex-wrap:wrap;margin-top:10px}
 .pw-table input[type=password],.pw-table input[type=text]{width:100%;min-width:120px;box-sizing:border-box}
@@ -215,4 +217,4 @@ body.wall .ps-turnout b{color:#5aa2ff}
 .pw-bad{color:#c0392b;font-weight:600}
 .pw-list{max-height:min(46dvh,460px);overflow:auto;margin-top:12px}
 .pw-change{display:flex;gap:8px;align-items:center;margin-top:12px;font-weight:600}
-@media (max-width:640px){.pw-fill{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:640px){.pw-fill,.pw-scope{grid-template-columns:minmax(0,1fr)}}
