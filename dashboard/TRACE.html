@@ -1276,6 +1276,8 @@ body{letter-spacing:-.01em}
 .viewer-main{max-width:1400px;margin:auto;padding:22px}
 .viewer-top{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap}
 .viewer-top h1{margin:0;font-size:26px}.viewer-top p{margin:5px 0 0;color:#52637a;font-size:13px}
+.viewer-share{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:14px 0;padding:11px 13px;border:1px solid #b8dfe6;border-radius:9px;background:#e9f8fb;color:#154557;font-size:13px}
+.viewer-share button{padding:8px 12px;border:1px solid #0086a4;border-radius:7px;background:#fff;color:#006e87;font:inherit;font-weight:700;cursor:pointer}
 .viewer-stats{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0}
 .viewer-stat{min-width:135px;padding:13px 17px;border:1px solid #dce3eb;border-radius:9px;background:#fff}
 .viewer-stat b{display:block;font-size:25px}.viewer-stat span{font-size:12px;color:#52637a}
@@ -1514,7 +1516,7 @@ body.wall .ps-turnout b{color:#5aa2ff}
 
 <section id="viewerApp" class="viewer-app" hidden>
   <header class="viewer-head"><div><strong>TRACK · Viewer Portal</strong><small>East Godavari District Police · Assigned mandal</small></div><button id="viewerLogout" type="button">Sign out</button></header>
-  <main class="viewer-main"><div class="viewer-top"><div><h1 id="viewerMandal">Assigned mandal</h1><p id="viewerOfficer"></p></div><p id="viewerUpdated" role="status">Loading…</p></div><p id="viewerAlert" class="viewer-alert" role="alert" hidden></p><div id="viewerStats" class="viewer-stats"></div><div class="viewer-grid"><section class="viewer-panel"><h2>Assigned routes and phones</h2><div class="viewer-table-wrap"><table><thead><tr><th>Route</th><th>Officer</th><th>Phone status</th><th>Last update</th></tr></thead><tbody id="viewerRoutes"></tbody></table></div></section><section class="viewer-panel"><div class="viewer-map-head"><h2>Live location and polling booths</h2><button id="viewerFullMap" class="viewer-full-btn" type="button" aria-pressed="false">⛶ Full map</button></div><div id="viewerMap" aria-label="Map of assigned route phones and polling booths"></div><p id="viewerMapNote" class="note"></p></section></div><p class="viewer-foot">Restricted to your assigned routes and polling booths. Live data refreshes every 10 seconds. Location and SOS information is for official duty only.</p></main>
+  <main class="viewer-main"><div class="viewer-top"><div><h1 id="viewerMandal">Assigned mandal</h1><p id="viewerOfficer"></p></div><p id="viewerUpdated" role="status">Loading…</p></div><div class="viewer-share"><span id="viewerShareStatus" role="status">Location sharing will start after sign-in.</span><button id="viewerShare" type="button">Stop sharing location</button></div><p id="viewerAlert" class="viewer-alert" role="alert" hidden></p><div id="viewerStats" class="viewer-stats"></div><div class="viewer-grid"><section class="viewer-panel"><h2>Assigned routes and phones</h2><div class="viewer-table-wrap"><table><thead><tr><th>Route</th><th>Officer</th><th>Phone status</th><th>Last update</th></tr></thead><tbody id="viewerRoutes"></tbody></table></div></section><section class="viewer-panel"><div class="viewer-map-head"><h2>Live location and polling booths</h2><button id="viewerFullMap" class="viewer-full-btn" type="button" aria-pressed="false">⛶ Full map</button></div><div id="viewerMap" aria-label="Map of assigned route phones and polling booths"></div><p id="viewerMapNote" class="note"></p></section></div><p class="viewer-foot">Restricted to your assigned routes and polling booths. Live data refreshes every 10 seconds. Your location is shared with the control room while sharing is on. On Android, sharing continues with the screen locked or the app removed from Recents until you stop it here or from the persistent notification.</p></main>
 </section>
 
 <div id="app" class="app rd" hidden>
@@ -4713,7 +4715,6 @@ async function signIn(email, pw, keep) {
   LS.set('au', keep ? AU : null);
   if (/^si91[6-9][0-9]{9}@members\.track\.invalid$/.test(email)) sessionStorage.setItem('rm_si_au', JSON.stringify(AU));
   else sessionStorage.removeItem('rm_si_au');
-  bridgeAuth();
 }
 async function refreshToken() {
   if (ID_TOKEN && Date.now() < ID_EXP - 120000) return ID_TOKEN;
@@ -4722,12 +4723,13 @@ async function refreshToken() {
   const j = await r.json().catch(() => ({}));
   if (!r.ok) { const e = new Error(authErr(j)); e.auth = true; throw e; }
   ID_TOKEN = j.id_token; ID_EXP = Date.now() + (+j.expires_in || 3600) * 1000; AU.rt = j.refresh_token; AU.uid = j.user_id;
+  if (NATIVE && typeof Android.updateViewerToken === 'function') try { Android.updateViewerToken(AU.uid, AU.rt); } catch (_) { }
   if (KEEP) LS.set('au', AU);
   else if (/^si91[6-9][0-9]{9}@members\.track\.invalid$/.test(AU.email || '')) sessionStorage.setItem('rm_si_au', JSON.stringify(AU));
   return ID_TOKEN;
 }
 function bridgeAuth() { if (NATIVE && AU) try { Android.setAuth(CFG.k, CFG.d, AU.rt, AU.email, AU.uid, CFG.p || "", CFG.sender || "", CFG.appId || ""); } catch (e) { } }
-function signOut() { if (NATIVE) try { Android.signOut(); } catch (e) { } AU = null; ID_TOKEN = null; LS.set('au', null); sessionStorage.removeItem('rm_si_au'); location.reload(); }
+function signOut() { if (typeof stopViewerLocation === 'function') stopViewerLocation(); if (NATIVE) try { Android.signOut(); } catch (e) { } AU = null; ID_TOKEN = null; LS.set('au', null); sessionStorage.removeItem('rm_si_au'); location.reload(); }
 
 async function db(method, path, body, query) {
   const t = await token();
@@ -4866,12 +4868,12 @@ const forceCode = v => { const s = String(v || '').toLowerCase(); return /spec|s
 const forceLabel = c => (FORCE[c] || FORCE.route).n;
 const STATUS_TXT = { move: 'Moving', stop: 'Stopped', weak: 'GPS weak', gpsoff: 'GPS off', nosig: 'No signal', none: 'Not started' };
 
-const DEV = {}, LIVE = {}, EVT = {}, CONF = {};
+const DEV = {}, LIVE = {}, EVT = {}, CONF = {}, VIEWER_LIVE = {}, SI_SCOPES = {};
 let USER_ROLE = '';
 const TRAIL = {};          // uid -> [[t, lat, lng, acc]] for today
 const SEEN_EVT = new Set();
 const UI = { tab: 'sum', sel: null, fStatus: '', fSd: LS.get('fSd', ''), fPs: LS.get('fPs', ''), fForce: LS.get('fForce', ''), q: '', inc: null, incMode: false, replay: null, setupOpen: LS.get('setupOpen', 'routes') };
-let MAP, LAYER_V, LAYER_T, LAYER_S, LAYER_I, LAYER_R, fitted = false, booted = false, PS_N = -1;
+let MAP, LAYER_V, LAYER_T, LAYER_S, LAYER_I, LAYER_R, LAYER_VIEWERS, fitted = false, booted = false, PS_N = -1;
 
 const pad = n => String(n).padStart(2, '0');
 const fT = t => { if (!t) return '–'; const d = new Date(t); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
@@ -4992,6 +4994,49 @@ const devIds = () => perTask(`devIds|${UI.fSd}|${UI.fPs}|${UI.fForce}`, () => {
 let LOGIN_MODE = 'viewer', VIEWER_SCOPE = null, VIEWER_ROUTES = [], VIEWER_STATIONS = [], VIEWER_MAP = null, VIEWER_MARKERS = {}, VIEWER_BOOTH_LAYER = null, VIEWER_TIMER = null, VIEWER_RANK = '', VIEWER_SCOPE_KEY = '', VIEWER_SCOPE_AT = 0, VIEWER_BOOTH_KEY = '';
 const VIEWER_DETAIL = {}, VIEWER_SCOPE_MS = 5 * 60000, VIEWER_DEVICE_MS = 5 * 60000;
 const VIEWER_RANKS = ['Incharge', 'Striking Force', 'Sub-Striking Force', 'DSP'];
+let VIEWER_SHARING = false, VIEWER_WATCH = null, VIEWER_PROBE = null, VIEWER_LAST_SENT = 0;
+function viewerShareUi(message) {
+  $('#viewerShareStatus').textContent = message;
+  $('#viewerShare').textContent = VIEWER_SHARING ? 'Stop sharing location' : 'Start sharing location';
+}
+function stopViewerLocation() {
+  if (VIEWER_WATCH != null) navigator.geolocation.clearWatch(VIEWER_WATCH);
+  VIEWER_WATCH = null; clearInterval(VIEWER_PROBE); VIEWER_PROBE = null;
+  if (NATIVE && typeof Android.stopViewerTracking === 'function') try { Android.stopViewerTracking(); } catch (_) { }
+  else if (VIEWER_SHARING && AU && ID_TOKEN && CFG) {
+    fetch(`${CFG.d}/viewerLive/${encodeURIComponent(AU.uid)}.json?auth=${encodeURIComponent(ID_TOKEN)}`, { method: 'DELETE', keepalive: true }).catch(() => {});
+  }
+  VIEWER_SHARING = false;
+  viewerShareUi('Location sharing stopped.');
+}
+function startViewerLocation() {
+  if (!AU || !VIEWER_SCOPE || VIEWER_SHARING) return;
+  VIEWER_SHARING = true;
+  viewerShareUi('Starting location sharing…');
+  if (NATIVE && typeof Android.startViewerTracking === 'function') {
+    try { Android.startViewerTracking(AU.uid, AU.rt, CFG.k, CFG.d); viewerShareUi('Background location sharing is starting. Keep location on.'); }
+    catch (e) { VIEWER_SHARING = false; viewerShareUi('Could not start location sharing: ' + e.message); }
+    return;
+  }
+  if (!navigator.geolocation) { VIEWER_SHARING = false; viewerShareUi('Location is unavailable in this browser.'); return; }
+  const got = async p => {
+    if (!VIEWER_SHARING || !AU || Date.now() - VIEWER_LAST_SENT < 25000) return;
+    const { latitude: lat, longitude: lng, accuracy: acc } = p.coords;
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || !Number.isFinite(acc)) return;
+    VIEWER_LAST_SENT = Date.now();
+    try { await dbPut('viewerLive/' + AU.uid, { lat, lng, acc: Math.round(acc), t: Date.now() }); viewerShareUi('Your location is visible to the control room while this page is open.'); }
+    catch (e) { VIEWER_LAST_SENT = 0; viewerShareUi('Location could not sync: ' + e.message); }
+  };
+  const failed = e => { if (e.code === 1) { stopViewerLocation(); viewerShareUi('Location permission denied. Allow it to share your position.'); } else viewerShareUi('Waiting for a location fix. Check GPS and connection.'); };
+  VIEWER_WATCH = navigator.geolocation.watchPosition(got, failed, { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 });
+  VIEWER_PROBE = setInterval(() => { if (VIEWER_SHARING && !document.hidden) navigator.geolocation.getCurrentPosition(got, failed, { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 }); }, 30000);
+}
+$('#viewerShare').addEventListener('click', () => VIEWER_SHARING ? stopViewerLocation() : startViewerLocation());
+setInterval(() => {
+  if (!VIEWER_SHARING || !NATIVE || typeof Android.isViewerTracking !== 'function' || $('#viewerApp').hidden) return;
+  try { if (!Android.isViewerTracking()) { VIEWER_SHARING = false; viewerShareUi('Location sharing is off. Tap Start sharing location.'); } }
+  catch (_) { }
+}, 5000);
 function setLoginMode(mode) {
   LOGIN_MODE = mode;
   const viewer = mode === 'viewer';
@@ -5096,6 +5141,7 @@ async function startViewer() {
   $('#login').hidden = true; $('#app').hidden = true; $('#viewerApp').hidden = false;
   if (!VIEWER_MAP) { VIEWER_MAP = L.map('viewerMap').setView([17.0005, 81.804], 10); L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap contributors' }).addTo(VIEWER_MAP); VIEWER_BOOTH_LAYER = L.layerGroup().addTo(VIEWER_MAP); }
   setTimeout(() => VIEWER_MAP.invalidateSize(), 50);
+  startViewerLocation();
   await refreshViewer();
   clearTimeout(VIEWER_TIMER);
   const nextWait = () => (document.hidden ? 60000 : 10000) + Math.floor(Math.random() * 2000);
@@ -5156,6 +5202,10 @@ function start() {
   initMap();
   stream('devices', '', DEV, () => { loadTrails(); schedule(); }, { every: 15000 });
   stream('live', '', LIVE, path => { onLive(path); schedule(); }, { every: 8000 });
+  if (USER_ROLE === 'admin') {
+    stream('viewerLive', '', VIEWER_LIVE, () => schedule(), { every: 8000 });
+    stream('siScopes', '', SI_SCOPES, () => schedule(), { every: 60000 });
+  }
   stream('config', '', CONF, () => { googleLayers(); const n = Object.keys(CONF.stations || {}).length; if (n !== PS_N) { PS_N = n; fitted = false; stationsSig = ''; } schedule(true); }, { every: 300000 });
   stream('events', `&orderBy="t"&startAt=${dayStart(Date.now()) - 6 * HOUR}`, EVT, () => { onEvents(); schedule(); }, { every: 15000, inc: 't' });
   setInterval(() => { $('#clock').textContent = fTs(Date.now()); }, 1000);
@@ -5317,7 +5367,8 @@ function initMap() {
   const pick = LS.get('base', 'Streets'); (base[pick] || base.Streets).addTo(MAP);
   BASE = base; LAYERS_CTL = L.control.layers(base, null, { position: 'topright' }).addTo(MAP);
   MAP.on('baselayerchange', e => LS.set('base', e.name));
-  LAYER_S = L.layerGroup().addTo(MAP); LAYER_T = L.layerGroup().addTo(MAP); LAYER_V = L.layerGroup().addTo(MAP); LAYER_I = L.layerGroup().addTo(MAP); LAYER_R = L.layerGroup().addTo(MAP);
+  LAYER_S = L.layerGroup().addTo(MAP); LAYER_T = L.layerGroup().addTo(MAP); LAYER_V = L.layerGroup().addTo(MAP); LAYER_I = L.layerGroup().addTo(MAP); LAYER_R = L.layerGroup().addTo(MAP); LAYER_VIEWERS = L.layerGroup().addTo(MAP);
+  LAYERS_CTL.addOverlay(LAYER_VIEWERS, 'Viewer locations');
   const pollingHint = document.createElement('div'); pollingHint.id = 'pollingMapHint'; pollingHint.className = 'polling-map-hint'; pollingHint.hidden = true; pollingHint.textContent = 'Zoom in to load polling locations'; MAP.getContainer().appendChild(pollingHint);
   const lg = L.control({ position: 'bottomleft' });
   lg.onAdd = () => { const d = L.DomUtil.create('div', 'legend'); d.innerHTML = `<div class="lgh"><b>Legend</b><button type="button" class="lgx" title="Hide or show the legend">${+LS.get('legend', 1) ? '−' : '+'}</button></div><div class="lgb"><b>Units</b><br><i style="background:${FORCE.route.c}"></i>Route mobile<br><i style="background:${FORCE.sf.c}"></i>Striking force<br><i style="background:${FORCE.ssf.c}"></i>Special striking force<br><b>Status ring</b><br><i style="box-shadow:0 0 0 2px #fff,0 0 0 3px #e0a800;background:#fff"></i>Stopped<br><i style="box-shadow:0 0 0 2px #fff,0 0 0 3px #c0392b;background:#fff"></i>No signal<br><i style="box-shadow:0 0 0 2px #fff,0 0 0 3px #7f8c8d;background:#fff"></i>GPS weak<br><i style="background:${C.sos}"></i>SOS (pulsing)<br><b>Polling locations</b> (◆ hypersensitive)<br><span class="psm" style="display:inline-block;background:#1e7b45;margin-right:5px"></span>visited recently<br><span class="psm" style="display:inline-block;background:#e0a800;margin-right:5px"></span>visit due<br><span class="psm" style="display:inline-block;background:#c0392b;margin-right:5px"></span>no visit / overdue<br>⚠ tension or problem reported<br><b>Hotspots</b> 🔥<br><span style="display:inline-block;width:34px;height:8px;border-radius:4px;background:linear-gradient(90deg,#2c7fb8,#f1c40f,#e67e22,#c0392b);vertical-align:middle;margin-right:5px"></span>more SOS / incidents = hotter</div>`;
@@ -5331,6 +5382,25 @@ function initMap() {
   MAP.on('click', e => { if (UI.incMode) { setIncident(e.latlng.lat, e.latlng.lng, 'Marked on map'); UI.incMode = false; MAP.getContainer().style.cursor = ''; } });
 }
 const MK = {}, TRAIL_LINES = {};
+const ADMIN_VIEWER_MARKERS = {};
+function drawViewerLocations() {
+  if (!MAP || !LAYER_VIEWERS || USER_ROLE !== 'admin') return;
+  const keep = new Set();
+  Object.entries(VIEWER_LIVE).forEach(([uid, p]) => {
+    if (!p || !Number.isFinite(+p.lat) || !Number.isFinite(+p.lng) || Math.abs(+p.lat) > 90 || Math.abs(+p.lng) > 180 || !p.t || Date.now() - p.t > 120000 || p.t > Date.now() + 60000) return;
+    keep.add(uid);
+    const scope = SI_SCOPES[uid] || {}, name = scope.officer || scope.mobile || 'Viewer';
+    const label = `<b>Viewer · ${esc(name)}</b><br>${esc(scope.rank || '')}${scope.mandal ? ` · ${esc(scope.mandal)}` : ''}<br>Updated ${esc(ago(p.t))}${Number.isFinite(+p.acc) ? ` · ±${Math.round(+p.acc)} m` : ''}`;
+    let marker = ADMIN_VIEWER_MARKERS[uid];
+    if (!marker) {
+      marker = L.circleMarker([+p.lat, +p.lng], { radius: 10, color: '#fff', weight: 3, fillColor: '#00a8c9', fillOpacity: 1 }).addTo(LAYER_VIEWERS);
+      ADMIN_VIEWER_MARKERS[uid] = marker;
+      marker.bindTooltip(label, { direction: 'top' });
+    } else { marker.setLatLng([+p.lat, +p.lng]); marker.setTooltipContent(label); }
+  });
+  Object.keys(ADMIN_VIEWER_MARKERS).forEach(uid => { if (!keep.has(uid)) { LAYER_VIEWERS.removeLayer(ADMIN_VIEWER_MARKERS[uid]); delete ADMIN_VIEWER_MARKERS[uid]; } });
+}
+setInterval(drawViewerLocations, 30000);
 let stationsDrawn = '', TRAIL_CANVAS = null;
 /* hover a route mobile (map marker or Vehicles card): show the nearest units and polling locations with distance in km */
 let HOVER_U = null;
@@ -5379,6 +5449,7 @@ function renderMap() {
   const s = S(); const ids = devIds();
   // polling locations first, so an error in the vehicle or trail code cannot hide them
   try { drawStations(); } catch (e) { console.error('polling locations', e); if (!window.__psErr) { window.__psErr = 1; toast('Polling locations could not be drawn: ' + e.message, 12000); } }
+  drawViewerLocations();
   // phones
   const keep = new Set();
   const grouped = MAP.getZoom() < 12 && !UI.sel;
@@ -5411,6 +5482,7 @@ function renderMap() {
   // first view: fit the phones AND the polling locations (filtered), so locations far from the phones are not off-screen
   if (!fitted) {
     const pts = ids.filter(u => validLocation(LIVE[u]) && matchStatus(u)).map(u => [+LIVE[u].lat, +LIVE[u].lng]);
+    if (USER_ROLE === 'admin') Object.values(VIEWER_LIVE).forEach(p => { if (p && Number.isFinite(+p.lat) && Number.isFinite(+p.lng) && p.t && Date.now() - p.t <= 120000) pts.push([+p.lat, +p.lng]); });
     stations().forEach(p => { if (mappableStation(p) && (!UI.fPs || p.ps === UI.fPs) && (!UI.fSd || !routes().length || routes().some(r => r.ps === p.ps && r.sd === UI.fSd))) pts.push([+p.lat, +p.lng]); });
     if (pts.length) { fitted = true; try { MAP.invalidateSize(); } catch (e) { } MAP.fitBounds(L.latLngBounds(pts).pad(0.12), { maxZoom: 14 }); }
   }
@@ -5909,7 +5981,7 @@ function paneSetup() {
   return h;
 }
 function afterSetup() { if ($('#rulesOut')) $('#rulesOut').value = rulesText(); }
-function rulesText() { return JSON.stringify({"rules":{".read":false,".write":false,"roles":{".read":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'","$uid":{".read":"auth != null && (auth.uid == $uid || root.child('roles').child(auth.uid).val() == 'admin')",".write":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'",".validate":"newData.val() == 'admin' || newData.val() == 'monitor' || newData.val() == 'route' || newData.val() == 'si_monitor'"}},"assignments":{".read":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'","$uid":{".read":"auth != null && (auth.uid == $uid || root.child('roles').child(auth.uid).val() == 'admin')",".write":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'"}},"officers":{".read":"auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor')","$uid":{".read":"auth != null && auth.uid == $uid",".write":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'"}},"config":{".read":"auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor' || root.child('roles').child(auth.uid).val() == 'route')",".write":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'","routes":{"$rid":{".read":"auth != null && (root.child('roles').child(auth.uid).val() == 'si_monitor' && root.child('siScopes').child(auth.uid).child('routes').child($rid).val() == true)"}},"stations":{"$sid":{".read":"auth != null && (root.child('roles').child(auth.uid).val() == 'si_monitor' && root.child('siScopes').child(auth.uid).child('stations').child($sid).val() == true)"}}},"devices":{".read":"auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor')","$uid":{".read":"(auth != null && auth.uid == $uid) || (auth != null && (root.child('roles').child(auth.uid).val() == 'si_monitor' && root.child('siScopes').child(auth.uid).child('routes').child(root.child('assignments').child($uid).child('routeId').val()).val() == true))",".write":"auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || (auth.uid == $uid && root.child('roles').child(auth.uid).val() == 'route' && root.child('assignments').child(auth.uid).exists() && newData.child('ps').val() == root.child('assignments').child(auth.uid).child('ps').val() && newData.child('route').val() == root.child('assignments').child(auth.uid).child('route').val()))"}},"live":{".read":"auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor')","$uid":{".read":"(auth != null && auth.uid == $uid) || (auth != null && (root.child('roles').child(auth.uid).val() == 'si_monitor' && root.child('siScopes').child(auth.uid).child('routes').child(root.child('assignments').child($uid).child('routeId').val()).val() == true))",".write":"(auth != null && root.child('roles').child(auth.uid).val() == 'admin' || (auth != null && auth.uid == $uid && root.child('roles').child(auth.uid).val() == 'route' && root.child('assignments').child(auth.uid).exists()))"}},"track":{".read":"auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor')","$uid":{".read":"(auth != null && auth.uid == $uid) || (auth != null && (root.child('roles').child(auth.uid).val() == 'si_monitor' && root.child('siScopes').child(auth.uid).child('routes').child(root.child('assignments').child($uid).child('routeId').val()).val() == true))",".write":"(auth != null && root.child('roles').child(auth.uid).val() == 'admin' || (auth != null && auth.uid == $uid && root.child('roles').child(auth.uid).val() == 'route' && root.child('assignments').child(auth.uid).exists()))"}},"events":{".read":"auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor') || (auth != null && root.child('roles').child(auth.uid).val() == 'si_monitor' && query.orderByChild == 'uid' && query.equalTo != null && root.child('siScopes').child(auth.uid).child('routes').child(root.child('assignments').child(query.equalTo).child('routeId').val()).val() == true)",".indexOn":["t","uid"],"$id":{".read":"auth != null && root.child('roles').child(auth.uid).val() == 'route' && data.child('uid').val() == auth.uid",".write":"(auth != null && root.child('roles').child(auth.uid).val() == 'admin' || (auth != null && root.child('roles').child(auth.uid).val() == 'route' && root.child('assignments').child(auth.uid).exists() && !data.exists() && newData.child('uid').val() == auth.uid))"}},"msg":{".read":"auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor')",".write":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'","$uid":{".read":"auth != null && auth.uid == $uid"}},"photos":{".read":"auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor')","$id":{".read":"auth != null && root.child('roles').child(auth.uid).val() == 'route' && data.child('uid').val() == auth.uid",".write":"(auth != null && root.child('roles').child(auth.uid).val() == 'admin' || (auth != null && root.child('roles').child(auth.uid).val() == 'route' && root.child('assignments').child(auth.uid).exists() && !data.exists() && newData.child('uid').val() == auth.uid))"}},"voice":{".read":"auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor')",".write":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'","$id":{".read":"auth != null && root.child('roles').child(auth.uid).val() == 'route' && data.child('uid').val() == auth.uid",".write":"auth != null && root.child('roles').child(auth.uid).val() == 'route' && root.child('assignments').child(auth.uid).exists() && !data.exists() && newData.child('uid').val() == auth.uid"}},"incidents":{".read":"auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor')",".write":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'",".indexOn":["t"]},"lock":{".read":"auth != null && root.child('roles').child(auth.uid).exists()",".write":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'"},"districtAbstract":{".read":"auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor')",".write":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'"},"mandals":{".read":"(auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor') || (auth != null && root.child('roles').child(auth.uid).val() == 'route' && root.child('assignments').child(auth.uid).exists()))",".write":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'"},"policeStations":{".read":"(auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor') || (auth != null && root.child('roles').child(auth.uid).val() == 'route' && root.child('assignments').child(auth.uid).exists()))",".write":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'"},"routeGroups":{".read":"(auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor') || (auth != null && root.child('roles').child(auth.uid).val() == 'route' && root.child('assignments').child(auth.uid).exists()))",".write":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'"},"routePoints":{".read":"(auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor') || (auth != null && root.child('roles').child(auth.uid).val() == 'route' && root.child('assignments').child(auth.uid).exists()))",".write":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'"},"routes":{".read":"(auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor') || (auth != null && root.child('roles').child(auth.uid).val() == 'route' && root.child('assignments').child(auth.uid).exists()))",".write":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'"},"stationAbstract":{".read":"auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor')",".write":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'"},"subdivisions":{".read":"(auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor') || (auth != null && root.child('roles').child(auth.uid).val() == 'route' && root.child('assignments').child(auth.uid).exists()))",".write":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'"},"siScopes":{".read":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'","$uid":{".read":"auth != null && auth.uid == $uid",".write":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'"}}}}, null, 2); }
+function rulesText() { return JSON.stringify({"rules":{".read":false,".write":false,"roles":{".read":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'","$uid":{".read":"auth != null && (auth.uid == $uid || root.child('roles').child(auth.uid).val() == 'admin')",".write":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'",".validate":"newData.val() == 'admin' || newData.val() == 'monitor' || newData.val() == 'route' || newData.val() == 'si_monitor'"}},"assignments":{".read":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'","$uid":{".read":"auth != null && (auth.uid == $uid || root.child('roles').child(auth.uid).val() == 'admin')",".write":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'"}},"officers":{".read":"auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor')","$uid":{".read":"auth != null && auth.uid == $uid",".write":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'"}},"config":{".read":"auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor' || root.child('roles').child(auth.uid).val() == 'route')",".write":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'","routes":{"$rid":{".read":"auth != null && (root.child('roles').child(auth.uid).val() == 'si_monitor' && root.child('siScopes').child(auth.uid).child('routes').child($rid).val() == true)"}},"stations":{"$sid":{".read":"auth != null && (root.child('roles').child(auth.uid).val() == 'si_monitor' && root.child('siScopes').child(auth.uid).child('stations').child($sid).val() == true)"}}},"devices":{".read":"auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor')","$uid":{".read":"(auth != null && auth.uid == $uid) || (auth != null && (root.child('roles').child(auth.uid).val() == 'si_monitor' && root.child('siScopes').child(auth.uid).child('routes').child(root.child('assignments').child($uid).child('routeId').val()).val() == true))",".write":"auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || (auth.uid == $uid && root.child('roles').child(auth.uid).val() == 'route' && root.child('assignments').child(auth.uid).exists() && newData.child('ps').val() == root.child('assignments').child(auth.uid).child('ps').val() && newData.child('route').val() == root.child('assignments').child(auth.uid).child('route').val()))"}},"live":{".read":"auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor')","$uid":{".read":"(auth != null && auth.uid == $uid) || (auth != null && (root.child('roles').child(auth.uid).val() == 'si_monitor' && root.child('siScopes').child(auth.uid).child('routes').child(root.child('assignments').child($uid).child('routeId').val()).val() == true))",".write":"(auth != null && root.child('roles').child(auth.uid).val() == 'admin' || (auth != null && auth.uid == $uid && root.child('roles').child(auth.uid).val() == 'route' && root.child('assignments').child(auth.uid).exists()))"}},"viewerLive":{".read":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'","$uid":{".read":"auth != null && auth.uid == $uid",".write":"auth != null && ((auth.uid == $uid && root.child('roles').child(auth.uid).val() == 'si_monitor' && root.child('siScopes').child(auth.uid).exists()) || root.child('roles').child(auth.uid).val() == 'admin')",".validate":"newData.hasChildren(['lat', 'lng', 't']) && newData.child('lat').isNumber() && newData.child('lat').val() >= -90 && newData.child('lat').val() <= 90 && newData.child('lng').isNumber() && newData.child('lng').val() >= -180 && newData.child('lng').val() <= 180 && newData.child('t').isNumber() && newData.child('t').val() <= now + 60000 && newData.child('t').val() >= now - 600000 && (!newData.child('acc').exists() || (newData.child('acc').isNumber() && newData.child('acc').val() >= 0 && newData.child('acc').val() <= 10000))","lat":{".validate":"newData.isNumber()"},"lng":{".validate":"newData.isNumber()"},"t":{".validate":"newData.isNumber()"},"acc":{".validate":"newData.isNumber()"},"$other":{".validate":false}}},"track":{".read":"auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor')","$uid":{".read":"(auth != null && auth.uid == $uid) || (auth != null && (root.child('roles').child(auth.uid).val() == 'si_monitor' && root.child('siScopes').child(auth.uid).child('routes').child(root.child('assignments').child($uid).child('routeId').val()).val() == true))",".write":"(auth != null && root.child('roles').child(auth.uid).val() == 'admin' || (auth != null && auth.uid == $uid && root.child('roles').child(auth.uid).val() == 'route' && root.child('assignments').child(auth.uid).exists()))"}},"events":{".read":"auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor') || (auth != null && root.child('roles').child(auth.uid).val() == 'si_monitor' && query.orderByChild == 'uid' && query.equalTo != null && root.child('siScopes').child(auth.uid).child('routes').child(root.child('assignments').child(query.equalTo).child('routeId').val()).val() == true)",".indexOn":["t","uid"],"$id":{".read":"auth != null && root.child('roles').child(auth.uid).val() == 'route' && data.child('uid').val() == auth.uid",".write":"(auth != null && root.child('roles').child(auth.uid).val() == 'admin' || (auth != null && root.child('roles').child(auth.uid).val() == 'route' && root.child('assignments').child(auth.uid).exists() && !data.exists() && newData.child('uid').val() == auth.uid))"}},"msg":{".read":"auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor')",".write":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'","$uid":{".read":"auth != null && auth.uid == $uid"}},"photos":{".read":"auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor')","$id":{".read":"auth != null && root.child('roles').child(auth.uid).val() == 'route' && data.child('uid').val() == auth.uid",".write":"(auth != null && root.child('roles').child(auth.uid).val() == 'admin' || (auth != null && root.child('roles').child(auth.uid).val() == 'route' && root.child('assignments').child(auth.uid).exists() && !data.exists() && newData.child('uid').val() == auth.uid))"}},"voice":{".read":"auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor')",".write":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'","$id":{".read":"auth != null && root.child('roles').child(auth.uid).val() == 'route' && data.child('uid').val() == auth.uid",".write":"auth != null && root.child('roles').child(auth.uid).val() == 'route' && root.child('assignments').child(auth.uid).exists() && !data.exists() && newData.child('uid').val() == auth.uid"}},"incidents":{".read":"auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor')",".write":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'",".indexOn":["t"]},"lock":{".read":"auth != null && root.child('roles').child(auth.uid).exists()",".write":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'"},"districtAbstract":{".read":"auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor')",".write":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'"},"mandals":{".read":"(auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor') || (auth != null && root.child('roles').child(auth.uid).val() == 'route' && root.child('assignments').child(auth.uid).exists()))",".write":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'"},"policeStations":{".read":"(auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor') || (auth != null && root.child('roles').child(auth.uid).val() == 'route' && root.child('assignments').child(auth.uid).exists()))",".write":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'"},"routeGroups":{".read":"(auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor') || (auth != null && root.child('roles').child(auth.uid).val() == 'route' && root.child('assignments').child(auth.uid).exists()))",".write":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'"},"routePoints":{".read":"(auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor') || (auth != null && root.child('roles').child(auth.uid).val() == 'route' && root.child('assignments').child(auth.uid).exists()))",".write":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'"},"routes":{".read":"(auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor') || (auth != null && root.child('roles').child(auth.uid).val() == 'route' && root.child('assignments').child(auth.uid).exists()))",".write":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'"},"stationAbstract":{".read":"auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor')",".write":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'"},"subdivisions":{".read":"(auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor') || (auth != null && root.child('roles').child(auth.uid).val() == 'route' && root.child('assignments').child(auth.uid).exists()))",".write":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'"},"siScopes":{".read":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'","$uid":{".read":"auth != null && auth.uid == $uid",".write":"auth != null && root.child('roles').child(auth.uid).val() == 'admin'"}}}}, null, 2); }
 
 /* route add / edit and device edit */
 function confirmRemoval(title, message, yesLabel) {
@@ -6696,6 +6768,13 @@ $('#logout').addEventListener('click', () => { if (confirm('Sign out of the dash
 if (NATIVE) {
   window.print = () => { try { Android.print(); } catch (e) { } };
   const wf = XLSX.writeFile; XLSX.writeFile = (wb, name) => { try { Android.saveFile(name, XLSX.write(wb, { bookType: 'xlsx', type: 'base64' })); } catch (e) { wf(wb, name); } };
+  if (typeof Android.checkForUpdates === 'function') {
+    const update = document.createElement('button'); update.type = 'button'; update.className = 'ibtn'; update.textContent = 'App update';
+    update.addEventListener('click', () => Android.checkForUpdates());
+    $('#logout').before(update);
+    const viewerUpdate = update.cloneNode(true); viewerUpdate.addEventListener('click', () => Android.checkForUpdates());
+    $('#viewerLogout').before(viewerUpdate);
+  }
 }
 
 /* Hide / show the whole side panel (Summary, Vehicles, Alerts ...) so the map fills the screen */
@@ -8276,11 +8355,11 @@ function dashUnits() {
   return `<div class="mts">${tile('Route mobiles', f.route, FORCE.route.c, '🚓')}${tile('Striking force', f.sf, FORCE.sf.c, '🚔')}${tile('Special striking', f.ssf, FORCE.ssf.c, '🛡')}${tile('On alert', sos, '#d62d2d', '🚨')}</div>`;
 }
 function dashLegend() {
-  return [['Moving', '#1e9e57'], ['Stopped', '#f0a500'], ['No signal', '#e0413a'], ['GPS off/weak', '#8e44ad'], ['SOS', '#b0161b']].map(([l, c]) => `<span><i style="background:${c}"></i>${l}</span>`).join('')
+  return [['Moving', '#1e9e57'], ['Stopped', '#f0a500'], ['No signal', '#e0413a'], ['GPS off/weak', '#8e44ad'], ['SOS', '#b0161b'], ['Viewer location', '#00a8c9']].map(([l, c]) => `<span><i style="background:${c}"></i>${l}</span>`).join('')
     + '<span><i class="sq" style="background:#1e7b45"></i>Polling station</span><span><i class="sq" style="background:#c0392b"></i>Not visited</span>';
 }
 /* layer check-boxes on the dashboard map */
-const LYR = () => [['units', 'Units (vehicles)', [LAYER_V, typeof LAYER_G !== 'undefined' ? LAYER_G : null]], ['ps', 'Polling stations', [LAYER_S]], ['trail', 'Routes travelled', [LAYER_T]], ['ph', 'Photos', [typeof LAYER_PH !== 'undefined' ? LAYER_PH : null]], ['inc', 'Incidents', [typeof LAYER_INC !== 'undefined' ? LAYER_INC : null]]];
+const LYR = () => [['units', 'Units (vehicles)', [LAYER_V, typeof LAYER_G !== 'undefined' ? LAYER_G : null]], ['viewers', 'Viewer locations', [LAYER_VIEWERS]], ['ps', 'Polling stations', [LAYER_S]], ['trail', 'Routes travelled', [LAYER_T]], ['ph', 'Photos', [typeof LAYER_PH !== 'undefined' ? LAYER_PH : null]], ['inc', 'Incidents', [typeof LAYER_INC !== 'undefined' ? LAYER_INC : null]]];
 function setLayer(k, on) { const x = LYR().find(l => l[0] === k); if (!x || !MAP) return; x[2].forEach(g => { if (!g) return; if (on && !MAP.hasLayer(g)) g.addTo(MAP); if (!on && MAP.hasLayer(g)) MAP.removeLayer(g); }); }
 function dashLayers() {
   const box = $('#dLyr'); if (!box || !MAP) return;

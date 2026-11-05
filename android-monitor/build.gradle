@@ -1,0 +1,55 @@
+plugins { id 'com.android.application' }
+
+def monitorSigningFile = file('../.local-data/monitor-signing.properties')
+def monitorSigning = new Properties()
+if (monitorSigningFile.exists()) monitorSigningFile.withInputStream { monitorSigning.load(it) }
+def firebaseConfig = new groovy.json.JsonSlurper().parse(file('../config/staging.json'))
+
+android {
+    namespace 'org.trace.monitor'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'org.trace.monitor'
+        minSdk 26
+        targetSdk 35
+        versionCode 2
+        versionName '1.1.0'
+        buildConfigField 'String', 'FIREBASE_API_KEY', groovy.json.JsonOutput.toJson(firebaseConfig.apiKey)
+        buildConfigField 'String', 'FIREBASE_DATABASE_URL', groovy.json.JsonOutput.toJson(firebaseConfig.databaseURL.replaceAll('/+$', ''))
+    }
+    signingConfigs {
+        release {
+            if (monitorSigningFile.exists()) {
+                storeFile file(monitorSigning.getProperty('storeFile'))
+                storePassword monitorSigning.getProperty('storePassword')
+                keyAlias monitorSigning.getProperty('keyAlias')
+                keyPassword monitorSigning.getProperty('keyPassword')
+            }
+        }
+    }
+    buildTypes { release { signingConfig signingConfigs.release } }
+    buildFeatures { buildConfig true }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+}
+
+dependencies {
+    implementation 'androidx.core:core:1.16.0'
+    implementation 'com.google.android.gms:play-services-location:21.4.0'
+}
+
+tasks.register('buildMonitorPages', Exec) {
+    workingDir rootProject.projectDir
+    commandLine 'node', 'tools/build-dashboard.mjs'
+    inputs.files file('../dashboard/source.html'), file('../dashboard/si-monitor.template.html'), file('../dashboard/vercel-theme.css'), file('../dashboard/live-trip.js'), file('../tools/build-dashboard.mjs'), file('../config/staging.json'), file('../version.json'), file('../firebase/database.rules.json')
+    outputs.file file('../dist/index.html')
+    outputs.file file('../dist/si-monitor.html')
+}
+
+tasks.register('syncMonitorPages', Sync) {
+    dependsOn tasks.named('buildMonitorPages')
+    from file('../dist')
+    into layout.buildDirectory.dir('generated/monitorAssets')
+}
+
+android.sourceSets.main.assets.srcDir(layout.buildDirectory.dir('generated/monitorAssets'))
+tasks.named('preBuild').configure { dependsOn tasks.named('syncMonitorPages') }

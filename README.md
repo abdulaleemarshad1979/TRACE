@@ -94,3 +94,18 @@ Pushes to `main` run browser tests and deploy the rebuilt `dist` directory to Fi
 ./gradlew :android-route:assembleDebug
 ```
 Output: `android-route/build/outputs/apk/debug/android-route-debug.apk`.
+
+### 4. Build Trace Monitor APK
+
+Trace Monitor packages the administrator and viewer pages inside a separate Android app with the same launcher icon as TRACK Route. It connects directly to Firebase and map providers; the public monitor website address is not included in the APK. Rebuild the APK to ship dashboard page changes.
+
+After a viewer signs in and grants location permission, an Android foreground service sends current GPS fixes to `viewerLive/{uid}` about every 30 seconds. The administrator map shows active viewers as teal markers. The service keeps working when the screen is locked or the app is removed from Recents; the viewer can stop sharing in the app or through the ongoing notification. Android force-stop, revoked location permission, disabled location services, and device power restrictions can interrupt tracking. In a browser, location sharing works only while the viewer page is open.
+
+The app checks `monitor-version.json` for updates when opened and every six hours while open. It verifies the APK SHA-256, then opens Android's installer with the viewer's approval. Android does not allow this APK to silently install itself. Version 1.0.0 users need to install version 1.1.0 once; version 1.1.0 and later can prompt for future updates.
+
+```bash
+./gradlew :android-monitor:assembleRelease
+cp android-monitor/build/outputs/apk/release/android-monitor-release.apk release/Trace-Monitor.apk
+```
+
+Keep the private signing files under `.local-data/` safe for future app updates.

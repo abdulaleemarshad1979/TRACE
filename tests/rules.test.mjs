@@ -102,8 +102,18 @@ test('SI monitor reads only assigned route units and cannot write', async () => 
     await assertFails(get(query(ref(si, 'events'), orderByChild('uid'), equalTo('routeB'))));
     await assertFails(get(ref(si, 'events')));
     await assertFails(set(ref(si, 'live/routeA'), { lat: 0 }));
+    const position = { lat: 17.01, lng: 81.8, acc: 15, t: Date.now() };
+    await assertSucceeds(set(ref(si, 'viewerLive/si'), position));
+    await assertSucceeds(get(ref(si, 'viewerLive/si')));
+    await assertFails(get(ref(si, 'viewerLive')));
+    await assertFails(set(ref(si, 'viewerLive/routeA'), position));
+    await assertFails(set(ref(si, 'viewerLive/si'), { ...position, lat: 181 }));
+    await assertFails(set(ref(si, 'viewerLive/si'), { ...position, uid: 'routeA' }));
+    await assertFails(set(ref(env.authenticatedContext('routeA').database(), 'viewerLive/routeA'), position));
     await assertFails(update(ref(si), { 'roles/routeB': 'si_monitor' }));
     const admin = env.authenticatedContext('admin').database();
+    await assertSucceeds(get(ref(admin, 'viewerLive')));
+    await assertSucceeds(set(ref(si, 'viewerLive/si'), null));
     await assertSucceeds(update(ref(admin), { 'roles/si2': 'si_monitor', 'siScopes/si2': { mandal: 'Kadiyam', routes: { r1: true } } }));
   } finally { await env.cleanup(); }
 });

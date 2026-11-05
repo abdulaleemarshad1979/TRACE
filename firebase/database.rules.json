@@ -52,6 +52,19 @@
         ".write": "(auth != null && root.child('roles').child(auth.uid).val() == 'admin' || (auth != null && auth.uid == $uid && root.child('roles').child(auth.uid).val() == 'route' && root.child('assignments').child(auth.uid).exists()))"
       }
     },
+    "viewerLive": {
+      ".read": "auth != null && root.child('roles').child(auth.uid).val() == 'admin'",
+      "$uid": {
+        ".read": "auth != null && auth.uid == $uid",
+        ".write": "auth != null && ((auth.uid == $uid && root.child('roles').child(auth.uid).val() == 'si_monitor' && root.child('siScopes').child(auth.uid).exists()) || root.child('roles').child(auth.uid).val() == 'admin')",
+        ".validate": "newData.hasChildren(['lat', 'lng', 't']) && newData.child('lat').isNumber() && newData.child('lat').val() >= -90 && newData.child('lat').val() <= 90 && newData.child('lng').isNumber() && newData.child('lng').val() >= -180 && newData.child('lng').val() <= 180 && newData.child('t').isNumber() && newData.child('t').val() <= now + 60000 && newData.child('t').val() >= now - 600000 && (!newData.child('acc').exists() || (newData.child('acc').isNumber() && newData.child('acc').val() >= 0 && newData.child('acc').val() <= 10000))",
+        "lat": { ".validate": "newData.isNumber()" },
+        "lng": { ".validate": "newData.isNumber()" },
+        "t": { ".validate": "newData.isNumber()" },
+        "acc": { ".validate": "newData.isNumber()" },
+        "$other": { ".validate": false }
+      }
+    },
     "track": {
       ".read": "auth != null && (root.child('roles').child(auth.uid).val() == 'admin' || root.child('roles').child(auth.uid).val() == 'monitor')",
       "$uid": {

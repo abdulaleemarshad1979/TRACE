@@ -1,0 +1,7 @@
+{
+  "versionCode": 2,
+  "versionName": "1.1.0",
+  "apkUrl": "https://raw.githubusercontent.com/abdulaleemarshad1979/TRACK/main/release/Trace-Monitor.apk",
+  "sha256": "1eba49a78c51a66245b80ec858ca41e8422de93f4b12bdb12469ee92418c08a8",
+  "releaseNotes": "Viewer locations stay active with the screen locked or the app removed from Recents; administrators see teal viewer markers."
+}

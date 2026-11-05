@@ -139,6 +139,59 @@ test('viewer signs in on the main page and sees only assigned routes', async ({ 
   expect(reads).not.toContain('/config/routes/r3.json');
 });
 
+test('viewer shares a location after sign-in and stops it on request', async ({ page }) => {
+  const writes = [];
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'geolocation', { configurable: true, value: {
+      watchPosition: success => { setTimeout(() => success({ coords: { latitude: 17.08, longitude: 81.9, accuracy: 12 } }), 0); return 1; },
+      clearWatch: () => {}, getCurrentPosition: () => {}
+    } });
+  });
+  await page.route('https://identitytoolkit.googleapis.com/**', route => route.fulfill({ json: { localId: 'si-1', idToken: 'si-token', refreshToken: 'si-refresh', expiresIn: '3600' } }));
+  await page.route('https://officer-8eb52-default-rtdb.asia-southeast1.firebasedatabase.app/**', route => {
+    const request = route.request(), pathname = new URL(request.url()).pathname;
+    if (request.method() !== 'GET') writes.push({ method: request.method(), path: pathname, body: request.postDataJSON?.() });
+    const data = { '/roles/si-1.json': 'si_monitor', '/siScopes/si-1.json': { mandal: 'Kadiyam', routes: { r1: true } }, '/config/routes/r1.json': { ps: 'Kadiyam PS', route: 'Route 1' } };
+    route.fulfill({ json: data[pathname] ?? null });
+  });
+  await page.route('https://*.tile.openstreetmap.org/**', route => route.abort());
+  await page.goto(url);
+  await page.locator('#lMobile').fill('9876543210');
+  await page.locator('#lRank').selectOption('Incharge');
+  await page.locator('#lPw').fill('Example-password');
+  await page.locator('#lAgree').check();
+  await page.locator('#loginSubmit').click();
+  await expect.poll(() => writes.find(w => w.method === 'PUT' && w.path === '/viewerLive/si-1.json')?.body).toMatchObject({ lat: 17.08, lng: 81.9, acc: 12 });
+  await expect(page.locator('#viewerShareStatus')).toContainText('visible to the control room');
+  await page.locator('#viewerShare').click();
+  await expect.poll(() => writes.some(w => w.method === 'DELETE' && w.path === '/viewerLive/si-1.json')).toBe(true);
+  await expect(page.locator('#viewerShare')).toHaveText('Start sharing location');
+});
+
+test('administrator map shows fresh viewers in a distinct teal layer', async ({ page }) => {
+  await page.route('https://server.arcgisonline.com/**', route => route.abort());
+  await page.goto(url);
+  const result = await page.evaluate(() => {
+    USER_ROLE = 'admin';
+    document.querySelector('#login').hidden = true;
+    document.querySelector('#app').hidden = false;
+    initMap();
+    VIEWER_LIVE.si1 = { lat: 17.08, lng: 81.9, acc: 15, t: Date.now() };
+    SI_SCOPES.si1 = { officer: 'Viewer Example', mandal: 'Kadiyam', rank: 'Incharge' };
+    drawViewerLocations();
+    const marker = ADMIN_VIEWER_MARKERS.si1;
+    const live = { color: marker.options.fillColor, label: marker.getTooltip().getContent(), units: Object.keys(MK).length };
+    VIEWER_LIVE.si1.t = Date.now() - 121000;
+    drawViewerLocations();
+    return { ...live, staleGone: !ADMIN_VIEWER_MARKERS.si1 };
+  });
+  expect(result.color).toBe('#00a8c9');
+  expect(result.label).toContain('Viewer Example');
+  expect(result.label).toContain('Kadiyam');
+  expect(result.units).toBe(0);
+  expect(result.staleGone).toBe(true);
+});
+
 test('an existing viewer without a saved rank can use the new choices', async ({ page }) => {
   await page.route('https://identitytoolkit.googleapis.com/**', route => route.fulfill({ json: { localId: 'legacy-si', idToken: 'legacy-token', refreshToken: 'legacy-refresh', expiresIn: '3600' } }));
   const data = {
