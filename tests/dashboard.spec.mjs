@@ -415,7 +415,7 @@ test('deleting an election removes its saved name, routes, and polling locations
     settings: { election: 'Election 2026' }
   } });
   await page.locator('#tabs [data-tab="setup"]').click();
-  await page.locator('details[data-sec="routes"] summary').click();
+  await expect(page.locator('details[data-sec="routes"]')).toHaveAttribute('open', '');
   page.on('dialog', dialog => dialog.accept());
   await page.locator('[data-act="delElec"]').first().click();
   await expect.poll(() => writes.find(write => write.pathname === '/.json')?.body).toMatchObject({
@@ -526,7 +526,7 @@ async function controlRoom(page, overrides = {}) {
   await page.goto(url);
   await expect(page.locator('#app')).toBeVisible();
   await expect.poll(() => page.evaluate(() => USER_ROLE)).toBe(data['/roles/admin-1.json']);
-  await expect.poll(() => page.evaluate(() => Object.keys(CONF.routes || {}).length)).toBe(1);
+  await expect.poll(() => page.evaluate(() => Object.keys(CONF.routes || {}).length)).toBe(Object.keys(data['/config.json'].routes).length);
   await expect(page.locator('#counts .cnt')).toHaveCount(6);
   await expect(page.locator('#fSd')).toContainText('All sub-divisions');
   return writes;
@@ -1094,6 +1094,90 @@ test('settings tables allow horizontal scrolling without text wrapping letter by
   const tw = routes.locator('.tw');
   const overflowX = await tw.evaluate(el => window.getComputedStyle(el).overflowX);
   expect(['auto', 'scroll']).toContain(overflowX);
+});
+
+async function longRouteList(page) {
+  const routes = {};
+  for (let i = 1; i <= 60; i++) routes[`r${i}`] = { ps: 'Example Rural Police Station', route: `Route ${i}`, sd: 'Example Sub-division', villages: 'First village', officer: '', election: 'Election 2026', force: 'route' };
+  await controlRoom(page, { '/config.json': { routes, stations: {}, settings: { election: '', autoSos: false } } });
+  await page.locator('#tabs [data-tab="setup"]').click();
+  const list = page.locator('details[data-sec="routes"] .tw');
+  await expect(list).toBeVisible();
+  await list.evaluate(el => { el.scrollTop = 400; });
+  await expect.poll(() => list.evaluate(el => el.scrollTop)).toBe(400);
+  await page.waitForTimeout(1100); // setting the position counts as scrolling; let that pass
+  return list;
+}
+
+test('a long list keeps its place when the page refreshes itself', async ({ page }) => {
+  const list = await longRouteList(page);
+
+  // a phone report changes nothing in this list: it is left alone, so a scrollbar being dragged keeps working
+  await page.evaluate(() => { window.drawnList = document.querySelector('details[data-sec="routes"] .tw'); render(); });
+  expect(await page.evaluate(() => window.drawnList.isConnected)).toBe(true);
+  expect(await list.evaluate(el => el.scrollTop)).toBe(400);
+
+  // the list really changed: it is redrawn, in the same place
+  await page.evaluate(() => { const draw = paneSetup; paneSetup = () => draw() + '<p id="listChanged">changed</p>'; render(); });
+  await expect(page.locator('#listChanged')).toBeVisible();
+  expect(await page.evaluate(() => window.drawnList.isConnected)).toBe(false);
+  expect(await list.evaluate(el => el.scrollTop)).toBe(400);
+
+  // saving a row redraws at once and also stays on that row
+  await page.evaluate(() => renderPane());
+  expect(await list.evaluate(el => el.scrollTop)).toBe(400);
+});
+
+test('the page waits for scrolling to pause before redrawing a list', async ({ page }) => {
+  const list = await longRouteList(page);
+  const stillThere = await page.evaluate(async () => {
+    const el = document.querySelector('details[data-sec="routes"] .tw');
+    window.drawnList = el;
+    const scrolled = new Promise(done => el.addEventListener('scroll', done, { once: true }));
+    el.scrollTop = 450; await scrolled;
+    const draw = paneSetup; paneSetup = () => draw() + '<p id="listChanged">changed</p>';
+    render();
+    return el.isConnected && !document.querySelector('#listChanged');
+  });
+  expect(stillThere).toBe(true);
+  // nothing else needs to arrive: the waiting redraw follows on its own
+  await expect(page.locator('#listChanged')).toBeVisible();
+  expect(await list.evaluate(el => el.scrollTop)).toBe(450);
+  // putting the list back is not scrolling, so later redraws are not held up
+  await page.waitForTimeout(100);
+  expect(await page.evaluate(() => { const old = document.querySelector('details[data-sec="routes"] .tw'); const draw = paneSetup; paneSetup = () => draw() + '<p id="listAgain">again</p>'; render(); return old.isConnected; })).toBe(false);
+  await expect(page.locator('#listAgain')).toBeVisible();
+});
+
+test('a list starts at the top after choosing another tab or election', async ({ page }) => {
+  const list = await longRouteList(page);
+  await page.locator('#setElec').selectOption('Election 2026');
+  await expect(page.locator('details[data-sec="routes"] summary')).toContainText('Election 2026');
+  await expect.poll(() => list.evaluate(el => el.scrollTop)).toBe(0);
+
+  await list.evaluate(el => { el.scrollTop = 400; });
+  await expect.poll(() => list.evaluate(el => el.scrollTop)).toBe(400);
+  await page.locator('#tabs [data-tab="alerts"]').click();
+  await page.locator('#tabs [data-tab="setup"]').click();
+  await expect(list).toBeVisible();
+  expect(await list.evaluate(el => el.scrollTop)).toBe(0);
+});
+
+test('big screen numbers finish on the right value when a refresh lands during the count-up', async ({ page }) => {
+  await controlRoom(page);
+  const number = page.locator('#pane .tile b').first();
+  await page.evaluate(() => { document.body.classList.add('wall'); UI.tab = 'sum'; renderPane(); });
+  await expect(number).toBeVisible();
+  const settled = await number.textContent();
+  await page.evaluate(async () => {
+    const el = document.querySelector('#pane .tile b');
+    PREVNUM[el.dataset.k] = parseInt(el.textContent, 10) + 50;
+    renderPane();
+    await new Promise(done => setTimeout(done, 300));
+    render();
+  });
+  await page.waitForTimeout(1600);
+  await expect(number).toHaveText(settled);
 });
 
 test('settings accordion contains only Routes, Polling locations, and Registered phones', async ({ page }) => {
