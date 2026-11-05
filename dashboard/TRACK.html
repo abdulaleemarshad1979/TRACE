@@ -6435,16 +6435,17 @@ async function siMonitorModal(editUid = '', existing = null) {
   if (!list.length) throw new Error('Import or add routes before assigning a viewer login.');
   const modal = document.createElement('div'); modal.className = 'modal member-modal';
   modal.setAttribute('role', 'dialog'); modal.setAttribute('aria-modal', 'true'); modal.setAttribute('aria-labelledby', 'siMonitorTitle');
-  modal.innerHTML = `<form class="card"><h2 id="siMonitorTitle">${editUid ? 'Edit' : 'Create'} viewer login</h2><p class="note">This read-only login sees the selected routes, assigned phones and polling booths of one mandal. Select exact routes when mandals share a police station.</p>
+  modal.innerHTML = `<form class="card"><h2 id="siMonitorTitle">${editUid ? 'Edit' : 'Create'} viewer login</h2><p class="note">This read-only login sees only the routes you select, with their assigned phones and polling booths. Browse another mandal to add routes without losing those already selected.</p>
     <label class="f">Officer name<input name="officer" required autocomplete="off" value="${esc(existing?.officer || '')}"></label>
     <label class="f">Rank<select name="rank" required><option value="">Choose rank</option>${VIEWER_RANKS.map(rank => `<option ${existing?.rank === rank ? 'selected' : ''}>${rank}</option>`).join('')}</select></label>
     <label class="f">Mobile number<input name="mobile" type="tel" required autocomplete="off" placeholder="10-digit mobile number" value="${esc(existing?.mobile || '')}"></label>
     ${editUid ? '<label class="f">New password (leave blank to keep current)<input name="password" type="password" minlength="8" autocomplete="new-password"></label><label class="f">Current password (required to change mobile or password)<input name="currentPassword" type="password" autocomplete="current-password"></label>' : '<label class="f">Password<input name="password" type="password" required minlength="8" autocomplete="new-password"></label>'}
-    <label class="f">Assigned mandal<select name="mandal" required><option value="">Choose mandal</option>${SI_MANDALS.map(m => `<option value="${esc(m)}" ${existing?.mandal === m ? 'selected' : ''}>${esc(m)}</option>`).join('')}</select></label>
+    <label class="f">Primary mandal<select name="mandal" required><option value="">Choose mandal</option>${SI_MANDALS.map(m => `<option value="${esc(m)}" ${existing?.mandal === m ? 'selected' : ''}>${esc(m)}</option>`).join('')}</select></label>
+    <label class="f">Browse routes from<select data-si-browse><option value="">All mandals</option>${SI_MANDALS.map(m => `<option value="${esc(m)}" ${existing?.mandal === m ? 'selected' : ''}>${esc(m)}</option>`).join('')}</select></label>
     <label class="f">Find routes<input type="search" data-si-search placeholder="Filter by police station or route"></label>
-    <div class="row"><button class="btn small" type="button" data-si-select>Choose visible routes</button><span class="note" data-si-count>0 selected</span></div><p class="note" data-si-hint></p>
+    <div class="row"><button class="btn small" type="button" data-si-select>Add visible routes</button><span class="note" data-si-count>0 selected</span></div><p class="note" data-si-hint></p>
     <div class="tw" style="max-height:230px;overflow:auto;border:1px solid var(--line);padding:8px">${list.map(r => `<label class="row" data-si-row style="display:flex;align-items:center;margin:3px 0"><input type="checkbox" name="routeId" value="${esc(r.id)}" ${existing?.routes?.[r.id] ? 'checked' : ''}> ${esc(r.ps)} · ${esc(r.route)}${r.election ? ' · ' + esc(r.election) : ''}</label>`).join('')}</div>
-    <p class="note">Existing route members gain access only after their route assignment is linked to the selected route. The viewer cannot edit routes, dispatch messages or see other mandals.</p>
+    <p class="note">Existing route members appear only after their assignment is linked to a selected route. The viewer can see only checked routes and cannot edit routes or dispatch messages.</p>
     <div class="err" role="alert"></div><div class="row" style="justify-content:flex-end"><button class="btn" type="button" data-close>Cancel</button><button class="btn primary" type="submit">Save viewer login</button></div></form>`;
   document.body.appendChild(modal);
   const form = modal.querySelector('form');
@@ -6452,13 +6453,15 @@ async function siMonitorModal(editUid = '', existing = null) {
   const count = () => { modal.querySelector('[data-si-count]').textContent = `${form.querySelectorAll('[name=routeId]:checked').length} selected`; };
   form.addEventListener('change', count);
   const filter = () => {
-    const mandal = form.elements.mandal.value, matches = siMandalRoutes(mandal, list), allowed = new Set(matches.map(r => r.id)), q = modal.querySelector('[data-si-search]').value.trim().toLowerCase();
-    modal.querySelectorAll('[data-si-row]').forEach(row => { const check = row.querySelector('input'); row.hidden = !!mandal && matches.length ? !allowed.has(check.value) || !row.textContent.toLowerCase().includes(q) : !row.textContent.toLowerCase().includes(q); row.style.display = row.hidden ? 'none' : 'flex'; });
-    modal.querySelector('[data-si-hint]').textContent = mandal && !matches.length ? 'No route has a matching police station name. Choose the exact routes manually.' : mandal ? `${matches.length} matching routes for ${mandal}.` : 'Choose a mandal to filter routes.';
+    const mandal = modal.querySelector('[data-si-browse]').value, matches = siMandalRoutes(mandal, list), allowed = new Set(matches.map(r => r.id)), q = modal.querySelector('[data-si-search]').value.trim().toLowerCase();
+    modal.querySelectorAll('[data-si-row]').forEach(row => { const check = row.querySelector('input'); row.hidden = !check.checked && ((!!mandal && matches.length && !allowed.has(check.value)) || !row.textContent.toLowerCase().includes(q)); row.style.display = row.hidden ? 'none' : 'flex'; });
+    modal.querySelector('[data-si-hint]').textContent = mandal && !matches.length ? 'No route has a matching police station name. Search or choose exact routes manually; selected routes stay checked.' : mandal ? `${matches.length} matching routes for ${mandal}. Selected routes stay checked when you change mandal.` : 'Choose a mandal to find routes. Selected routes stay checked.';
   };
-  form.elements.mandal.onchange = () => { form.querySelectorAll('[name=routeId]').forEach(c => { c.checked = false; }); filter(); count(); };
+  form.elements.mandal.onchange = () => { modal.querySelector('[data-si-browse]').value = form.elements.mandal.value; filter(); count(); };
+  modal.querySelector('[data-si-browse]').onchange = filter;
   modal.querySelector('[data-si-search]').oninput = filter;
-  modal.querySelector('[data-si-select]').onclick = () => { modal.querySelectorAll('[data-si-row]:not([hidden]) input').forEach(c => { c.checked = true; }); count(); };
+  modal.querySelector('[data-si-select]').onclick = () => { modal.querySelectorAll('[data-si-row]:not([hidden]) input').forEach(c => { c.checked = true; }); filter(); count(); };
+  form.addEventListener('change', e => { if (e.target.name === 'routeId') filter(); });
   filter(); count();
   form.onsubmit = async e => {
     e.preventDefault(); const button = form.querySelector('[type=submit]'); button.disabled = true;
@@ -6466,10 +6469,8 @@ async function siMonitorModal(editUid = '', existing = null) {
     try {
       if (await dbGet('roles/' + AU.uid) !== 'admin') throw new Error('Administrator access is required.');
       const data = new FormData(form), selected = [...new Set(data.getAll('routeId'))];
-      if (!selected.length) throw new Error('Choose at least one route for this mandal.');
+      if (!selected.length) throw new Error('Choose at least one route.');
       if (selected.some(id => !CONF.routes?.[id])) throw new Error('A selected route no longer exists. Reload and try again.');
-      const matching = siMandalRoutes(String(data.get('mandal')), list);
-      if (matching.length && selected.some(id => !matching.some(r => r.id === id))) throw new Error('Choose routes belonging to the selected mandal only.');
       const mobile = memberPhone(data.get('mobile'));
       const email = 'si' + mobile.slice(1) + '@members.track.invalid', password = String(data.get('password') || '');
       let uid = editUid;
@@ -6601,10 +6602,9 @@ document.addEventListener('click', async e => {
         if (Object.keys(elections).length) { await dbPatch('config/elections', elections); CONF.elections = Object.assign({}, CONF.elections || {}, elections); }
         await dbPatch('config/routes', add);
         CONF.routes = Object.assign({}, CONF.routes || {}, add);
-        if (!ELEC() && names.length === 1) { await dbPatch('config/settings', { election: names[0] }); CONF.settings = Object.assign({}, CONF.settings || {}, { election: names[0] }); }
         schedule('force'); paneDirty = 'force'; renderPane();
       }
-      toast(n + ' routes imported (duplicates skipped).', 7000);
+      toast(`${n} routes added; existing routes kept (duplicates skipped).${ELEC() ? ' Choose All elections to see both old and new routes.' : ''}`, 7000);
     });
     else if (act === 'psImport') pickFile(async sheets => {
 

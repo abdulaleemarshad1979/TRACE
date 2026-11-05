@@ -197,6 +197,38 @@ test('administrator can list and edit viewer access without an orphaning revoke 
   await expect(reopened.getByRole('button', { name: 'Revoke access' })).toHaveCount(0);
 });
 
+test('editing a viewer adds routes from another mandal without removing existing routes', async ({ page }) => {
+  const writes = await controlRoom(page);
+  await page.evaluate(() => {
+    CONF.routes = {
+      old: { ps: 'Kadiyam PS', route: 'Route 1' },
+      next: { ps: 'Nidadavole PS', route: 'Route 2' }
+    };
+    CONF.stations = {
+      oldBooth: { ps: 'Kadiyam PS', route: 'Route 1' },
+      nextBooth: { ps: 'Nidadavole PS', route: 'Route 2' }
+    };
+  });
+  const scope = { mandal: 'Kadiyam', officer: 'Existing Officer', rank: 'Incharge', mobile: '+919876543210', routes: { old: true }, stations: { oldBooth: true } };
+  await page.route('https://trace-demo.firebaseio.test/siScopes.json**', route => route.fulfill({ json: { 'si-existing': scope } }));
+  await page.locator('#tabs [data-tab="setup"]').click();
+  await page.getByRole('button', { name: 'Manage viewer logins' }).click();
+  await page.getByRole('dialog', { name: 'Viewer logins' }).getByRole('button', { name: 'Edit' }).click();
+  const edit = page.getByRole('dialog', { name: 'Edit viewer login' });
+  await expect(edit.locator('[name=routeId][value=old]')).toBeChecked();
+  await edit.locator('[name=mandal]').selectOption('Nidadavole');
+  await expect(edit.locator('[name=routeId][value=old]')).toBeChecked();
+  await edit.locator('[name=mandal]').selectOption('Kadiyam');
+  await edit.locator('[data-si-browse]').selectOption('Nidadavole');
+  await expect(edit.locator('[name=mandal]')).toHaveValue('Kadiyam');
+  await expect(edit.locator('[name=routeId][value=next]')).toBeVisible();
+  await edit.locator('[name=routeId][value=next]').check();
+  await expect(edit.locator('[data-si-count]')).toHaveText('2 selected');
+  await edit.getByRole('button', { name: 'Save viewer login' }).click();
+  await expect(edit).toHaveCount(0);
+  expect(writes).toContainEqual({ pathname: '/.json', body: { 'roles/si-existing': 'si_monitor', 'siScopes/si-existing': { ...scope, routes: { old: true, next: true }, stations: { oldBooth: true, nextBooth: true } } } });
+});
+
 test('administrator can delete a viewer sign-in with its current password', async ({ page }) => {
   const writes = await controlRoom(page);
   const scope = { mandal: 'Kadiyam', officer: 'Viewer', rank: 'Incharge', mobile: '+919876543210', routes: { r1: true } };
@@ -236,6 +268,20 @@ test('selecting a mandal shows only its matching routes and booth assignments', 
   await expect(dialog.locator('[data-si-row]').filter({ hasText: 'Kadiyam PS' })).toBeVisible();
   await expect(dialog.locator('[data-si-row]').filter({ hasText: 'Nidadavole PS' })).toBeHidden();
   expect(await page.evaluate(() => siStationIds(['k1']))).toEqual(['boothK']);
+});
+
+test('importing new routes keeps old routes visible when All elections is selected', async ({ page }) => {
+  const writes = await controlRoom(page);
+  await page.locator('#tabs [data-tab="setup"]').click();
+  await expect(page.locator('#setElec')).toHaveValue('');
+  const chooser = page.waitForEvent('filechooser');
+  await page.getByRole('button', { name: 'Import from Excel' }).first().click();
+  await (await chooser).setFiles({ name: 'new-routes.csv', mimeType: 'text/csv', buffer: Buffer.from('Election,PS,Route\nNew Election,Kadiyam PS,Route 2\n') });
+  await expect.poll(() => page.evaluate(() => Object.keys(CONF.routes || {}).length)).toBe(2);
+  await expect(page.locator('#setElec')).toHaveValue('');
+  await expect(page.locator('#setElec')).toContainText('All elections (2 routes)');
+  await expect.poll(() => writes.some(w => w.pathname === '/config/routes.json')).toBe(true);
+  expect(writes.some(w => w.pathname === '/config/settings.json' && w.body.election === 'New Election')).toBe(false);
 });
 
 test('removing a polling location deletes its database record and clears the dashboard copy', async ({ page }) => {
