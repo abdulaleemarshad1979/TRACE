@@ -742,6 +742,10 @@ table.t td.num,table.t th.num{text-align:right}
 .vm.sos .pin{animation:pulse2 .8s infinite}
 @keyframes pulse2{50%{transform:scale(1.5)}}
 .psm{width:12px;height:12px;border-radius:3px;border:2px solid #fff;box-shadow:0 0 2px rgba(0,0,0,.6)}
+.main-center-icon{background:none!important;border:0!important}
+.main-center-sign{width:40px;height:40px;display:grid;place-items:center;transform:rotate(45deg);border:3px solid #fff;border-radius:9px;background:var(--center-color);box-shadow:0 2px 9px rgba(0,0,0,.65)}
+.main-center-sign span{transform:rotate(-45deg);color:#fff;font-size:27px;line-height:1;text-shadow:0 1px 2px rgba(0,0,0,.35)}
+.main-center-label{position:absolute;top:47px;left:20px;transform:translateX(-50%);padding:4px 8px;border:2px solid #fff;border-radius:6px;background:var(--center-color);box-shadow:0 2px 6px rgba(0,0,0,.45);color:#fff;font-size:12px;font-weight:800;line-height:1.2;text-align:center;white-space:nowrap;pointer-events:none}
 .incm{font-size:26px;line-height:1;text-shadow:0 0 3px #fff}
 .legend{background:#fff;padding:6px 8px;border-radius:8px;font-size:12px;line-height:1.6;box-shadow:0 1px 4px rgba(0,0,0,.3)}
 .legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px}
@@ -5364,6 +5368,11 @@ function matchStatus(u) { const k = status(u).k; return !UI.fStatus || (UI.fStat
 
 /* ---------- map ---------- */
 let BASE, LAYERS_CTL, GMAP_KEY = '';
+const MAIN_CENTERS = [
+  { name: 'NANNAYYA UNIVERSITY', lat: 17.06396286, lng: 81.87318079, color: '#5232a8' },
+  { name: 'DEEPTHI EM HIGH SCHOOL', lat: 17.00059795, lng: 81.73047281, color: '#007d78' },
+  { name: 'SVD DEGREE COLLEGE', lat: 16.91063858, lng: 81.67506316, color: '#aa3434' }
+];
 /* Google Maps views, added when a Maps JavaScript API key is saved in Setup */
 function googleLayers() {
   const key = ((CONF.settings || {}).gkey || '').trim();
@@ -5393,10 +5402,15 @@ function initMap() {
   BASE = base; LAYERS_CTL = L.control.layers(base, null, { position: 'topright' }).addTo(MAP);
   MAP.on('baselayerchange', e => LS.set('base', e.name));
   LAYER_S = L.layerGroup().addTo(MAP); LAYER_T = L.layerGroup().addTo(MAP); LAYER_V = L.layerGroup().addTo(MAP); LAYER_I = L.layerGroup().addTo(MAP); LAYER_R = L.layerGroup().addTo(MAP); LAYER_VIEWERS = L.layerGroup().addTo(MAP);
+  MAIN_CENTERS.forEach(center => {
+    const html = `<div style="--center-color:${center.color}"><div class="main-center-sign"><span>★</span></div><div class="main-center-label">${esc(center.name)}</div></div>`;
+    L.marker([center.lat, center.lng], { icon: L.divIcon({ html, className: 'main-center-icon', iconSize: [40, 40], iconAnchor: [20, 20] }), zIndexOffset: 800 })
+      .bindPopup(`<b>${esc(center.name)}</b><br>Main center`).addTo(MAP);
+  });
   LAYERS_CTL.addOverlay(LAYER_VIEWERS, 'Viewer locations');
   const pollingHint = document.createElement('div'); pollingHint.id = 'pollingMapHint'; pollingHint.className = 'polling-map-hint'; pollingHint.hidden = true; pollingHint.textContent = 'Zoom in to load polling locations'; MAP.getContainer().appendChild(pollingHint);
-  const lg = L.control({ position: 'bottomleft' });
-  lg.onAdd = () => { const d = L.DomUtil.create('div', 'legend'); d.innerHTML = `<div class="lgh"><b>Legend</b><button type="button" class="lgx" title="Hide or show the legend">${+LS.get('legend', 1) ? '−' : '+'}</button></div><div class="lgb"><b>Units</b><br><i style="background:${FORCE.route.c}"></i>Route mobile<br><i style="background:${FORCE.sf.c}"></i>Striking force<br><i style="background:${FORCE.ssf.c}"></i>Special striking force<br><b>Status ring</b><br><i style="box-shadow:0 0 0 2px #fff,0 0 0 3px #e0a800;background:#fff"></i>Stopped<br><i style="box-shadow:0 0 0 2px #fff,0 0 0 3px #c0392b;background:#fff"></i>No signal<br><i style="box-shadow:0 0 0 2px #fff,0 0 0 3px #7f8c8d;background:#fff"></i>GPS weak<br><i style="background:${C.sos}"></i>SOS (pulsing)<br><b>Polling locations</b> (◆ hypersensitive)<br><span class="psm" style="display:inline-block;background:#1e7b45;margin-right:5px"></span>visited recently<br><span class="psm" style="display:inline-block;background:#e0a800;margin-right:5px"></span>visit due<br><span class="psm" style="display:inline-block;background:#c0392b;margin-right:5px"></span>no visit / overdue<br>⚠ tension or problem reported<br><b>Hotspots</b> 🔥<br><span style="display:inline-block;width:34px;height:8px;border-radius:4px;background:linear-gradient(90deg,#2c7fb8,#f1c40f,#e67e22,#c0392b);vertical-align:middle;margin-right:5px"></span>more SOS / incidents = hotter</div>`;
+  const lg = L.control({ position: 'bottomright' });
+  lg.onAdd = () => { const d = L.DomUtil.create('div', 'legend'); d.innerHTML = `<div class="lgh"><b>Legend</b><button type="button" class="lgx" title="Hide or show the legend">${+LS.get('legend', 1) ? '−' : '+'}</button></div><div class="lgb"><b>Main centers</b><br><span style="display:inline-block;width:16px;height:16px;line-height:14px;text-align:center;background:#5232a8;color:#fff;transform:rotate(45deg);margin:3px 9px 3px 2px">★</span>large star marker<br><b>Units</b><br><i style="background:${FORCE.route.c}"></i>Route mobile<br><i style="background:${FORCE.sf.c}"></i>Striking force<br><i style="background:${FORCE.ssf.c}"></i>Special striking force<br><b>Status ring</b><br><i style="box-shadow:0 0 0 2px #fff,0 0 0 3px #e0a800;background:#fff"></i>Stopped<br><i style="box-shadow:0 0 0 2px #fff,0 0 0 3px #c0392b;background:#fff"></i>No signal<br><i style="box-shadow:0 0 0 2px #fff,0 0 0 3px #7f8c8d;background:#fff"></i>GPS weak<br><i style="background:${C.sos}"></i>SOS (pulsing)<br><b>Polling locations</b> (◆ hypersensitive)<br><span class="psm" style="display:inline-block;background:#1e7b45;margin-right:5px"></span>visited recently<br><span class="psm" style="display:inline-block;background:#e0a800;margin-right:5px"></span>visit due<br><span class="psm" style="display:inline-block;background:#c0392b;margin-right:5px"></span>no visit / overdue<br>⚠ tension or problem reported<br><b>Hotspots</b> 🔥<br><span style="display:inline-block;width:34px;height:8px;border-radius:4px;background:linear-gradient(90deg,#2c7fb8,#f1c40f,#e67e22,#c0392b);vertical-align:middle;margin-right:5px"></span>more SOS / incidents = hotter</div>`;
     d.classList.toggle('min', !+LS.get('legend', 1));
     L.DomEvent.disableClickPropagation(d);
     L.DomEvent.on(d.querySelector('.lgx'), 'click', e => { L.DomEvent.stop(e); const m = d.classList.toggle('min'); try { LS.set('legend', m ? 0 : 1); } catch (x) {} d.querySelector('.lgx').textContent = m ? '+' : '−'; });

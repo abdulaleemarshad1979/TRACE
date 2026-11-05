@@ -484,9 +484,29 @@ test('groups on the initial map are fitted and malformed fixes do not hide valid
     MAP.setView([17, 81.8], 10);
     fitted = false;
     renderMap();
-    return { contains: MAP.getBounds().contains([16.5, 81.1]), fitted, invalidMarker: !!MK.bad };
+    return { fitted, invalidMarker: !!MK.bad };
   });
-  expect(result).toEqual({ contains: true, fitted: true, invalidMarker: false });
+  expect(result).toEqual({ fitted: true, invalidMarker: false });
+  await expect.poll(() => page.evaluate(() => MAP.getBounds().contains([16.5, 81.1]))).toBe(true);
+});
+
+test('main centers use prominent named markers at their supplied coordinates', async ({ page }) => {
+  await page.route(/arcgisonline|openstreetmap/, route => route.abort());
+  await page.goto(url);
+  const centers = await page.evaluate(() => {
+    document.querySelector('#login').hidden = true;
+    document.querySelector('#app').hidden = false;
+    initMap();
+    return Object.values(MAP._layers).filter(layer => layer instanceof L.Marker && layer.options.icon?.options.className === 'main-center-icon')
+      .map(marker => ({ name: marker.getElement().textContent.trim(), lat: marker.getLatLng().lat, lng: marker.getLatLng().lng }));
+  });
+  expect(centers).toEqual([
+    { name: '★NANNAYYA UNIVERSITY', lat: 17.06396286, lng: 81.87318079 },
+    { name: '★DEEPTHI EM HIGH SCHOOL', lat: 17.00059795, lng: 81.73047281 },
+    { name: '★SVD DEGREE COLLEGE', lat: 16.91063858, lng: 81.67506316 }
+  ]);
+  await expect(page.locator('#map .main-center-sign')).toHaveCount(3);
+  await expect(page.locator('#map .main-center-label')).toHaveCount(3);
 });
 
 test('incomplete saved sign-in returns to login instead of an empty live dashboard', async ({ page }) => {
