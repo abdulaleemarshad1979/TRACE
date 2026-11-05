@@ -5081,12 +5081,37 @@ let pressedAt = 0;
 const PRESS_HOLD_MS = 2000;
 document.addEventListener('pointerdown', e => { if (e.target.closest && e.target.closest('#pane,#tabs,#dash,main.body > .bar')) pressedAt = Date.now(); }, true);
 ['pointerup', 'pointercancel'].forEach(ev => document.addEventListener(ev, () => { if (pressedAt) { pressedAt = 0; schedule(true); } }, true));
+/* A redraw replaces the lists, which would stop a scroll in progress, so the pane waits until scrolling pauses and then catches up. */
+let scrolledAt = 0, scrollPause = 0, autoRedraw = false, paneDrawn = null;
+const SCROLL_HOLD_MS = 1000, keptTop = new WeakMap();
+document.addEventListener('scroll', e => {
+  const t = e.target;
+  if (!t.closest || !t.closest('#pane')) return;
+  if (keptTop.get(t) === t.scrollTop) { keptTop.delete(t); return; } // a redraw putting the list back, not someone scrolling
+  scrolledAt = Date.now(); clearTimeout(scrollPause); scrollPause = setTimeout(() => schedule(true), SCROLL_HOLD_MS);
+}, true);
+/* A list with its own scrollbar is replaced by a redraw and would go back to the top, so each returns to where it was,
+   unless the pane now shows something else. A refresh that changes nothing leaves the pane alone. */
+function drawPane(html) {
+  const pane = $('#pane'), shows = [UI.tab, UI.sel, ELEC(), UI.fSd, UI.fPs, UI.fForce].join('|');
+  if (autoRedraw && paneDrawn && paneDrawn.html === html) return;
+  const lists = paneDrawn && paneDrawn.shows === shows ? [...pane.querySelectorAll('.tw')].map(el => [el.scrollTop, el.scrollLeft]) : [], top = pane.scrollTop;
+  pane.innerHTML = html;
+  pane.querySelectorAll('.tw').forEach((el, i) => {
+    if (!lists[i]) return;
+    [el.scrollTop, el.scrollLeft] = lists[i];
+    if (lists[i][0]) keptTop.set(el, el.scrollTop);
+  });
+  pane.scrollTop = top;
+  paneDrawn = { html, shows };
+}
 function render() {
   if (document.body.classList.contains('map-full')) { renderMap(); paneDirty = false; return; }
   if (Date.now() - pressedAt < PRESS_HOLD_MS) { renderMap(); return; }
   renderFilters(); renderCounts(); renderMap();
   const editing = document.activeElement && $('#pane').contains(document.activeElement) && /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);
-  if (!editing || paneDirty === 'force') renderPane();
+  const force = paneDirty === 'force';
+  if (force || (!editing && Date.now() - scrolledAt >= SCROLL_HOLD_MS)) { autoRedraw = !force; renderPane(); autoRedraw = false; }
   paneDirty = false; renderTabs();
 }
 function renderFilters() {
@@ -5304,7 +5329,7 @@ function renderPane() {
   else if (UI.tab === 'sum') html = `<div class="sumbar sumtop"><span></span><button type="button" class="btn small" data-act="sumToggle" title="Hide the summary to give the Vehicles and Locations lists more room">Hide summary −</button></div>` + f();
   else html = f();
   } catch (error) { console.error(error); html = `<div class="banner bad"><b>This section could not be drawn.</b> ${esc(error.message)}. Reload the page, and report this message if it comes back.</div>`; }
-  const st = $('#pane').scrollTop; $('#pane').innerHTML = html; $('#pane').scrollTop = st;
+  drawPane(html);
   if (UI.tab === 'setup') afterSetup();
 }
 
@@ -7830,8 +7855,9 @@ const _paneSum2 = paneSum;
 paneSum = function () { const h = _paneSum2(); return h.replace('<div class="tiles">', gauge(numbers()) + '<div class="tiles">'); };
 const _renderPane = renderPane;
 renderPane = function () {
+  const drawn = paneDrawn;
   _renderPane();
-  if (UI.tab === 'sum') {
+  if (UI.tab === 'sum' && paneDrawn !== drawn) {
     $('#pane').querySelectorAll('.tile b').forEach(b => {
       const lab = (b.nextElementSibling || {}).textContent || '';
       b.dataset.k = 't-' + lab; if (/SOS|tension|incidents open|no signal/i.test(lab)) b.dataset.bad = 'up'; else if (/active|visited/i.test(lab)) b.dataset.bad = 'down';
